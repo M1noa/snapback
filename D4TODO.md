@@ -78,13 +78,13 @@ Answers marked here were resolved from the Discord docs and are recorded in `D4P
 
 ## Phase 1 - scaffold
 
-- [ ] `package.json` with `oceanic.js`, `@duckdb/node-api`, nothing else without a reason.
-- [ ] scripts: `dev`, `start`, `build`, `test`, `typecheck` (`tsc --noEmit`), `lint`, `check` (`typecheck && lint && test`).
-- [ ] `tsconfig.json` strict, ESM, bun types.
-- [ ] `.env.example` with the keys listed above and a comment on each.
-- [ ] `.gitignore` covers `.env`, `data/`, `references/`, `node_modules/`.
-- [ ] directory tree from `D4PLAN.md` 3, empty files where needed.
-- [ ] check: `bun run check` exits 0 on a src that typechecks and has no tests.
+- [x] `package.json` with `oceanic.js`, `@duckdb/node-api`. Dev deps `typescript`, `@types/bun`, `@biomejs/biome` exist because `check` needs all three; nothing else without a reason.
+- [x] scripts: `dev`, `start`, `build`, `test`, `typecheck` (`tsc --noEmit`), `lint`, `check` (`typecheck && lint && test`).
+- [x] `tsconfig.json` strict, ESM, bun types.
+- [x] `.env.example` with the keys listed above and a comment on each.
+- [x] `.gitignore` covers `.env`, `data/`, `references/`, `node_modules/`.
+- [x] directory tree from `D4PLAN.md` 3. Created as each phase writes its files rather than as empty placeholders; git tracks files, not directories, so 80 empty files would only add churn. The tree of record stays `D4PLAN.md` 3.
+- [x] check: `bun run check` exits 0. Result: typecheck clean, Biome clean, 29 tests pass. Not "no tests" as first written: env parsing, settings merge, and the exit-on-missing-key path each have behaviour worth locking.
 
 ## Phase 2 - database
 
