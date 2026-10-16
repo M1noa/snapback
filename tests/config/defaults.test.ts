@@ -1,5 +1,11 @@
 import { describe, expect, test } from "bun:test";
-import { DEFAULT_GUILD_SETTINGS, readGuildSettings } from "../../src/config/defaults.ts";
+import {
+  DEFAULT_GUILD_SETTINGS,
+  DEFAULT_VERIFY_PANEL,
+  LOG_EVENT_FAMILIES,
+  mergeGuildSettings,
+  readGuildSettings,
+} from "../../src/config/defaults.ts";
 
 describe("readGuildSettings", () => {
   test("an empty row is all defaults", () => {
@@ -9,9 +15,12 @@ describe("readGuildSettings", () => {
   });
 
   test("a stored key overrides the default", () => {
-    const settings = readGuildSettings({ ephemeral_default: false, log_channel_id: "42" });
+    // a real-shaped snowflake, because an id field now rejects anything that is
+    // not one: the old "42" fixture was passing only while ids were unchecked.
+    const channelId = "123456789012345678";
+    const settings = readGuildSettings({ ephemeral_default: false, log_channel_id: channelId });
     expect(settings.ephemeral_default).toBe(false);
-    expect(settings.log_channel_id).toBe("42");
+    expect(settings.log_channel_id).toBe(channelId);
     expect(settings.auto_backup_enabled).toBe(false);
   });
 
@@ -38,5 +47,114 @@ describe("readGuildSettings", () => {
     const settings = readGuildSettings({});
     settings.auto_backup_enabled = true;
     expect(DEFAULT_GUILD_SETTINGS.auto_backup_enabled).toBe(false);
+  });
+});
+
+describe("the wizard and panel fields", () => {
+  test("every family is on by default, and an unknown one is dropped", () => {
+    expect(DEFAULT_GUILD_SETTINGS.log_events).toEqual(LOG_EVENT_FAMILIES);
+    const settings = readGuildSettings({ log_events: ["backup", "nonsense", 7] });
+    expect(settings.log_events).toEqual(["backup"]);
+  });
+
+  test("a panel of the wrong shape is no panel at all", () => {
+    expect(readGuildSettings({ verify_panel: "yes please" }).verify_panel).toBeNull();
+    expect(readGuildSettings({ verify_panel: [] }).verify_panel).toBeNull();
+    expect(
+      readGuildSettings({ verify_panel: { channel_id: 7 } }).verify_panel?.channel_id,
+    ).toBeNull();
+  });
+
+  test("a panel round trips, and a bad colour falls back to the default", () => {
+    const stored = readGuildSettings({
+      verify_panel: {
+        channel_id: "123456789012345678",
+        title: "  verify here  ",
+        colour: "naughty",
+        button_label: "let me in",
+        button_style: "link",
+        button_url: "https://example.com/verify",
+        button_mode: "embed",
+        scopes: ["identify", "identify", 3],
+      },
+    });
+    const panel = stored.verify_panel!;
+    expect(panel.channel_id).toBe("123456789012345678");
+    expect(panel.title).toBe("verify here");
+    expect(panel.colour).toBe(DEFAULT_VERIFY_PANEL.colour);
+    expect(panel.button_label).toBe("let me in");
+    expect(panel.button_style).toBe("link");
+    expect(panel.button_mode).toBe("embed");
+    expect(panel.scopes).toEqual(["identify"]);
+  });
+
+  test("a non-https button url is refused, not stored", () => {
+    expect(
+      readGuildSettings({ verify_panel: { button_url: "http://example.com" } }).verify_panel
+        ?.button_url,
+    ).toBeNull();
+    expect(
+      readGuildSettings({ verify_panel: { button_url: "javascript:alert(1)" } }).verify_panel
+        ?.button_url,
+    ).toBeNull();
+    expect(
+      readGuildSettings({ verify_panel: { button_url: "https://example.com/verify" } }).verify_panel
+        ?.button_url,
+    ).toBe("https://example.com/verify");
+  });
+
+  test("branding keeps the display name and the two flags", () => {
+    const branding = readGuildSettings({
+      branding: { display_name: "  snapback  ", avatar_set: true, banner_set: "yes" },
+    }).branding;
+    expect(branding.display_name).toBe("snapback");
+    expect(branding.avatar_set).toBe(true);
+    expect(branding.banner_set).toBe(false);
+  });
+
+  test("the restricted-scope acknowledgement keeps only a real timestamp", () => {
+    expect(
+      readGuildSettings({ acknowledged_restricted_scopes: "yesterday" })
+        .acknowledged_restricted_scopes,
+    ).toBeNull();
+    expect(
+      readGuildSettings({ acknowledged_restricted_scopes: "2026-10-16T12:00:00.000Z" })
+        .acknowledged_restricted_scopes,
+    ).toBe("2026-10-16T12:00:00.000Z");
+  });
+
+  test("a number out of range is clamped on read, so a hand-edited row cannot exceed the limit", () => {
+    expect(readGuildSettings({ auto_backup_interval_hours: 9999 }).auto_backup_interval_hours).toBe(
+      168,
+    );
+    expect(readGuildSettings({ auto_backup_interval_hours: 0 }).auto_backup_interval_hours).toBe(1);
+    expect(
+      readGuildSettings({ auto_backup_message_count: 999_999 }).auto_backup_message_count,
+    ).toBe(10_000);
+  });
+});
+
+describe("mergeGuildSettings", () => {
+  test("a patch goes through the same validation as a stored row", () => {
+    const merged = mergeGuildSettings(readGuildSettings({}), {
+      log_channel_id: "123456789012345678",
+      auto_backup_interval_hours: 5000,
+    });
+    expect(merged.log_channel_id).toBe("123456789012345678");
+    expect(merged.auto_backup_interval_hours).toBe(168);
+  });
+
+  test("fields the patch does not name are left alone", () => {
+    const current = readGuildSettings({ notify_on_join: true });
+    const merged = mergeGuildSettings(current, { ephemeral_default: false });
+    expect(merged.notify_on_join).toBe(true);
+    expect(merged.ephemeral_default).toBe(false);
+  });
+
+  test("a patch cannot smuggle in an unknown key", () => {
+    const merged = mergeGuildSettings(readGuildSettings({}), {
+      something_else: true,
+    } as never);
+    expect(Object.hasOwn(merged, "something_else")).toBe(false);
   });
 });
