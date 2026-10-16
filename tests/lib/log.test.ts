@@ -90,6 +90,7 @@ describe("the log-channel sink", () => {
       channelSink: (record) => {
         if (record.msg === "blows up") return Promise.reject(new Error("nope"));
         seen.push(record);
+        return; // the other path returns a promise, so this one says so too
       },
     });
 
