@@ -10,6 +10,8 @@ Legend for confidence:
 - `[r]` taken from a reference project, behaviour read directly
 - `[?]` assumed, needs a spike before it is coded
 
+Companion docs: `AGENTS.md` is the coding contract, `D4TODO.md` is the execution order, `S5PLAN.md` is the earlier draft this supersedes (its command list, its two-file schema, and its `snap:` id namespace are all replaced here; the captcha and public geo-lookup routes it proposed are dropped, see `19.4`).
+
 ---
 
 ## 1. What this is
@@ -44,12 +46,12 @@ One owner and a per-guild admin list run everything from Discord. The only thing
 |---|---|---|
 | Library | `oceanic.js` 1.15.x `[v]` | TypeScript-native, MIT, `tslib` + `ws` only, actively pushed, full Components V2 + modal coverage, gates its endpoints internally so we do not hand-roll rate limiting |
 | Language | TypeScript, `strict`, ESM | matches the library's own types |
-| Runtime | Bun primary, Node 22 LTS fallback `[?]` | Oceanic ships a `bun` export condition, so Bun is a supported target `[v]`. Single-runtime (bot + web server + scheduler in one process) is the whole point |
-| DB | DuckDB file by default, Postgres via `.env` `[?]` | one-file deploy for the common case, Postgres for anyone who wants concurrency |
+| Runtime | Bun `[v]` | Oceanic ships a `bun` export condition, so Bun is a supported target `[v]`. Single-runtime (bot + web server + scheduler in one process) is the whole point. No Node fallback in v1: two runtimes means two sets of DuckDB, fetch, and worker bugs |
+| DB | DuckDB file by default, Postgres via `DATABASE_URL` `[v]` | one-file deploy for the common case, Postgres for anyone who wants concurrency. The Bun + DuckDB binding is the one thing milestone 0 has to prove (`23.1`); the query layer is written portable so swapping to Postgres, or to `bun:sqlite`, is a config change |
 | Web | `node:http` + a tiny router, no framework | the site is five routes and one OAuth callback. A framework buys nothing |
-| Docs | `docs/` markdown, rendered into `/help` and the site | single source for both |
+| Docs | `docs/` markdown, rendered into `/snapback help` and `/setup guide` and the site | single source for all three |
 
-**The Bun risk, resolved early.** DuckDB has no official Bun build; `@duckdb/node-api` is a Node-API addon, and Bun's NAPI support is good but not certified for every addon. Milestone 0 is a half-day spike: open a DuckDB file from Bun, write a row, read it back. If it fails, fall back to Node 22 for the bot process and keep Bun for the web server, or swap the default driver to `better-sqlite3` behind the same abstraction. The storage layer (`5.1`) is written so that swap is one file.
+**The Bun risk, resolved early.** DuckDB has no official Bun build; `@duckdb/node-api` is a Node-API addon, and Bun's NAPI support is good but not certified for every addon. Milestone 0 is a half-day spike: open a DuckDB file from Bun, write a row, read it back. If it fails, the first fallback is `bun:sqlite` behind the same `Database` interface (`5.1`), which keeps the single-runtime design intact and costs one file. Dropping to Node is the last resort, only if Bun itself is unworkable for a reason SQLite does not fix, because two runtimes means two sets of addon, fetch, and worker bugs.
 
 Anything else is a distraction. No Python, no Go, no ORM.
 
@@ -155,6 +157,8 @@ snapback/
         fingerprint.ts
       views/                 server-rendered HTML, one file per page
     lib/
+      http.ts                  cdn GET with a timeout, the one non-API fetch
+      log.ts                   log channel + rotating file, redaction applied here
       sleep.ts
       chunk.ts
       redact.ts
@@ -249,8 +253,14 @@ Grouped, with the non-obvious columns called out.
 | `jobs` | see `4.1` |
 | `job_progress` | `job_id`, `step`, `cursor`, `done_count`, `total_count`, `updated_at` |
 | `audit_log` | `id`, `guild_id`, `actor_user_id`, `action`, `target`, `detail_json`, `created_at` |
+| `interaction_state` | `state_id` PK (short random), `guild_id`, `user_id`, `surface`, `payload_json`, `created_at`, `expires_at` |
+| `oauth_states` | `state` PK, `guild_id`, `created_at`, `expires_at`, `consumed_at`, `client_ip` |
 
-Per-flag admin permissions rather than a single "admin" boolean. The setup wizard asks for them, and "can peek at captured records" is a different trust level from "can wipe the server and restore". `[?]` keep the column count as is; if it turns out nobody uses the granularity, collapse to `role TEXT`.
+`interaction_state` backs the "payload too long for a customID" case in `9.3`; the scheduler sweeps it by `expires_at` (`17.1`). In-memory is the default path, the table is what makes a multi-worker deployment correct.
+
+`oauth_states` backs the CSRF nonce in `13.3`. Same reasoning: in-memory by default, the table exists so a restart mid-authorization does not invalidate a user's pending link.
+
+Per-flag admin permissions rather than a single "admin" boolean. The setup wizard asks for them, and "can peek at captured records" is a different trust level from "can wipe the server and restore". Keep the granular columns; the whole security model is that `verify.read` does not imply `restore.execute`.
 
 **Backups**
 
@@ -271,7 +281,7 @@ Per-flag admin permissions rather than a single "admin" boolean. The setup wizar
 | `backup_events` | `backup_id`, `source_event_id`, `name`, `description`, `scheduled_start`, `scheduled_end`, `privacy_level`, `entity_type`, `entity_metadata_json`, `status`, `cover_url` |
 | `backup_tags` | `backup_id`, `table`, `row_id`, `tag` |
 
-The `backup_tags` table exists so messages and members can be filtered by tag on restore ("restore only messages from #general, #announcements") without a second pass over JSON. `[?]` if it ends up unused, drop it.
+The `backup_tags` table exists so messages and members can be filtered by tag on restore ("restore only messages from #general, #announcements") without a second pass over JSON. Keep it. Selective restore is a first-class feature (`15.2`), and the alternative is re-reading every message row's JSON to answer "which channels had messages", which is the same work stored twice.
 
 Everything asset-like stores a **URL plus a local blob path**. Discord CDN URLs for emojis, stickers, and avatars are signed and expiring; icons and banners are semi-stable. `services/backup/assets.ts` downloads every asset at backup time into `backups/<backup_id>/assets/` and stores the relative path. On restore we upload from disk. This is the difference between a backup that restores in six months and one that restores empty. No reference project does this `[r]`; all of them store bare CDN URLs and silently restore blank icons.
 
@@ -341,10 +351,12 @@ MAX_MESSAGES_TOTAL=10000         # hard ceiling, cannot be raised
 MAX_CONCURRENT_JOBS=2
 PULL_DAILY_LIMIT_PER_ACCOUNT=100 # 100-500; trips cooldown at the cap
 PULL_COOLDOWN_HOURS=24
+PULL_FAILURE_COOLDOWN_MINUTES=60 # consecutive 403/429 burst cooldown
 
 # ---- optional ----
 LOG_LEVEL=info
-DEV_GUILD_ID=            # instant command registration while developing
+AUTOMATION_ENABLED=true   # false = scheduler off, every job is manual
+DISCORD_DEV_GUILD_ID=     # instant command registration while developing
 ```
 
 Rules:
@@ -366,8 +378,8 @@ auto_backup_message_count: 1000
 auto_restore_enabled: false
 restore_clear_before: false
 restore_message_timestamp_suffix: false
-retention: { enabled: false, keep_days: 30, keep_count: 10 }
 notify_on_join: false
+# retention is not duplicated here: it lives in the `retention_policies` table (`5.1`)
 ```
 
 `/setup` writes these; `/admin` edits them. Every one of them is also settable by the setup wizard, so nothing requires editing a file after first run.
@@ -479,7 +491,7 @@ Note on that last one, because it is a widespread myth: **message backup does no
 
 ## 8. Command surface
 
-Slash commands only. No prefix commands, no message handlers to maintain. Global registration in production, `DEV_GUILD_ID` guild registration when set (instant propagation).
+Slash commands only. No prefix commands, no message handlers to maintain. Global registration in production, `DISCORD_DEV_GUILD_ID` guild registration when set (instant propagation).
 
 Every command is owner-or-guild-admin gated by `discord/registry.ts` before the handler runs. A non-admin gets an ephemeral container: "you are not a Snapback admin for this server" plus a button explaining how to ask the owner. No stack traces.
 
@@ -729,7 +741,7 @@ A backup is a job. Steps run in a fixed order, each writing a checkpoint so a cr
 | 7 | Channels | `GET /guilds/{id}/channels` | categories, then everything else; overwrites recorded with target names, not just ids (`11.3`) |
 | 8 | Threads | `GET /guilds/{id}/threads/active` plus archived via `GET /channels/{id}/threads/archived/public` and `/private` | captured only when message backup is on |
 | 9 | Onboarding | `GET /guilds/{id}/onboarding` | prompts, default channels, mode, enabled |
-| 10 | Welcome screen | `GET /guilds/{id}/welcome-screen` | `[?]` may return 404 on guilds without the feature; that is normal, not an error |
+| 10 | Welcome screen | `GET /guilds/{id}/welcome-screen` | `[v]` only Community guilds have one; Discord errors rather than returning null, so a failure here means "no welcome screen", never a failed backup. Capture the `WELCOME_SCREEN_ENABLED` feature flag alongside it |
 | 11 | Automod | `GET /guilds/{id}/auto-moderation/rules` | |
 | 12 | Scheduled events | `GET /guilds/{id}/scheduled-events?with_user_count=true` | |
 | 13 | Bans | `GET /guilds/{id}/bans` | paginated; needs `BAN_MEMBERS` |
@@ -757,7 +769,7 @@ Stated in the UI, not just here, so nobody discovers it during a recovery:
 
 `is_everyone` is `role.name === "@everyone" && role.position === 0`, matching the reference `[r]` but with the id check added too (`role.id === guild_id` is the actual invariant, and it is cheaper and cannot be spoofed by a role someone renamed).
 
-Role **icon** is a per-role asset (a newer Discord feature) and gets the same download treatment as the guild icon. `[?]` confirm the field name and the upload path before coding.
+Role **icon** is a per-role asset and gets the same download treatment as the guild icon. `[v]` the role object carries `icon` (image data) and `unicode_emoji`, both gated on the guild's `ROLE_ICONS` feature. A guild without that feature returns neither, so both are captured as nullable and the restore skips them when the target lacks the feature.
 
 ### 11.3 Channels and overwrites
 
@@ -790,7 +802,7 @@ The 10k total ceiling exists because a full replay of a large guild is hours of 
 
 Per message captured: id, author (id, username, global name, nickname, avatar URL, `is_bot`, `webhook_id`), content, embeds, attachments, stickers, components, reactions, message reference, thread, flags, pinned, type, created and edited timestamps.
 
-Filtering, same as the reference `[r]` keeps only types 0 (`DEFAULT`) and 19 (`REPLY`) by default, but configurable, because pinned system messages and boost messages are sometimes wanted. `[?]` decide the default set at implementation time and expose it in `/setup backup`.
+Filtering. Default set is 0 (`DEFAULT`), 19 (`REPLY`), and 20 (`CHAT_INPUT_COMMAND`) — the three that are actual conversation. Everything else (joins, boosts, pins, thread creates) is off by default because it replays as noise in a restored channel, and each is a toggle in `/setup backup` for anyone who wants it. The reference keeps 0 and 19 only `[r]`; we add 20 because slash-command invocations often carry the only visible record of what a command produced.
 
 A message with no content, no embeds, no attachments and no stickers is still stored if it has reactions or components; the reference drops those `[r]`, which loses poll results and button messages. We keep them.
 
@@ -870,7 +882,7 @@ Rate limiting is handled by the shared limiter, not by sleeps. Every reference p
 - Non-`@everyone`, non-managed roles are created, ordered by `position` **descending**, and then reordered in one `PATCH /guilds/{id}/roles` call with an array of `{id, position}` rather than one call per role. `[r]` RestoreCord creates in order with a sleep between each and never reorders, meaning a restored guild's hierarchy is whatever Discord decided.
 - Matching existing roles: if a role with the same name exists, the default is to reuse and edit it rather than create a duplicate. Configurable to force-create.
 - Bot-managed roles cannot be created or deleted. If the backup has a role with `bot_id` and the target guild has an integration role from the same application, they are linked by name in the mapping table. If there is no matching integration, the role is reported as "not restorable: integration role from an application not in this guild".
-- Role colour, hoist, mentionable, icon and unicode emoji are all set. `[?]` verify the role-icon upload endpoint before coding.
+- Role colour, hoist, mentionable, icon and unicode emoji are all set. `[v]` icon and `unicode_emoji` go in the same `POST`/`PATCH` body as `color` (data URI for the icon), no separate upload call. The target guild must have `ROLE_ICONS`; if it does not, the icon is dropped and the report says so rather than the request failing.
 
 ### 12.4 Channel overwrites
 
@@ -905,7 +917,7 @@ Timeouts: `PATCH /guilds/{id}/members/{user_id}` with `communication_disabled_un
 
 The mechanism: one webhook per channel.
 
-1. `POST /channels/{id}/webhooks` with `{name}`, `[?]` verify whether an avatar can be set on creation or only via `PATCH`. Create it with a neutral name, then reuse it.
+1. `POST /channels/{id}/webhooks` with `{name, avatar}` — `[v]` `avatar` (image data) is accepted on create, so one call sets name and avatar. Name it `Snapback`, and reuse the webhook for every message in the channel.
 2. For each stored message, `POST /webhooks/{id}/{token}` with `{content, username, avatar_url}`.
 3. `DELETE /webhooks/{id}` when the channel is done (and in a `finally`, so an aborted job does not leave webhooks behind; a startup sweep deletes orphaned Snapback webhooks too).
 
@@ -926,7 +938,7 @@ Interruptions: the job checkpoints `job_progress.cursor` after every 100 message
 
 `clear before restore` deletes channels, then roles, then (optionally) bans, in that order.
 
-Deleting channels: for channels with messages, `POST /channels/{id}/messages/bulk-delete` handles up to 100 messages and refuses anything older than 14 days (`[v]` these are the documented bulk-delete constraints), so clearing a channel older than that means individual deletes. Then `DELETE /channels/{id}`.
+Deleting channels: for channels with messages, `POST /channels/{id}/messages/bulk-delete` takes 2 to 100 ids and refuses anything older than 14 days `[v]`. Three documented traps, all handled in one helper: a single id is a `400` (the minimum is 2), ids that do not exist still count toward the 2-100 range (so a batch of 100 with 40 stale ids is fine but a batch of 1 stale id is not), and clearing a channel older than 14 days needs individual `DELETE /channels/{id}/messages/{id}` calls at one request each. Prefer `DELETE /channels/{id}` when the whole channel is going anyway; bulk-delete only matters when the channel is kept and emptied.
 
 Deleting roles: `DELETE /guilds/{id}/roles/{role_id}` for every non-`@everyone` non-managed role.
 
@@ -936,7 +948,7 @@ Because this is the most destructive thing the bot does, it is triple-guarded:
 2. an acknowledgement input requiring the operator to type the guild name
 3. a 15-minute nonce on the confirm button, single use
 
-And it refuses to run if the target guild is the bot's `DEV_GUILD_ID` unless an explicit env flag is set. Eating your own test server once is enough.
+And it refuses to run if the target guild is the bot's `DISCORD_DEV_GUILD_ID` unless an explicit env flag is set. Eating your own test server once is enough.
 
 ### 12.8 Failure handling per step
 
@@ -993,7 +1005,7 @@ Standard authorization code, no PKCE (public client is the browser, confidential
 7. If `email` was granted, `email` and `verified` are on the `/users/@me` response.
 8. If `connections` was granted, `GET /users/@me/connections`.
 9. If `guilds` was granted, `GET /users/@me/guilds`.
-10. If `relationships.read` was granted and acknowledged, `GET /users/@me/relationships` (`[?]` the exact route for reading relationships should be confirmed at implementation; Discord has historically not exposed a documented public endpoint for this on the standard API surface, and this is a genuine implementation risk, see `23`).
+10. `relationships.read` `[v]`: Discord documents this scope as "part of our Social SDK — submit for access", not a plain OAuth scope, and exposes no public REST route for reading the list. So there is nothing to call with a normal OAuth token. The capture path stays disabled with a "requires Social SDK access" state, the scope is requested and acknowledged in the consent text, and `relationships_json` stays nullable (`23`).
 11. Capture IP and fingerprint (`14`).
 12. Upsert the record. Write a `verify_record_events` row with `kind: oauth`.
 13. Show the result page: success, the guild name, what was captured, the revocation link, and the disclosure link.
@@ -1106,7 +1118,7 @@ Two local data files, no API keys, no per-request cost, no third party seeing th
 | Country, city, region, ASN | db-ip lite (Country and City/ASN editions) | MMDB | monthly; the file name carries `YYYY-MM` `[v]` |
 | ASN to org name, ASN type (hosting, ISP, business, education, government) | ipverse `as-metadata` | CSV/JSON, CC0-1.0 `[v]` | weekly |
 
-Reading MMDB needs a reader. `maxmind` and `mmdb-lib` are the two options; both are pure JS. `[?]` pick one at implementation time and note the licence of the reader (the *data* is the licensed part, and db-ip lite is CC-BY, so the attribution requirement has to be honoured in `docs/self-hosting.md` and on `/legal`).
+Reading MMDB needs a reader. Use `maxmind` (the `node-maxmind` package): pure JS, MIT, sync and async readers, handles both the country and city editions. `mmdb-lib` is the lower-level alternative but its API is thinner. The reader licence is MIT; the *data* is the licensed part, and db-ip lite is CC-BY, so the attribution goes in `docs/self-hosting.md` and on `/legal`, with the copyright line reproduced verbatim on the page. The reader is lazy-loaded on first verify so a deploy without the `.mmdb` files still boots.
 
 `services/intel/classify.ts` produces a verdict from those two sources:
 
@@ -1162,7 +1174,7 @@ Rules, all configurable from `/pull config`:
 - `PULL_DAILY_LIMIT_PER_ACCOUNT` default 100, sane range 100-500, hard ceiling 500. Above 500 the UI says the account risks a flag and requires a second confirmation.
 - On reaching the limit: `restricted = true`, `restricted_reason = 'daily_limit'`, `cooldown_until = now + PULL_COOLDOWN_HOURS` (default 24).
 - While restricted, the pull engine **skips that account entirely** before making any request. It does not attempt-and-handle-error; it does not attempt. This is what the user asked for ("stop attempts for that account immediately").
-- Failures also count. `[?]` the exact ratio at implementation time, but the plan is: three consecutive `403`/`429` results on one account trip a shorter cooldown (default 1 hour) even under the daily cap, because failure bursts are the actual signal.
+- Failures also count. Three consecutive `403`/`429` results on one account trip a shorter cooldown, `PULL_FAILURE_COOLDOWN_MINUTES` default 60, even under the daily cap, because failure bursts are the actual signal and a slow daily limit reacts too late. The counter is per account and per process; it resets on any `201`.
 - A successful `201` clears the consecutive-failure counter.
 - Counters reset by UTC day, swept by the scheduler at 00:05 UTC and lazily on read, so a missing sweep cannot hand someone a fresh budget.
 
@@ -1380,6 +1392,7 @@ Stated because the reference material contains all of it `[r]` and it will come 
 - No proxy rotation or ban evasion. No `zproxy.lum-superproxy.io`, no `CF_API_TOKEN`-driven zone juggling. The reference project's setup doc wires a residential proxy in front of every Discord API call; that is an evasion infrastructure and this project does not include it.
 - No selfbot behaviour, no user-token message sending, no token harvesting.
 - No CAPTCHA-solving service integration. hCaptcha is in the reference's env; here, verification is the OAuth flow and nothing else.
+- No public geo-lookup endpoint. The earlier draft exposed `POST /api/geo` so the site could ask the server what an arbitrary IP resolves to; that is an unauthenticated query surface against the intel data and it is not built. Geolocation is computed internally, at verify time, from the stored IP, and never on request.
 - No payment, subscription, or gift-code surface. Five of the reference's tables exist to run a paid SaaS; this is a self-hosted tool.
 - No "block alts" enforcement that acts on a hash match alone. An IP hash match is a signal shown to an operator, never an automatic ban, because shared NAT, student halls, and mobile carriers all produce false matches.
 
@@ -1393,7 +1406,7 @@ Stated because the reference material contains all of it `[r]` and it will come 
 | Fixtures | a synthetic guild: 4 categories, 20 channels of every relevant type, 60 roles including managed and `@everyone`, 300 members with role combinations, 2000 messages with attachments, embeds, replies, reactions, emojis, stickers, automod rules, onboarding, bans | a generator script committed to the repo, so the shape is reviewable |
 | Golden files | the backup of the fixture guild, committed as JSON | any change to the backup shape shows up as a diff. This is the only cheap way to catch a schema regression |
 | Contract | every endpoint the bot calls, mocked, asserting the exact request shape | catches camelCase/snake_case and bigint bugs before they reach Discord |
-| Integration | restore the fixture backup into a real test guild, then diff the target against the fixture | runs manually against a `DEV_GUILD_ID`, never in CI, because it needs a real token |
+| Integration | restore the fixture backup into a real test guild, then diff the target against the fixture | runs manually against a `DISCORD_DEV_GUILD_ID`, never in CI, because it needs a real token |
 | Round-trip | backup, restore into an empty guild, backup again, diff the two backups | the strongest single test in the suite. Differences must be explainable by the known-lossy list (`11.1`, `12.6`) and anything else is a bug |
 | Failure injection | the mock returns `429`, `500`, `50035`, HTML, an empty body, and a mid-stream disconnect at every step | every one of those paths has to produce a typed error and a sensible user message |
 | Load | a 10k-message backup and restore against a mock, measuring memory and asserting the checkpoints work | proves the batching and the resume |
@@ -1448,9 +1461,9 @@ Each milestone ends with something runnable and a verify check.
 
 Ordered by how likely they are to change the plan.
 
-1. **Bun + DuckDB.** Real risk, cheap to test, milestone 0. Fallbacks: Node 22, or SQLite behind the same interface. Do not build past milestone 1 without resolving this.
-2. **`relationships.read` endpoint.** `[?]` The friends/blocked/pending list is a restricted scope, but the standard API surface has not historically exposed a clean read endpoint for it, and Discord has moved this capability around. **Verify this before promising the feature.** If it turns out to require the Social SDK's own integration rather than a plain OAuth scope, the plan's answer is: keep the schema (`relationships_json`), keep the UI, and disable the capture path with a clear "requires the Social SDK, see docs" state rather than shipping something that cannot work.
-3. **Role icons.** `[?]` The per-role icon field and its upload path need confirming before milestone 5.
+1. **Bun + DuckDB.** Real risk, cheap to test, milestone 0. Fallback order: `bun:sqlite` behind the same interface (one file, keeps the single runtime), then Node only as a last resort. Do not build past milestone 1 without resolving this.
+2. **`relationships.read` is Social-SDK-gated.** Answered against the docs. The scope reads "This scope is part of our Social SDK — submit for access", and there is no public REST endpoint for the friends/pending/blocked list. Not a milestone blocker, but the feature is not shippable without Discord granting Social SDK access. Decision: keep `relationships_json`, keep the UI, ship the capture path disabled with a "requires Social SDK access" state and a link to the application form. Do not present it as working.
+3. **Role icons.** Answered. `icon` (image data) and `unicode_emoji` on the role object, both gated on the guild's `ROLE_ICONS` feature, both set in the same create/modify role body. Capture as nullable; skip on restore when the target guild lacks the feature and report it.
 4. **Message-count math.** A 5000-message restore is roughly 5000 webhook posts plus limiter spacing. The honest duration estimate needs measuring at milestone 6, and the UI should show the measured number, not a guess.
 5. **Attachment preservation.** Most historical attachments will be unrecoverable (expired signed URLs). Milestone 4 should measure what fraction of a realistic channel is recoverable so the UI text is accurate.
 6. **DuckDB write contention** when someone runs the bot and the web site as separate processes. Mitigated by the lock message, but the doc has to be loud about it.

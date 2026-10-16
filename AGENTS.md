@@ -8,10 +8,13 @@ Rules for writing code and commands in Snapback. Read `D4PLAN.md` first; it is t
 bun install
 cp .env.example .env      # fill DISCORD_TOKEN and DISCORD_OWNER_ID
 bun run dev               # bot + web server, one process
-bun test
-bun run typecheck
-bun run lint
+bun run check             # typecheck + lint + test, the gate before every commit
+bun run typecheck         # tsc --noEmit only
+bun run lint              # linter only
+bun test                  # tests only
 ```
+
+`bun run check` is `typecheck && lint && test` and is the only thing that counts as passing.
 
 `DISCORD_DEV_GUILD_ID` set means guild-scoped command registration (instant). Unset means global (up to an hour).
 
@@ -24,7 +27,7 @@ Break one of these and the change is wrong, however well it works.
 3. **Snowflakes are strings until they hit the DB.** Never `Number(id)`. Never compare an id to a number. `bigint` exists only inside `db/`.
 4. **Never `sleep()` to dodge rate limits.** Use `discord/ratelimit.ts`. It reads the headers; fixed sleeps are simultaneously too slow and too fast.
 5. **Never invent an error message.** Parse the JSON body and show Discord's `code` and `message` verbatim. A code with no table entry is shown raw, not paraphrased. `D4PLAN.md` 18.1.
-6. **All Discord traffic goes through `discord/client.ts`.** Nothing else imports `fetch` against `discord.com`. This is what makes the limiter, the error parser, and the redaction apply everywhere.
+6. **All Discord API traffic goes through `discord/client.ts`.** Nothing else imports `fetch` against `discord.com` or `discordapp.com`. This is what makes the limiter, the error parser, and the redaction apply everywhere. One carve-out: read-only CDN downloads (`cdn.discordapp.com` for icons, emojis, stickers, attachments) go through `lib/http.ts` — a plain GET, timeout, no auth header. Everything else, including attachment re-upload during a restore, goes through the client.
 7. **Nothing long runs in an interaction handler.** Enqueue a job, ack, edit the message from the job runner.
 8. **Re-check authorisation and ownership on every interaction.** A button rendered for an admin last week must fail closed today.
 9. **No user tokens, no selfbot code, no proxy rotation, no CAPTCHA service.** Not negotiable, not behind a flag.
@@ -59,6 +62,7 @@ Say what is happening in words as well as colour. Every coloured container also 
 - One page builder (`page()`). Do not hand-roll layouts in a command handler.
 - One component factory per component type in `discord/components/`. Factories return plain objects; the library has no builders.
 - camelCase in TypeScript (`customID`, `maxValues`, `minValues`), snake_case only in raw payloads.
+- Custom ids are `sb:<surface>:<guild>:<object>:<action>:<cursor>` (`D4PLAN.md` 9.3). Anything that will not fit goes into `interaction_state` behind a short random id with a 15-minute TTL. Never pack a selection payload into a customID.
 - Every surface has the same shape: title, body, status line, controls, and a way back.
 - Destructive actions always get their own page with a nonce on the confirm button and a 15-minute expiry.
 - Errors always look the same: what happened, what Discord said, what to do.
@@ -106,7 +110,7 @@ Say what is happening in words as well as colour. Every coloured container also 
 
 ## Before you call it done
 
-- [ ] `bun run typecheck` clean, `bun run lint` clean, `bun test` green
+- [ ] `bun run check` clean (typecheck + lint + test)
 - [ ] every new interactive component has a handler registered and the boot check passes
 - [ ] no message exceeds 40 components
 - [ ] no `Number(snowflake)`, no `setTimeout` for rate limits, no `console.log` left behind

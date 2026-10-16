@@ -1,0 +1,263 @@
+# D4TODO.md
+
+Execution order for Snapback. `D4PLAN.md` is the design, `AGENTS.md` is the coding contract, this is the queue.
+
+Tick a box only when its check passes on a real run, not when the code is written.
+
+`[ ]` todo, `[~]` in progress, `[x]` done and checked, `[!]` blocked.
+
+Paths, command names, route names, and the customID namespace below are taken from `D4PLAN.md`. If one disagrees with `D4PLAN.md`, `D4PLAN.md` wins and this file is wrong.
+
+## Decisions locked
+
+| Decision | Value |
+|---|---|
+| runtime | Bun 1.3+, the only runtime. No Node fallback (`D4PLAN.md` 2) |
+| language | TypeScript, `strict`, ESM |
+| library | `oceanic.js` 1.15.x |
+| db default | DuckDB file at `data/snapback.duckdb` via `@duckdb/node-api` |
+| db alt | Postgres via `Bun.sql` when `DATABASE_URL` is set |
+| orm | none, one thin helper layer, two drivers |
+| schema | one portable `db/schema.sql`, plus numbered migrations. Not two dialect files |
+| website | `bun.serve` in the same process as the bot |
+| components | Components V2 on every message. v1 embeds only in the two places `D4PLAN.md` 9.5 allows |
+| custom ids | `sb:<surface>:<guild>:<object>:<action>:<cursor>` (`D4PLAN.md` 9.3) |
+| long payloads | `interaction_state` table, short random id in the customID, 15 minute TTL |
+| geo/asn | db-ip lite + ipverse, local files, no third party at request time |
+| mmdb reader | `maxmind` (MIT). Data attribution for db-ip (CC-BY) goes on `/legal` and `docs/self-hosting.md` |
+| role icons | captured as `icon` + `unicode_emoji`, both gated on the guild's `ROLE_ICONS` feature |
+| relationships | schema and UI kept, capture path disabled behind "requires Social SDK access" |
+| tokens | AES-256-GCM, decrypted only in the token refresh path and the pull join |
+| settings | `guilds.settings_json`, defaults in `config/defaults.ts`. There is no `bot_config` table |
+
+`.env` holds connection and process secrets only (`D4PLAN.md` 6). Everything an owner changes from Discord lives in `guilds.settings_json` and is written by `/setup`:
+
+```
+DISCORD_TOKEN  DISCORD_OWNER_ID
+DATABASE_URL
+PUBLIC_BASE_URL  PORT  IP_STORAGE  IP_HASH_PEPPER  ENCRYPTION_KEY
+BEHIND_CLOUDFLARE_TUNNEL  TRUSTED_PROXY_DEPTH
+DBIP_COUNTRY_MMDB  AS_METADATA_CSV  INTEL_ENABLED
+MAX_MESSAGES_PER_CHANNEL  MAX_MESSAGES_TOTAL  MAX_CONCURRENT_JOBS
+PULL_DAILY_LIMIT_PER_ACCOUNT  PULL_COOLDOWN_HOURS  PULL_FAILURE_COOLDOWN_MINUTES
+LOG_LEVEL  AUTOMATION_ENABLED  DISCORD_DEV_GUILD_ID
+```
+
+Already verified on this machine before the plan was written: Bun runs `@duckdb/node-api` and `Bun.sql`. The gotcha carried forward: DuckDB returns `BigInt` for `BIGINT`, so snowflakes become `string` at the db boundary in `db/rows.ts`.
+
+## Milestone map
+
+`D4PLAN.md` 21 defines 12 milestones. The phases below are the same work at a finer grain.
+
+| D4PLAN milestone | TODO phases |
+|---|---|
+| 0 Spike | 0 |
+| 1 Skeleton | 1, 2, 3 |
+| 2 UI | 3 |
+| 3 Backup | 5 |
+| 4 Messages | 5 |
+| 5 Restore | 6 |
+| 6 Message restore | 6 |
+| 7 Web + OAuth | 7 |
+| 8 Records UI | 8 |
+| 9 Intel + pull | 9, 10 |
+| 10 Automation | 11 |
+| 11 Polish | 12, 13, 14 |
+
+## Phase 0 - blockers, resolve before feature code
+
+Answers marked here were resolved from the Discord docs and are recorded in `D4PLAN.md` 23.
+
+- [ ] `@duckdb/node-api` opens, writes, reads, and returns BigInt under the Bun version that will ship. Record the exact version in `AGENTS.md`.
+- [ ] Oceanic 1.15 sends a Components V2 container from Bun with a plain object payload, and a button in it responds.
+- [x] mmdb reader: `maxmind` (MIT). db-ip data is CC-BY, attribution on `/legal` and `docs/self-hosting.md`.
+- [x] role icons: `icon` (image data) and `unicode_emoji` on the role object, set in the same create/modify body, gated on `ROLE_ICONS`. Do not drop from v1.
+- [x] friends/pending/blocked: `relationships.read` is Social-SDK-gated with no public REST route. Keep the schema, ship the capture disabled.
+- [x] bulk delete: 2 to 100 ids, 14 day window, non-existent ids still count toward the range, a single id is a `400`.
+- [x] file upload ceiling: 10 MiB unboosted, 25 MiB boosted (`D4PLAN.md` 17.3). Confirm again at Phase 11 against the export path.
+
+## Phase 1 - scaffold
+
+- [ ] `package.json` with `oceanic.js`, `@duckdb/node-api`, nothing else without a reason.
+- [ ] scripts: `dev`, `start`, `build`, `test`, `typecheck` (`tsc --noEmit`), `lint`, `check` (`typecheck && lint && test`).
+- [ ] `tsconfig.json` strict, ESM, bun types.
+- [ ] `.env.example` with the keys listed above and a comment on each.
+- [ ] `.gitignore` covers `.env`, `data/`, `references/`, `node_modules/`.
+- [ ] directory tree from `D4PLAN.md` 3, empty files where needed.
+- [ ] check: `bun run check` exits 0 on a src that typechecks and has no tests.
+
+## Phase 2 - database
+
+- [ ] `db/schema.sql`, portable SQL, one file, no engine-specific types (`D4PLAN.md` 5).
+- [ ] `db/index.ts` picks DuckDB or Postgres from `DATABASE_URL`; `db/duckdb.ts` and `db/postgres.ts` both implement `Database` from `db/types.ts`.
+- [ ] `db/rows.ts` converts BigInt to string at the boundary. One place, no exceptions.
+- [ ] one query module per table under `db/`.
+- [ ] `db/migrate.ts`: numbered, idempotent, safe to run every boot, `schema_version` in `meta`.
+- [ ] `config/defaults.ts` holds every `guilds.settings_json` default from `D4PLAN.md` 6.1.
+- [ ] check: round-trip insert/select/update per table, BigInt conversion asserted, both drivers.
+
+## Phase 3 - bot shell
+
+- [ ] `discord/client.ts`: intents, gateway, ready, error and warn hooks with the gateway close-code table.
+- [ ] `discord/registry.ts`: command registration, diff against live commands, owner-or-admin gate. Deny is an ephemeral container naming what is needed.
+- [ ] `discord/components/`: container, section, textDisplay, separator, actionRow, button, selects, modal, colors. Plain objects, no classes.
+- [ ] `discord/interactions/router.ts`: `sb:` parsing, handler registry, boot-time assertion that every produced customID has a handler.
+- [ ] `discord/interactions/state.ts`: short-lived state store, in-memory with the `interaction_state` table behind it.
+- [ ] `discord/ratelimit.ts`: per-route buckets, honours `retry_after` exactly, no fixed sleeps.
+- [ ] `lib/log.ts` + `lib/redact.ts`: log channel plus rotating file, redaction of tokens, secrets, emails, full IPs.
+- [ ] `/snapback status`, `/snapback diagnostics`: uptime, gateway latency, job depth, db driver + size, tracked guilds, version.
+- [ ] check: a container with a section, separator, and button renders in a test guild; a `50035` prints field errors verbatim; a demoted admin is refused.
+
+## Phase 4 - `/setup` wizard
+
+- [ ] resumable state machine in `guilds.settings_json` under `wizard`, each step `{done, skipped, at}`. Re-running edits rather than duplicating.
+- [ ] steps 0-11 from `D4PLAN.md` 10.1, plus a subcommand for each: `status`, `app`, `web`, `admins`, `backup`, `restore`, `verify`, `branding`, `logs`, `privacy`, `data`, `guide`.
+- [ ] file upload for avatar and banner through the modal `file_upload` component, size checked and non-square centre-cropped before upload, GIF accepted for the avatar.
+- [ ] `app` page: exact redirect string to paste, intents list, `app test` self-test, tunnel pointer.
+- [ ] `verify` page: the panel builder from `D4PLAN.md` 10.3, live preview posted to the wizard channel only.
+- [ ] every save writes an `audit_log` row and confirms ephemerally with the new value.
+- [ ] every save clamps numbers and validates colours before writing.
+- [ ] check: a full pass saves, a re-run shows prefilled values, audit rows exist, a partial setup resumes after a restart.
+
+## Phase 5 - backup
+
+- [ ] capture in `services/backup/`: guild settings, roles, channels, overwrites by id plus name, threads, members, bans, emojis, stickers, soundboard, automod, scheduled events, onboarding, welcome screen, widget, afk.
+- [ ] message capture newest to oldest via `before` cursor, `limit: min(100, remaining)`, per-channel cap and global 10k cap both enforced in code, counted outside the parallel map.
+- [ ] messages store authorId, type, messageReference, editedAt, reactions, stickerIds, flags, attachments with url, size, contentType.
+- [ ] `services/backup/assets.ts` downloads icon, banner, splash, emojis, stickers, soundboard, role icons, and attachments under the size cap into `backups/<id>/assets/`, storing the relative path next to the url.
+- [ ] `services/backup/` honours `doNotBackup`: roles, channels, messages, members, bans, emojis, stickers, onboarding.
+- [ ] every skip is recorded in `skipped[]`, never silent.
+- [ ] self-check before sealing, with a per-item failure list (`D4PLAN.md` 11.6).
+- [ ] `/backup create`, `/backup list` with a per-row select, `/backup info`, `/backup export`, `/backup delete`, `/backup prune`.
+- [ ] check: a scratch guild round-trips counts, an over-limit channel clamps at the cap and not a page past it, the JSON matches the golden file.
+
+## Phase 6 - restore
+
+- [ ] `services/restore/plan.ts`: backup plus options to an ordered op list, with counts per op.
+- [ ] `/restore plan` dry-run posts the diff and writes nothing.
+- [ ] phased executor in `services/restore/`, each phase awaited, live progress on one edited message, a checkpoint per phase:
+  1. guild settings
+  2. roles: `@everyone` edited, others created, then positions set bottom-up, build old id to new id map
+  3. categories
+  4. channels with overwrites resolved through the id map, name fallback only if the id misses, and log when it does
+  5. threads, archived and locked re-applied after creation
+  6. emojis and stickers, tier capped
+  7. messages oldest first via one webhook per channel, `allowedMentions: {parse: []}`, attachments re-uploaded, then a second pass to fix replies to the new message ids, then reactions, then pins
+  8. afk, widget, system channels by mapped id
+  9. members: roles through the map, nickname, timeout. Never kicks
+  10. bans
+  11. onboarding, welcome screen, invites, automod, scheduled events, best effort with per-item warnings
+  12. report: per phase ok/warn/fail, the dropped list, duration, and the not-reversible line
+- [ ] clear-before-restore: own page, typed guild-name confirm, 15 minute single-use nonce, only deletes what the backup has.
+- [ ] `/restore start`, `/restore status`, `/restore cancel`, `/restore members`, `/restore messages`.
+- [ ] check: roles keep hierarchy, overwrites survive, replies thread to the new ids, pins set, a kill mid-restore resumes from the last phase.
+
+## Phase 7 - website, oauth, verify
+
+- [ ] `web/server.ts` on `bun.serve`, `web/router.ts`, five routes: `/`, `/callback`, `/revoke`, `/health`, `/legal` (`D4PLAN.md` 13.1). No `/v/{slug}`, no public geo route.
+- [ ] one function builds the authorize URL, in `services/verify/oauth.ts`. Search the repo for a second copy and delete it.
+- [ ] `state`: 32 random bytes base64url, bound to guild, client ip, and expiry, single use, validated on callback. Stored in memory with the `oauth_states` table behind it. Guild id as state is banned.
+- [ ] `redirect_uri` always from `PUBLIC_BASE_URL`, byte-identical to the registered one, never from a request header.
+- [ ] code exchange server side, then `/users/@me`, then `/oauth2/@me` for the authoritative granted scopes, then email, connections, guilds per scope.
+- [ ] IP capture (`web/capture/ip.ts`): `CF-Connecting-IP` in cloudflare mode, else right-to-left walk of `X-Forwarded-For` with `TRUSTED_PROXY_DEPTH`, else socket. Validate every candidate, never store a bare string.
+- [ ] fingerprint (`web/capture/fingerprint.ts`): attributes collected client side and posted with the nonce, stored on the pending row and merged on callback.
+- [ ] tokens encrypted before insert, never returned to a command.
+- [ ] panel builder per `D4PLAN.md` 10.3: channel select, modal for title and description, colour, thumbnail, button label and style, scope checkboxes with consequence lines, `?guild=` link button.
+- [ ] disclosure text generated from the panel's scope list, not typed into a template.
+- [ ] check: end-to-end verify with a test app, record row complete, `/revoke` clears tokens and keeps the record, tunnel mode captures a real IP not a loopback.
+
+## Phase 8 - records and refresh
+
+- [ ] `/verify records`: paginated browser, 10 per page, Section per record, filter select, sort, export.
+- [ ] `/verify user`: one container with identity, oauth, network, guilds, connections, relationships (guarded), fingerprint, events. Empty fields say "not captured".
+- [ ] `/verify refresh`: one live-edited message, coalesced to at most one edit per 2 seconds, revoked list appended as found, `checked/active/stale/revoked` counts.
+- [ ] refresh logic: `/users/@me` for liveness, refresh on expiry, **store the rotated refresh token**, `invalid_grant` marks unauthorized and clears tokens but keeps every other field.
+- [ ] a network blip must not mark anyone unauthorized. Distinguish a real `invalid_grant` from a transport error.
+- [ ] `/verify delete`: the only path that erases captured data, owner only, `scope` of record/ip/token/all, typed confirm, audit row.
+- [ ] `/verify export`, `/verify stats`, `/users lookup`, `/users export`, `/users blacklist`.
+- [ ] check: a 200 record refresh reports the right unauthorized count, the message edits without tripping a 429, a revoked user keeps ip and email.
+
+## Phase 9 - intel
+
+- [ ] `services/intel/dbip.ts`: mmdb reader for country, region, city, asn.
+- [ ] `services/intel/asmetadata.ts`: ipverse `as-metadata` CSV reader, ASN to org name and type.
+- [ ] `services/intel/classify.ts`: `ip_type` from the ASN type, `vpn` and `hosting` booleans, `tor` from a bundled exit list or an ASN name match.
+- [ ] wording in the UI is a likelihood, never a verdict. Show the ASN and org as the evidence.
+- [ ] missing data files skip geo with a `/snapback status` warning, never a crash.
+- [ ] check: known IPs classify correctly for a hosting provider, a residential ISP, and a mobile carrier.
+
+## Phase 10 - pull engine
+
+- [ ] `services/pull/member.ts`: sequential, `PUT /guilds/{g}/members/{u}` with the user's access token, roles limited to what the bot can assign.
+- [ ] parse the json body always. Map on `(status, code)`, never guess.
+- [ ] refresh once on 401, retry the join once, then mark stale and continue.
+- [ ] `services/pull/counter.ts`: daily per-account counter from `account_counters`, `cooldown_until` on hitting the limit, skip before attempting while cooling down.
+- [ ] consecutive failure burst trips `PULL_FAILURE_COOLDOWN_MINUTES` even under the daily cap.
+- [ ] delay between joins from config plus 0 to 250 ms jitter.
+- [ ] guild-level `pulling` flag blocks concurrent pulls to one guild.
+- [ ] `/pull start` dry run lists who would be added and writes nothing.
+- [ ] `pull_attempts` row per attempt; `account_counters` row per account per day.
+- [ ] `/pull counters` page per account, `/pull reset` with confirm and audit, `/pull config`, `/pull status`.
+- [ ] check: mixed valid and revoked set produces exact counts, a 429 is honoured from the mock, the account at the limit is skipped without an attempt.
+
+## Phase 11 - automation, retention, export
+
+- [ ] `services/scheduler/index.ts`, tick every 15 s, due work read from the db not from memory timers. `AUTOMATION_ENABLED=false` disables it entirely.
+- [ ] auto backup per guild interval, auto restore on join, token refresh sweep, counter reset at 00:05 UTC, interaction-state TTL sweep, orphan webhook sweep, export expiry sweep.
+- [ ] retention from `retention_policies`: `keep_days`, `keep_count`, `keep_kind`. Never deletes the newest backup, never one referenced by a running job, pre-restore first.
+- [ ] export: backup json, records json, records csv, full dump. Tokens excluded by construction in the serialiser.
+- [ ] exported files land in `data/exports/` with `expires_at` (24h default) and are swept.
+- [ ] check: an auto backup fires on schedule, pruning never leaves zero backups, an export contains no token under any option combination.
+
+## Phase 12 - hardening
+
+- [ ] failure injection at every step: `429`, `500`, `50035`, HTML body, empty body, mid-stream disconnect.
+- [ ] every one of those produces a typed error and a user message that names the fix.
+- [ ] security pass against `D4PLAN.md` 19 threat model, one line of evidence per row.
+- [ ] load test: 10k message backup and restore against a mock, memory measured, checkpoints proven.
+- [ ] round-trip test green, differences all on the known-lossy list.
+- [ ] measure and record: restore duration per 1000 messages, attachment recovery rate on a realistic channel.
+- [ ] check: report the four numbers, update the UI estimates with the measured values.
+
+## Phase 13 - docs
+
+- [ ] `docs/setup.md`, `docs/developer-panel.md`, `docs/cloudflare-tunnel.md`, `docs/scopes.md`.
+- [ ] `docs/commands.md`, `docs/backup-format.md`, `docs/self-hosting.md`.
+- [ ] `docs/privacy.md`, `docs/troubleshooting.md`, `docs/architecture.md`, `docs/contributing.md`.
+- [ ] every guide reachable from `/setup guide` or `/snapback help` so it cannot drift.
+- [ ] `docs/commands.md` checked by a test that every registered command appears in it.
+- [ ] check: a fresh operator goes from clone to verified user using only `docs/setup.md` and `docs/cloudflare-tunnel.md`.
+
+## Phase 14 - release
+
+- [ ] licence file. MIT unless there is a reason otherwise.
+- [ ] README line two keeps the agentic-tools notice, untouched.
+- [ ] CI: `bun run check` on push to both remotes.
+- [ ] version 1.0.0, tag pushed to both remotes.
+- [ ] `docs/screenshots/` with one image per major surface.
+- [ ] check: a fresh clone on a clean machine runs `bun install` and `bun run dev` with only `.env` filled.
+
+## Applies to every phase
+
+- [ ] smallest diff that fixes the root cause, no adjacent refactors.
+- [ ] `bun run check` before moving on. Fix what broke.
+- [ ] the relevant `docs/` guide updated in the same change.
+- [ ] new setting added to `config/defaults.ts` and to the `/setup` page that owns it.
+- [ ] new command appears in `docs/commands.md`.
+- [ ] new interactive component has a handler, boot assertion passes.
+- [ ] no message over 40 components.
+- [ ] commit per working step, conventional prefix, lowercase, no em dashes. Push to both remotes.
+
+## Open research items
+
+Tracked here so they do not get quietly answered by a guess. Answered ones are struck through with the answer so the reasoning is not lost.
+
+- ~~`relationships.read` by scope alone?~~ Social-SDK-gated, no public REST route. Capture disabled, schema kept.
+- ~~role icons: field name and endpoint?~~ `icon` + `unicode_emoji`, same create/modify body, `ROLE_ICONS`-gated.
+- ~~mmdb reader and licence?~~ `maxmind`, MIT. db-ip data is CC-BY, attributed on `/legal`.
+- ~~bulk delete limits?~~ 2 to 100 ids, 14 days, single id is a `400`.
+- ~~file upload ceiling per boost tier?~~ 10 MiB unboosted, 25 MiB boosted. Re-confirm at Phase 11.
+- [ ] measured restore duration per 1000 messages.
+- [ ] measured attachment recovery rate on old channels.
+- [ ] whether `enumerateDevices` labels are ever non-empty without a permission prompt, and if not, drop labels and keep counts.
+- [ ] Discord's current guild role and channel caps, from real `30005` and `30013` responses rather than from folklore.
