@@ -94,25 +94,38 @@ Answers marked here were resolved from the Discord docs and are recorded in `D4P
 
 - [x] `db/schema.sql`, portable SQL, one file, no engine-specific types (`D4PLAN.md` 5).
       `src/db/schema.sql`, 539 lines, all 29 tables from `D4PLAN.md` 5.1. `tests/db/schema.test.ts` loads the whole file into a real DuckDB, asserts every table exists, asserts a second load is a no-op, and asserts snowflakes and uuid keys are `VARCHAR` not a numeric type.
-- [ ] `db/index.ts` picks DuckDB or Postgres from `DATABASE_URL`; `db/duckdb.ts` and `db/postgres.ts` both implement `Database` from `db/types.ts`. `src/db/types.ts` defines the `Database` interface and every row type; the two drivers are not written.
+- [x] `db/index.ts` picks DuckDB or Postgres from `DATABASE_URL`; `db/duckdb.ts` and `db/postgres.ts` both implement `Database` from `db/types.ts`.
+      `src/db/index.ts` is the only module that imports `config/env.ts` (that import parses and can exit, so no driver may). The handle is lazy and a failed open is not cached. `duckdb.ts` retries the file lock for 30s and then reports `SB_DB_LOCKED` naming the file; `postgres.ts` rewrites `?` to `$n` for Bun.sql.
 - [x] `db/rows.ts` converts BigInt to string at the boundary. One place, no exceptions.
       `src/db/rows.ts`, explicit per-column converters, no reflection. `tests/db/rows.test.ts` covers the round trip and the refusal of a lossy `Number(snowflake)`.
-- [ ] one query module per table under `db/`.
-- [ ] `db/migrate.ts`: numbered, idempotent, safe to run every boot, `schema_version` in `meta`.
+- [~] one query module per table under `db/`.
+      Seven modules exist for the tables phases 3 and 4 read: `meta`, `guilds`, `guild_admins`, `jobs`, `audit_log`, `interaction_state`, `oauth_states`. Every function takes the `Database` interface first, values are bound, snowflakes stay strings. The remaining 22 tables get their module with the feature that first reads them: a `messages` module before the capture path exists is scaffolding with no caller. The per-table file rule is what matters and it holds.
+- [x] `db/migrate.ts`: numbered, idempotent, safe to run every boot, `schema_version` in `meta`.
+      `schema.sql` is the version 1 baseline, applied every boot (it is `IF NOT EXISTS` throughout). `MIGRATIONS` is empty until the shape changes; a shipped migration is never edited.
 - [x] `config/defaults.ts` holds every `guilds.settings_json` default from `D4PLAN.md` 6.1.
-- [ ] check: round-trip insert/select/update per table, BigInt conversion asserted, both drivers. BigInt conversion is asserted; the per-table round trip and the Postgres driver are outstanding, so this stays open.
+- [~] check: round-trip insert/select/update per table, BigInt conversion asserted, both drivers.
+      DuckDB is covered for real against a temp file: insert, select back, update, a snowflake returning as a string, a `settings_json` round trip, and the batch helper landing the same rows as the single-row path. BigInt conversion is asserted in `tests/db/rows.test.ts`. **Postgres is not verified**: there is no server on this machine, so `tests/db/duckdb.test.ts` and `tests/db/migrate.test.ts` prove the DuckDB path only. Two things in `postgres.ts` are therefore assumptions, not findings: that `Bun.sql.unsafe` accepts several statements in one call (which `migrate.ts` depends on), and that the `?` to `$n` rewrite holds. Both need a real server before this box is ticked.
 
 ## Phase 3 - bot shell
 
-- [ ] `discord/client.ts`: intents, gateway, ready, error and warn hooks with the gateway close-code table.
-- [ ] `discord/registry.ts`: command registration, diff against live commands, owner-or-admin gate. Deny is an ephemeral container naming what is needed.
-- [ ] `discord/components/`: container, section, textDisplay, separator, actionRow, button, selects, modal, colors. Plain objects, no classes.
-- [ ] `discord/interactions/router.ts`: `sb:` parsing, handler registry, boot-time assertion that every produced customID has a handler.
-- [ ] `discord/interactions/state.ts`: short-lived state store, in-memory with the `interaction_state` table behind it.
-- [ ] `discord/ratelimit.ts`: per-route buckets, honours `retry_after` exactly, no fixed sleeps.
-- [ ] `lib/log.ts` + `lib/redact.ts`: log channel plus rotating file, redaction of tokens, secrets, emails, full IPs. `src/lib/redact.ts` is done, with tests, as are `src/lib/http.ts`, `src/lib/chunk.ts`, and `src/lib/snowflake.ts`. `lib/log.ts` is not written.
-- [ ] `/snapback status`, `/snapback diagnostics`: uptime, gateway latency, job depth, db driver + size, tracked guilds, version.
-- [ ] check: a container with a section, separator, and button renders in a test guild; a `50035` prints field errors verbatim; a demoted admin is refused.
+- [x] `discord/client.ts`: intents, gateway, ready, error and warn hooks with the gateway close-code table.
+      `src/discord/client.ts` is the one module that talks to Discord over REST (AGENTS.md rule 6), so the limiter, the error parser, and redaction apply everywhere; `src/discord/gateway.ts` holds the close-code table and points 4013/4014 at the intents checklist. `tests/discord/client.test.ts`, `tests/discord/gateway.test.ts`.
+- [x] `discord/registry.ts`: command registration, diff against live commands, owner-or-admin gate. Deny is an ephemeral container naming what is needed.
+      `src/discord/registry.ts` builds the definitions and runs the gate; `src/discord/commands/register.ts` lists the live commands, diffs names, descriptions, and options, and PUTs only when something changed, logging which propagation to expect (instant for guild scope, up to an hour for global). `tests/discord/register.test.ts`, `tests/discord/commands.test.ts`.
+- [x] `discord/components/`: container, section, textDisplay, separator, actionRow, button, selects, modal, colors. Plain objects, no classes.
+      `src/discord/components/`, factories returning plain objects because oceanic has no builders. `page()` in `components/page.ts` is the only layout and asserts the 40-component cap including nested children. `tests/discord/components.test.ts`.
+- [x] `discord/interactions/router.ts`: `sb:` parsing, handler registry, boot-time assertion that every produced customID has a handler.
+      `router.assertComplete(CUSTOM_ID_SPECS)` runs during boot and throws on a produced id with no handler, so the assertion is a startup failure and not a runtime 404. `tests/discord/router.test.ts`.
+- [x] `discord/interactions/state.ts`: short-lived state store, in-memory with the `interaction_state` table behind it.
+      Oversized payloads get a short random id with a 15-minute TTL; nothing is packed into a customID. `tests/discord/state.test.ts`.
+- [x] `discord/ratelimit.ts`: per-route buckets, honours `retry_after` exactly, no fixed sleeps.
+      Buckets key on the route and read the response headers; a `retry_after` is waited out precisely, never rounded up to a fixed sleep. `tests/discord/ratelimit.test.ts`.
+- [x] `lib/log.ts` + `lib/redact.ts`: log channel plus rotating file, redaction of tokens, secrets, emails, full IPs.
+      `src/lib/log.ts` is written: level filter, rotating file at 5 MiB keeping 5, and a log-channel sink that suppresses itself after one failure so a dead channel never breaks the action that triggered the line. `src/lib/redact.ts` now anchors the `Bot`/`Bearer` rule to a header delimiter and Discord's own capitalisation, because the earlier `\b(Bot|Bearer)\s+\S+` shape ate the word after the route segment in `/gateway/bot with 401` and after `(Bot tab)` in our own fix text. `tests/lib/log.test.ts`, `tests/lib/redact.test.ts`.
+- [x] `/snapback status`, `/snapback diagnostics`: uptime, gateway latency, job depth, db driver + size, tracked guilds, version.
+      `src/discord/commands/system/` with the numbers read from `src/boot/probes.ts`, so the commands render and the probes query. Both are already in `docs/commands.md`. `tests/boot/probes.test.ts`.
+- [~] check: a container with a section, separator, and button renders in a test guild; a `50035` prints field errors verbatim; a demoted admin is refused.
+      Two of three hold in tests. A `50035` surfaces Discord's `message` plus every field path and nothing paraphrased (`tests/discord/errors.test.ts`); a demoted admin is refused with the deny page naming what is needed, an unknown or malformed customID fails closed, and every refusal stays inside the 40-component cap (`tests/discord/handlers.test.ts`). The live render in a test guild is **not verified**: it needs a real token and a guild, the same gap Phase 0 records, and it stays the one claim here that only a live send can settle.
 
 ## Phase 4 - `/setup` wizard
 

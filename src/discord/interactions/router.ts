@@ -90,6 +90,8 @@ export interface AuthInput {
 export interface DenialReason {
   readonly code: string; // SB_ prefixed, one fixed message (AGENTS.md Errors)
   readonly message: string;
+  /** the one actionable next step, shown as the last line. */
+  readonly fix?: string;
 }
 
 // allow or deny. a thrown hook is neither: route() reports it as auth_error, so

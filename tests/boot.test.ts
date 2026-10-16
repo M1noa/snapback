@@ -3,13 +3,18 @@ import { describe, expect, test } from "bun:test";
 // boots the real entry point in a child process with a hand-built environment.
 // this is the only way to cover the exit-on-missing-key path, and it is the
 // phase 1 acceptance check: a fresh checkout starts or says exactly why not.
+//
+// the config cases pass --print-config: a real boot opens the database and dials
+// the gateway, which needs a live token and should not happen in a test run.
 const ENTRY = new URL("../src/index.ts", import.meta.url).pathname;
+const PRINT_CONFIG = ["--print-config"];
 
 async function boot(
   env: Record<string, string>,
+  args: readonly string[] = [],
 ): Promise<{ code: number; out: string; err: string }> {
   const child = Bun.spawn({
-    cmd: [process.execPath, ENTRY],
+    cmd: [process.execPath, ENTRY, ...args],
     env,
     stdout: "pipe",
     stderr: "pipe",
@@ -30,8 +35,8 @@ const MINIMAL = {
 };
 
 describe("boot", () => {
-  test("starts and prints the resolved config", async () => {
-    const { code, out } = await boot(MINIMAL);
+  test("prints the resolved config and stops at the flag", async () => {
+    const { code, out } = await boot(MINIMAL, PRINT_CONFIG);
 
     expect(code).toBe(0);
     expect(out).toContain("snapback 0.0.0");
@@ -52,7 +57,7 @@ describe("boot", () => {
   });
 
   test("reports a warning on stderr without failing", async () => {
-    const { code, err } = await boot({ ...MINIMAL, IP_STORAGE: "plaintext" });
+    const { code, err } = await boot({ ...MINIMAL, IP_STORAGE: "plaintext" }, PRINT_CONFIG);
 
     expect(code).toBe(0);
     expect(err).toContain("personal data");
