@@ -20,6 +20,8 @@ bun test                  # tests only
 
 Verified working on this machine, milestone 0: Bun 1.3.14, oceanic.js 1.15.0, `@duckdb/node-api` 1.5.6-r.1, TypeScript 7.0.2, Biome 2.5.15. `@duckdb/node-api` returns JS `bigint` for `BIGINT` and accepts a multi-statement DDL script in one call; `Bun.sql` is present, so Postgres needs no extra dependency. Both findings have a runnable record in `scripts/spike/`. Paths in this file are relative to `src/`.
 
+`Bun.randomUUIDv7()` exists, so the UUIDv7 application-generated primary keys (`D4PLAN.md` 5) need no helper module and no dependency.
+
 `MessageFlags.IS_COMPONENTS_V2` is `32768`. oceanic.js has no component builder classes, so factories in `discord/components/` return plain objects; that is not a style choice, it is the only option the library offers.
 
 ## Non-negotiables
@@ -31,7 +33,7 @@ Break one of these and the change is wrong, however well it works.
 3. **Snowflakes are strings until they hit the DB.** Never `Number(id)`. Never compare an id to a number. `bigint` exists only inside `db/`.
 4. **Never `sleep()` to dodge rate limits.** Use `discord/ratelimit.ts`. It reads the headers; fixed sleeps are simultaneously too slow and too fast.
 5. **Never invent an error message.** Parse the JSON body and show Discord's `code` and `message` verbatim. A code with no table entry is shown raw, not paraphrased. `D4PLAN.md` 18.1.
-6. **All Discord API traffic goes through `discord/client.ts`.** Nothing else imports `fetch` against `discord.com` or `discordapp.com`. This is what makes the limiter, the error parser, and the redaction apply everywhere. One carve-out: read-only CDN downloads (`cdn.discordapp.com` for icons, emojis, stickers, attachments) go through `lib/http.ts` — a plain GET, timeout, no auth header. Everything else, including attachment re-upload during a restore, goes through the client.
+6. **All Discord API traffic goes through `discord/client.ts`.** Nothing else imports `fetch` against `discord.com` or `discordapp.com`. This is what makes the limiter, the error parser, and the redaction apply everywhere. oceanic.js is the **gateway** (connection, shards, event payload types); it is not the REST client. `client.ts` issues REST over `fetch` and `ratelimit.ts` guards it, because oceanic's own REST would hand back its own error objects and skip rule 5. One carve-out: read-only CDN downloads (`cdn.discordapp.com` for icons, emojis, stickers, attachments) go through `lib/http.ts` — a plain GET, timeout, no auth header. Everything else, including attachment re-upload during a restore, goes through the client.
 7. **Nothing long runs in an interaction handler.** Enqueue a job, ack, edit the message from the job runner.
 8. **Re-check authorisation and ownership on every interaction.** A button rendered for an admin last week must fail closed today.
 9. **No user tokens, no selfbot code, no proxy rotation, no CAPTCHA service.** Not negotiable, not behind a flag.

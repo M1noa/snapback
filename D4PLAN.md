@@ -44,7 +44,7 @@ One owner and a per-guild admin list run everything from Discord. The only thing
 
 | Piece | Choice | Why |
 |---|---|---|
-| Library | `oceanic.js` 1.15.x `[v]` | TypeScript-native, MIT, `tslib` + `ws` only, actively pushed, full Components V2 + modal coverage, gates its endpoints internally so we do not hand-roll rate limiting |
+| Library | `oceanic.js` 1.15.x `[v]` | TypeScript-native, MIT, `tslib` + `ws` only, actively pushed, full Components V2 + modal coverage. Used for the **gateway only**: it gives us the shard lifecycle, reconnect and resume handling, and the event payload types. We keep REST, because we need Discord's raw error bodies (`18.1`) and our own per-bucket guard (`16`) rather than a library's opaque ones |
 | Language | TypeScript, `strict`, ESM | matches the library's own types |
 | Runtime | Bun `[v]` | Oceanic ships a `bun` export condition, so Bun is a supported target `[v]`. Single-runtime (bot + web server + scheduler in one process) is the whole point. No Node fallback in v1: two runtimes means two sets of DuckDB, fetch, and worker bugs |
 | DB | DuckDB file by default, Postgres via `DATABASE_URL` `[v]` | one-file deploy for the common case, Postgres for anyone who wants concurrency. The Bun + DuckDB binding is the one thing milestone 0 has to prove (`23.1`); the query layer is written portable so swapping to Postgres, or to `bun:sqlite`, is a config change |
@@ -84,7 +84,7 @@ snapback/
       schema.sql
       migrate.ts             idempotent, versioned
     discord/
-      client.ts              gateway client, intent list, error hook
+      client.ts              gateway connection + the only REST path, intent list, error hook
       errors.ts              DiscordApiError, code table, formatter
       ratelimit.ts           global + per-route guard, 429 backoff
       registry.ts            command registration, diff against live commands
@@ -211,6 +211,7 @@ One process. Three loops.
 Rules that keep it sane:
 
 - **Every Discord call goes through the client.** Nothing in `services/` imports `fetch` for `discord.com`. That is what makes the rate-limit guard, the error parser, and the redaction layer actually apply everywhere.
+- **We own REST; oceanic.js owns the gateway.** oceanic gives us the connection, the shard lifecycle, and the payload types. It does not give us REST, deliberately: its own REST client has its own limiter and its own error objects, and anything routed through it would bypass the verbatim error parser (§18.1) and the per-bucket guard (§16). So `client.ts` issues REST over `fetch` and `ratelimit.ts` guards it, and no other module reaches for either oceanic's REST helpers or `fetch` directly.
 - **Long jobs never run inside an interaction handler.** A backup is a job row in the DB with a runner; the interaction gets an ack and a message it edits. This is what lets a 40-minute, 10k-message restore survive a gateway reconnect.
 - **Jobs are resumable.** Each backup/restore job writes progress checkpoints (`job_progress`), so a crash resumes at the last completed channel instead of restarting a 10k-message replay.
 - **All state that a button needs lives in the DB or in a customID, never in a module-level Map.** Cold restart mid-wizard must not brick the wizard.
