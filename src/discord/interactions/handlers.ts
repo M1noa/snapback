@@ -11,6 +11,7 @@ import {
   ApplicationCommandOptionTypes,
   type CommandInteraction,
   type ComponentInteraction,
+  ComponentTypes,
   type InteractionOptions,
   type ModalSubmitInteraction,
 } from "oceanic.js";
@@ -27,7 +28,7 @@ import {
   outcomeReply,
   v2Payload,
 } from "./dispatch.ts";
-import type { AuthDecision, AuthHook, Router } from "./router.ts";
+import type { AuthDecision, AuthHook, HandlerSurface, Router, SubmittedValue } from "./router.ts";
 
 // the two codes this file can raise itself. one fixed message each (AGENTS.md errors).
 export const ACCESS_DENIED = "SB_ACCESS_DENIED";
@@ -92,6 +93,58 @@ function invocationOf(options: readonly InteractionOptions[] | undefined): Invoc
 
 function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+// one submitted control, whatever type it was. the modal wrapper already flattens
+// rows and labels, so this reads a flat list rather than walking the tree.
+function submittedValues(
+  interaction: ComponentInteraction | ModalSubmitInteraction,
+): Record<string, SubmittedValue> {
+  const out: Record<string, SubmittedValue> = {};
+  if (interaction.isModalSubmitInteraction()) {
+    for (const component of interaction.data.components.getComponents()) {
+      const node = component as { customID: string; value?: unknown; values?: unknown };
+      if (typeof node.value === "string") out[node.customID] = node.value;
+      // a bare checkbox submits a boolean; every step reads text, so it is
+      // normalised to the same "true"/"false" a modal field would carry.
+      else if (typeof node.value === "boolean") out[node.customID] = String(node.value);
+      else if (Array.isArray(node.values)) {
+        const strings = node.values.filter((value): value is string => typeof value === "string");
+        // a file upload carries attachment ids; the step reads the first one.
+        out[node.customID] =
+          component.type === ComponentTypes.FILE_UPLOAD ? (strings[0] ?? undefined) : strings;
+      }
+    }
+    return out;
+  }
+  if (interaction.isSelectMenuComponentInteraction()) {
+    // a select submits only its own id, so there is exactly one entry. the
+    // narrowing above does not reach the conditional `data` type, hence the cast.
+    const data = interaction.data as { customID: string; values: { raw: string[] } };
+    out[data.customID] = [...data.values.raw];
+  }
+  return out;
+}
+
+function surfaceFor(
+  interaction: ComponentInteraction | ModalSubmitInteraction,
+  responder: InteractionResponder,
+): HandlerSurface {
+  return {
+    values: submittedValues(interaction),
+    source: interaction.isModalSubmitInteraction() ? "modal" : "component",
+    async reply(request) {
+      const payload = v2Payload(request.message, request.ephemeral === true);
+      // a fresh interaction must be answered, not followed up: reply() is what
+      // decides between the initial response and a followup when it is already
+      // acknowledged.
+      if (request.update === true) await responder.update(interaction, payload);
+      else await responder.reply(interaction, payload);
+    },
+    async openModal(modal) {
+      await responder.openModal(interaction, modal);
+    },
+  };
 }
 
 /** owner or guild admin, re-checked on every interaction. a control rendered for
@@ -217,11 +270,15 @@ async function runComponent(
   }
 
   const customId = interaction.data.customID;
-  const outcome = await deps.router.route(customId, {
-    userId: interaction.user.id,
-    guildId,
-    isOwner: interaction.user.id === deps.ownerId,
-  });
+  const outcome = await deps.router.route(
+    customId,
+    {
+      userId: interaction.user.id,
+      guildId,
+      isOwner: interaction.user.id === deps.ownerId,
+    },
+    surfaceFor(interaction, responder),
+  );
 
   if (outcome.kind === "handled") {
     // the handler answered, or asked to be deferred. deferring something already

@@ -136,6 +136,13 @@ export interface InteractionResponder {
   reply(interaction: RespondableInteraction, payload: V2Payload): Promise<void>;
   /** edit the message a component or modal came from. */
   update(interaction: RespondableInteraction, payload: V2Payload): Promise<void>;
+  /** a private message after the interaction was already answered. */
+  followUp(interaction: RespondableInteraction, payload: V2Payload): Promise<void>;
+  /** answer with a modal. a component interaction can only be answered once. */
+  openModal(
+    interaction: RespondableInteraction,
+    modal: { customID: string; title: string; components: readonly unknown[] },
+  ): Promise<void>;
   /** take the interaction out of the 3-second window without answering it yet. */
   defer(interaction: RespondableInteraction): Promise<void>;
 }
@@ -143,6 +150,12 @@ export interface InteractionResponder {
 /** the oceanic adapter. */
 export const oceanicResponder: InteractionResponder = {
   async reply(interaction, payload) {
+    // an already-acknowledged interaction has no initial response left, so the
+    // only place left to put the message is a followup.
+    if (interaction.acknowledged) {
+      await interaction.createFollowup(payload);
+      return;
+    }
     await interaction.createMessage(payload);
   },
   async update(interaction, payload) {
@@ -152,6 +165,17 @@ export const oceanicResponder: InteractionResponder = {
       return;
     }
     await interaction.createMessage(payload);
+  },
+  async followUp(interaction, payload) {
+    await interaction.createFollowup(payload);
+  },
+  async openModal(interaction, modal) {
+    if (!interaction.isComponentInteraction()) {
+      throw new Error("only a component interaction can open a modal");
+    }
+    // the library's ModalData does not take camelCase components, so the modal
+    // body is passed through as the raw object it already is.
+    await interaction.createModal(modal as Parameters<typeof interaction.createModal>[0]);
   },
   async defer(interaction) {
     // a modal reply cannot be deferred, and a command has its own defer path that

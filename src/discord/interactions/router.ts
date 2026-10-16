@@ -7,14 +7,18 @@
 // inline (rule 7), and the auth hook runs before the handler on every
 // interaction (rule 8).
 
+import type { ContainerComponent } from "oceanic.js";
+
 export const CUSTOM_ID_PREFIX = "sb:";
 export const MAX_CUSTOM_ID_LENGTH = 100;
 
-// surface and action are lowercase identifiers. guild, object, and cursor are
-// opaque slots: anything but a colon or a control char (the \x1f separator
-// D4PLAN 9.3 bans; \p{Cc} covers it and every other control). cursor may be empty.
+// surface and action are lowercase identifiers (action may carry dashes: the
+// shared list row's page-prev and page-next come from components/row.ts, whose
+// token rule allows them). guild, object, and cursor are opaque slots: anything
+// but a colon or a control char (the \x1f separator D4PLAN 9.3 bans; \p{Cc}
+// covers it and every other control). cursor may be empty.
 const CUSTOM_ID_RE =
-  /^sb:(?<surface>[a-z][a-z0-9_]*):(?<guild>[^:\p{Cc}]+):(?<object>[^:\p{Cc}]+):(?<action>[a-z][a-z0-9_]*):(?<cursor>[^:\p{Cc}]*)$/u;
+  /^sb:(?<surface>[a-z][a-z0-9_]*):(?<guild>[^:\p{Cc}]+):(?<object>[^:\p{Cc}]+):(?<action>[a-z][a-z0-9_-]*):(?<cursor>[^:\p{Cc}]*)$/u;
 
 export interface CustomId {
   readonly raw: string;
@@ -116,6 +120,8 @@ export interface HandlerContext {
   readonly id: CustomId;
   readonly identity: InteractionIdentity;
   readonly enqueue: EnqueueJob;
+  /** how the handler answers. the transport supplies it per interaction. */
+  readonly surface: HandlerSurface;
 }
 
 export type HandlerResult =
@@ -124,6 +130,55 @@ export type HandlerResult =
   | { readonly kind: "noop" };
 
 export type Handler = (ctx: HandlerContext) => Promise<HandlerResult> | HandlerResult;
+
+// what a handler may answer with, in the router's own vocabulary so this file
+// does not import the payload builders (dispatch.ts imports this one). a handler
+// that answers returns { kind: "reply" } once the surface call has resolved.
+export interface ReplyRequest {
+  readonly message: ContainerComponent;
+  /** edit the message the control sits on instead of posting a new one. */
+  readonly update?: boolean;
+  /** a private message. a follow-up is used when the interaction is answered. */
+  readonly ephemeral?: boolean;
+}
+
+// one submitted control's value. a text input and a select option are strings, a
+// select and a checkbox group are string arrays, and a file upload contributes
+// the id of its first attachment. a bare checkbox arrives as a boolean from
+// discord, and the transport normalises it to "true"/"false" before it gets here.
+export type SubmittedValue = string | readonly string[] | undefined;
+
+export interface ModalRequest {
+  readonly customID: string;
+  readonly title: string;
+  readonly components: readonly unknown[];
+}
+
+export interface HandlerSurface {
+  /** answer the interaction. */
+  reply(request: ReplyRequest): Promise<void>;
+  /** answer with a modal. an interaction can only be answered once. */
+  openModal(modal: ModalRequest): Promise<void>;
+  /** every control the user submitted. a button submits nothing, so it is empty. */
+  readonly values: Readonly<Record<string, SubmittedValue>>;
+  /** which interaction this is: a click on a message control, or the submission
+   *  of a modal. a step's "edit" button and the modal it opens carry the same
+   *  customID, so this is the one honest way to tell them apart. */
+  readonly source: "component" | "modal";
+}
+
+const NO_SURFACE: HandlerSurface = {
+  reply: async () => {
+    // a handler that answers through route() without a surface wired is a
+    // programming error, but throwing here would look like a handler failure.
+    throw new Error("router has no interaction surface; pass one to route()");
+  },
+  openModal: async () => {
+    throw new Error("router has no interaction surface; pass one to route()");
+  },
+  values: {},
+  source: "component",
+};
 
 // the error branches carry the Error itself, not just its message: the handler
 // wrapper logs the stack, and a message alone throws that away. message stays
@@ -220,8 +275,13 @@ export class Router {
     if (gaps.length > 0) throw new UnhandledCustomIdsError(gaps);
   }
 
-  /** total: every failure path is an outcome, never a throw. */
-  async route(rawId: string, identity: InteractionIdentity): Promise<RouteOutcome> {
+  /** total: every failure path is an outcome, never a throw. the surface is how
+   *  a handler answers, so a caller that only wants the decision may omit it. */
+  async route(
+    rawId: string,
+    identity: InteractionIdentity,
+    surface: HandlerSurface = NO_SURFACE,
+  ): Promise<RouteOutcome> {
     let id: CustomId;
     try {
       id = parseCustomId(rawId);
@@ -242,7 +302,7 @@ export class Router {
     if (decision.kind === "deny") return { kind: "denied", reason: decision.reason };
 
     try {
-      const result = await handler({ id, identity, enqueue: this.#enqueue });
+      const result = await handler({ id, identity, enqueue: this.#enqueue, surface });
       return { kind: "handled", result };
     } catch (error) {
       return { kind: "handler_error", message: messageOf(error), error };

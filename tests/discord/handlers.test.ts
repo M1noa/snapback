@@ -79,6 +79,9 @@ function fakeInteraction(
     isCommandInteraction: () => customId === undefined,
     isComponentInteraction: () => customId !== undefined,
     isModalSubmitInteraction: () => false,
+    // a button, not a select: the surface reads values from a select only, and
+    // this is what tells the two apart.
+    isSelectMenuComponentInteraction: () => false,
     data:
       customId === undefined
         ? {
