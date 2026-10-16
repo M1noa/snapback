@@ -1,1 +1,14 @@
+node_modules/
+dist/
+coverage/
+
+.env
+!.env.example
+
+data/
 /references/
+
+*.duckdb
+*.duckdb.wal
+*.mmdb
+*.log
