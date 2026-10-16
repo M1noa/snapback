@@ -8,6 +8,8 @@ Tick a box only when its check passes on a real run, not when the code is writte
 
 Paths, command names, route names, and the customID namespace below are taken from `D4PLAN.md`. If one disagrees with `D4PLAN.md`, `D4PLAN.md` wins and this file is wrong.
 
+Paths such as `db/`, `lib/`, `discord/`, `services/`, and `web/` are relative to `src/`, matching the tree in `D4PLAN.md` 3. `tests/`, `docs/`, and `scripts/` sit at the repository root.
+
 ## Decisions locked
 
 | Decision | Value |
@@ -68,8 +70,10 @@ Already verified on this machine before the plan was written: Bun runs `@duckdb/
 
 Answers marked here were resolved from the Discord docs and are recorded in `D4PLAN.md` 23.
 
-- [ ] `@duckdb/node-api` opens, writes, reads, and returns BigInt under the Bun version that will ship. Record the exact version in `AGENTS.md`.
-- [ ] Oceanic 1.15 sends a Components V2 container from Bun with a plain object payload, and a button in it responds.
+- [x] `@duckdb/node-api` opens, writes, reads, and returns BigInt under the Bun version that will ship. Record the exact version in `AGENTS.md`.
+      Run: `bun scripts/spike/duckdb.ts`. 1.5.6-r.1 under Bun 1.3.14. Opens 70 ms, returns `bigint` for `BIGINT`, accepts several DDL statements in one call, `INSERT OR IGNORE` and `CAST(? AS JSON)` both work, `Bun.sql` present. 1000 prepared inserts 350 ms; the same 1000 as one multi-row statement 15.6 ms, so batch on the write path.
+- [x] Oceanic 1.15 sends a Components V2 container from Bun with a plain object payload, and a button in it responds.
+      Run: `bun scripts/spike/oceanic-cv2.ts`. Payload shape and the 40-cap counter verified offline against the library's own enums. `IS_COMPONENTS_V2 = 32768`, and every type number matches `D4PLAN.md` 9. No builder classes exist. The gateway send itself still needs a token and a test guild: do that first thing in Phase 3, since it is the one claim here that only a live send can settle.
 - [x] mmdb reader: `maxmind` (MIT). db-ip data is CC-BY, attribution on `/legal` and `docs/self-hosting.md`.
 - [x] role icons: `icon` (image data) and `unicode_emoji` on the role object, set in the same create/modify body, gated on `ROLE_ICONS`. Do not drop from v1.
 - [x] friends/pending/blocked: `relationships.read` is Social-SDK-gated with no public REST route. Keep the schema, ship the capture disabled.
@@ -88,13 +92,15 @@ Answers marked here were resolved from the Discord docs and are recorded in `D4P
 
 ## Phase 2 - database
 
-- [ ] `db/schema.sql`, portable SQL, one file, no engine-specific types (`D4PLAN.md` 5).
-- [ ] `db/index.ts` picks DuckDB or Postgres from `DATABASE_URL`; `db/duckdb.ts` and `db/postgres.ts` both implement `Database` from `db/types.ts`.
-- [ ] `db/rows.ts` converts BigInt to string at the boundary. One place, no exceptions.
+- [x] `db/schema.sql`, portable SQL, one file, no engine-specific types (`D4PLAN.md` 5).
+      `src/db/schema.sql`, 539 lines, all 29 tables from `D4PLAN.md` 5.1. `tests/db/schema.test.ts` loads the whole file into a real DuckDB, asserts every table exists, asserts a second load is a no-op, and asserts snowflakes and uuid keys are `VARCHAR` not a numeric type.
+- [ ] `db/index.ts` picks DuckDB or Postgres from `DATABASE_URL`; `db/duckdb.ts` and `db/postgres.ts` both implement `Database` from `db/types.ts`. `src/db/types.ts` defines the `Database` interface and every row type; the two drivers are not written.
+- [x] `db/rows.ts` converts BigInt to string at the boundary. One place, no exceptions.
+      `src/db/rows.ts`, explicit per-column converters, no reflection. `tests/db/rows.test.ts` covers the round trip and the refusal of a lossy `Number(snowflake)`.
 - [ ] one query module per table under `db/`.
 - [ ] `db/migrate.ts`: numbered, idempotent, safe to run every boot, `schema_version` in `meta`.
-- [ ] `config/defaults.ts` holds every `guilds.settings_json` default from `D4PLAN.md` 6.1.
-- [ ] check: round-trip insert/select/update per table, BigInt conversion asserted, both drivers.
+- [x] `config/defaults.ts` holds every `guilds.settings_json` default from `D4PLAN.md` 6.1.
+- [ ] check: round-trip insert/select/update per table, BigInt conversion asserted, both drivers. BigInt conversion is asserted; the per-table round trip and the Postgres driver are outstanding, so this stays open.
 
 ## Phase 3 - bot shell
 
@@ -104,7 +110,7 @@ Answers marked here were resolved from the Discord docs and are recorded in `D4P
 - [ ] `discord/interactions/router.ts`: `sb:` parsing, handler registry, boot-time assertion that every produced customID has a handler.
 - [ ] `discord/interactions/state.ts`: short-lived state store, in-memory with the `interaction_state` table behind it.
 - [ ] `discord/ratelimit.ts`: per-route buckets, honours `retry_after` exactly, no fixed sleeps.
-- [ ] `lib/log.ts` + `lib/redact.ts`: log channel plus rotating file, redaction of tokens, secrets, emails, full IPs.
+- [ ] `lib/log.ts` + `lib/redact.ts`: log channel plus rotating file, redaction of tokens, secrets, emails, full IPs. `src/lib/redact.ts` is done, with tests, as are `src/lib/http.ts`, `src/lib/chunk.ts`, and `src/lib/snowflake.ts`. `lib/log.ts` is not written.
 - [ ] `/snapback status`, `/snapback diagnostics`: uptime, gateway latency, job depth, db driver + size, tracked guilds, version.
 - [ ] check: a container with a section, separator, and button renders in a test guild; a `50035` prints field errors verbatim; a demoted admin is refused.
 

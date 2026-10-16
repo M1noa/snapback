@@ -67,14 +67,18 @@ snapback/
   README.md
   D4PLAN.md
   AGENTS.md
+  scripts/
+    spike/                   phase 0 probes, kept so each finding carries its evidence
   src/
     index.ts                 entrypoint, wires everything
     config/
       env.ts                 parse + validate env once, throw loudly
+      parse-env.ts           the pure parser env.ts binds to the process
       defaults.ts            every tunable with its default
     db/
       index.ts               driver selection from DATABASE_URL
       types.ts               the only place SQL-agnostic row types live
+      rows.ts                the one place a driver BigInt becomes a string
       duckdb.ts
       postgres.ts
       schema.sql
@@ -1463,13 +1467,13 @@ Each milestone ends with something runnable and a verify check.
 
 Ordered by how likely they are to change the plan.
 
-1. **Bun + DuckDB.** Real risk, cheap to test, milestone 0. Fallback order: `bun:sqlite` behind the same interface (one file, keeps the single runtime), then Node only as a last resort. Do not build past milestone 1 without resolving this.
+1. **Bun + DuckDB.** Resolved at milestone 0. `@duckdb/node-api` 1.5.6-r.1 under Bun 1.3.14 opens a file database, accepts several DDL statements in one call, and returns JS `bigint` for `BIGINT` exactly as the boundary assumes. `INSERT OR IGNORE` and `CAST(? AS JSON)` both work, so the schema needs no dialect escape hatch. Measured: 1000 prepared inserts in one transaction is 350 ms, the same 1000 as one multi-row statement is 15.6 ms, so bulk inserts are roughly 22x faster and the capture path should batch. Evidence kept in `scripts/spike/duckdb.ts`. `Bun.sql` is present, so the Postgres path needs no extra dependency. Fallback order if this ever regresses: `bun:sqlite` behind the same interface (one file, keeps the single runtime), then Node only as a last resort.
 2. **`relationships.read` is Social-SDK-gated.** Answered against the docs. The scope reads "This scope is part of our Social SDK — submit for access", and there is no public REST endpoint for the friends/pending/blocked list. Not a milestone blocker, but the feature is not shippable without Discord granting Social SDK access. Decision: keep `relationships_json`, keep the UI, ship the capture path disabled with a "requires Social SDK access" state and a link to the application form. Do not present it as working.
 3. **Role icons.** Answered. `icon` (image data) and `unicode_emoji` on the role object, both gated on the guild's `ROLE_ICONS` feature, both set in the same create/modify role body. Capture as nullable; skip on restore when the target guild lacks the feature and report it.
 4. **Message-count math.** A 5000-message restore is roughly 5000 webhook posts plus limiter spacing. The honest duration estimate needs measuring at milestone 6, and the UI should show the measured number, not a guess.
 5. **Attachment preservation.** Most historical attachments will be unrecoverable (expired signed URLs). Milestone 4 should measure what fraction of a realistic channel is recoverable so the UI text is accurate.
 6. **DuckDB write contention** when someone runs the bot and the web site as separate processes. Mitigated by the lock message, but the doc has to be loud about it.
-7. **Restore into a guild with different boosts.** Bitrate and upload limits differ. Handled by clamping, but worth a line in the report.
+7. **Restore into a guild with different boosts.** Bitrate and upload limits differ, and the upload limit is also per user, not just per guild: `attachment_size_limit` on the interaction is the maximum of the uploader's Nitro limit and the guild's boost tier. Read it at runtime and clamp, never hardcode (`17.3`). Worth a line in the report.
 8. **Guild size.** Everything so far is designed for tens of thousands of members and ten thousand messages. A 500k-member guild is a different engineering problem (pagination memory, job duration measured in hours, the webhook post budget). v1 states a supported ceiling in the docs rather than pretending there is none.
 9. **Rate limit behaviour on very large restores.** The limiter is correct but untested at 10k sequential posts. Milestone 6 measures it.
 
