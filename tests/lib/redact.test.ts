@@ -18,6 +18,18 @@ describe("redactText", () => {
   test("keeps the scheme word on an auth header", () => {
     expect(redactText(`Bot ${TOKEN}`)).toBe("Bot sk_***");
     expect(redactText("Bearer opaque-value-123")).toBe("Bearer sk_***");
+    expect(redactText(`authorization: Bot ${TOKEN}`)).toBe("authorization: Bot sk_***");
+  });
+
+  test("leaves prose that only looks like a scheme alone", () => {
+    // a route segment named /bot and a capitalised "Bot" in running text are
+    // not auth headers. the earlier \b(Bot|Bearer)\s+\S+ rule ate the next word.
+    expect(redactText("discord rejected GET /gateway/bot with 401")).toBe(
+      "discord rejected GET /gateway/bot with 401",
+    );
+    expect(redactText("regenerate it in the Developer Panel (Bot tab)")).toBe(
+      "regenerate it in the Developer Panel (Bot tab)",
+    );
   });
 
   test("redacts the webhook token but keeps host and id", () => {

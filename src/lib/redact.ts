@@ -10,13 +10,16 @@ const IP = "<ip>";
 // the host and the id are not secret.
 const WEBHOOK =
   /(https?:\/\/(?:ptb\.|canary\.)?discord(?:app)?\.com\/api\/webhooks\/\d+\/)[\w-]+/gi;
-// "Bot <token>" and "Bearer <token>". keep the scheme word, drop the value.
-const AUTH = /\b(Bot|Bearer)\s+[A-Za-z0-9._~+/=-]+/gi;
+// "Bot <token>" and "Bearer <token>". keep the scheme word, drop the value. the
+// scheme is only a header value, so it needs a delimiter before it and discord's
+// own capitalisation: "/gateway/bot with" and "(Bot tab)" are prose, not headers.
+const AUTH = /(^|[\s"'=:,])(Bot|Bearer)\s+[A-Za-z0-9._~+/=-]+/g;
 // a bot token: base64url id . base64url timestamp . base64url hmac.
 const TOKEN = /[A-Za-z0-9_-]{23,28}\.[A-Za-z0-9_-]{6,7}\.[A-Za-z0-9_-]{27,40}/g;
-// generic key=value secrets, quotes preserved.
+// generic key=value secrets, quotes preserved. an authorization header keeps its
+// scheme word, so "authorization: Bot <token>" does not decay to a bare sk_***.
 const KV =
-  /(\b(?:token|secret|password|passwd|pwd|api[_-]?key|apikey|authorization|client[_-]?secret|pepper|encryption[_-]?key)\b)(\s*[:=]\s*)(["']?)([^\s"',;]+)\3/gi;
+  /(\b(?:token|secret|password|passwd|pwd|api[_-]?key|apikey|authorization|client[_-]?secret|pepper|encryption[_-]?key)\b)(\s*[:=]\s*)(["']?)((?:Bot|Bearer)\s+)?([^\s"',;]+)\3/gi;
 const EMAIL_RE = /[\w.+-]+@[\w-]+(?:\.[\w-]+)+/g;
 // full ipv4 only. a truncated 1.2.3.x has a non-digit last octet and survives
 // on purpose (D4PLAN 14.5 keeps a truncated prefix for grouping).
@@ -36,9 +39,9 @@ function isIpv6(token: string): boolean {
 export function redactText(text: string): string {
   return text
     .replace(WEBHOOK, `$1${SECRET}`)
-    .replace(AUTH, `$1 ${SECRET}`)
+    .replace(AUTH, `$1$2 ${SECRET}`)
     .replace(TOKEN, SECRET)
-    .replace(KV, `$1$2$3${SECRET}$3`)
+    .replace(KV, `$1$2$3$4${SECRET}$3`)
     .replace(EMAIL_RE, EMAIL)
     .replace(IPV4, IP)
     .replace(IPV6_CANDIDATE, (match) => (isIpv6(match) ? IP : match));
