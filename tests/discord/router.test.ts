@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { customID } from "../../src/discord/components/row.ts";
 import {
   type AuthDecision,
   CustomIdParseError,
@@ -195,5 +196,31 @@ describe("routing outcomes fail closed", () => {
 
     const outcome = await router.route(`sb:backup:${GUILD}:list:page:1`, identity);
     expect(outcome.kind).toBe("handler_error");
+  });
+});
+
+// the two halves of the customID format live in different modules: components/
+// row.ts builds, this router parses. a builder that emitted five segments would
+// pass its own round trip and fail here, so the pair is asserted together.
+describe("custom id format, builder against parser", () => {
+  test("an id with no cursor still round-trips through the router", () => {
+    const built = customID({ surface: "backup", guild: "1", object: "2", action: "list" });
+    expect(built.split(":")).toHaveLength(6);
+    const parsed = parseCustomId(built);
+    expect(parsed.surface).toBe("backup");
+    expect(parsed.cursor).toBe("");
+  });
+
+  test("an id with a cursor round-trips with the cursor intact", () => {
+    const built = customID({
+      surface: "backup",
+      guild: "1",
+      object: "2",
+      action: "page",
+      cursor: "3",
+    });
+    const parsed = parseCustomId(built);
+    expect(parsed.cursor).toBe("3");
+    expect(parsed.action).toBe("page");
   });
 });

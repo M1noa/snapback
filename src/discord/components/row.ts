@@ -262,6 +262,11 @@ const MAX_LENGTH = 100; // discord's customID limit
 // a token may not contain the separator or a control character, or it would not
 // round-trip. letters, digits, dash, underscore only.
 const TOKEN = /^[a-z0-9_-]+$/i;
+// the cursor may be empty: a surface with no cursor still writes the sixth slot,
+// so the id is always six segments and parseCustomId in interactions/router.ts
+// reads every id this builder makes. a five-segment id would round-trip here and
+// fail there.
+const CURSOR = /^[a-z0-9_-]*$/i;
 
 export interface CustomIDParts {
   surface: string;
@@ -276,10 +281,9 @@ export function customID(parts: CustomIDParts): string {
   for (const field of fields) {
     if (!TOKEN.test(field)) throw new Error(`customID: bad token "${field}"`);
   }
-  if (parts.cursor !== undefined && !TOKEN.test(parts.cursor)) {
-    throw new Error(`customID: bad cursor "${parts.cursor}"`);
-  }
-  const id = [PREFIX, ...fields, ...(parts.cursor === undefined ? [] : [parts.cursor])].join(SEP);
+  const cursor = parts.cursor ?? "";
+  if (!CURSOR.test(cursor)) throw new Error(`customID: bad cursor "${cursor}"`);
+  const id = [PREFIX, ...fields, cursor].join(SEP);
   if (id.length > MAX_LENGTH) throw new Error(`customID: ${id.length} chars exceeds ${MAX_LENGTH}`);
   return id;
 }
@@ -299,6 +303,8 @@ export function parseCustomID(id: string): CustomIDParts | null {
   if (guild === undefined || !TOKEN.test(guild)) return null;
   if (object === undefined || !TOKEN.test(object)) return null;
   if (action === undefined || !TOKEN.test(action)) return null;
-  if (cursor !== undefined && !TOKEN.test(cursor)) return null;
-  return { surface, guild, object, action, ...(cursor === undefined ? {} : { cursor }) };
+  // an empty cursor is the "no cursor" case, so it is accepted and then left off
+  // the result: the id the builder makes for absent and empty is the same id.
+  if (cursor !== undefined && !CURSOR.test(cursor)) return null;
+  return { surface, guild, object, action, ...(cursor ? { cursor } : {}) };
 }
