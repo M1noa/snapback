@@ -255,9 +255,11 @@ Tracked here so they do not get quietly answered by a guess. Answered ones are s
 - ~~`relationships.read` by scope alone?~~ Social-SDK-gated, no public REST route. Capture disabled, schema kept.
 - ~~role icons: field name and endpoint?~~ `icon` + `unicode_emoji`, same create/modify body, `ROLE_ICONS`-gated.
 - ~~mmdb reader and licence?~~ `maxmind`, MIT. db-ip data is CC-BY, attributed on `/legal`.
-- ~~bulk delete limits?~~ 2 to 100 ids, 14 days, single id is a `400`.
-- ~~file upload ceiling per boost tier?~~ 10 MiB unboosted, 25 MiB boosted. Re-confirm at Phase 11.
+- ~~bulk delete limits?~~ 2 to 100 ids, a 2 week window, ids that do not exist still count toward the range. Duplicate ids are a `400`. A 1-element array is below the documented minimum of 2 rather than an error the docs name.
+- ~~file upload ceiling per boost tier?~~ Re-verified against `developers/reference.mdx` and `resources/channel.mdx`. 20 MiB per file by default, raised from 10 MiB in September 2026. The 25 MiB figure is the per-message request size, not a boost tier. Boost tiers add their own limits. The number is per uploader as well, so read `attachment_size_limit` off the interaction instead of hardcoding anything. D4PLAN 17.3 corrected.
+- ~~role and channel caps?~~ `30005` is "maximum number of guild roles reached (250)", `30013` is "maximum number of guild channels reached (500)". Documented as fixed; no primary source varies them by boost tier or feature. Doc-verified only, not triggered against a live guild at the cap.
 - [ ] measured restore duration per 1000 messages.
 - [ ] measured attachment recovery rate on old channels.
-- [ ] whether `enumerateDevices` labels are ever non-empty without a permission prompt, and if not, drop labels and keep counts.
-- [ ] Discord's current guild role and channel caps, from real `30005` and `30013` responses rather than from folklore.
+- ~~whether `enumerateDevices` labels are ever non-empty without a permission prompt, and if not, drop labels and keep counts.~~ Never. Per the Media Capture spec, before a successful capture the device info object carries empty `deviceId`, `label`, and `groupId`, and at most one device of each kind is listed. So the label is always empty and the count is not a real device count either. Record device kinds present, not labels, and treat the count as unusable.
+- ~~Discord's current guild role and channel caps, from real `30005` and `30013` responses rather than from folklore.~~ See the answered entry above; doc-verified, not response-verified.- [ ] `/users blacklist` is specified in D4PLAN 8 but D4PLAN 5.1 defines no table for it. Pick one: a `guild_blacklist` table keyed on `(guild_id, kind, value)` where kind is `user_id` | `ip_hash` | `asn`, or a `blacklist_json` array inside `guilds.settings_json`. A table wins if the list can grow past a few dozen entries, because the pull engine reads it on every join.
+- [ ] `/users export scope members` names no source table. D4PLAN 5.1 has `backup_members` (a snapshot, per backup) and no live members table. Decide whether it exports the newest backup's member snapshot, which is the only thing that exists.

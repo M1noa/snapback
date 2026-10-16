@@ -1272,7 +1272,9 @@ Pruning is deterministic and explainable:
 
 ### 17.3 Export
 
-`/backup export` and `/users export` both write a file and return it as a Discord File component, if the size permits, or a path plus a note if it does not. Discord's file upload limit is 10 MiB for non-boosted guilds and 25 MiB for boosted (`[v]`), so anything larger means the operator pulls the file from disk and the message says exactly where it is.
+`/backup export` and `/users export` both write a file and return it as a Discord File component, if the size permits, or a path plus a note if it does not. The ceiling is not a constant: read `attachment_size_limit` off the interaction object, which Discord documents as "the maximum" of the uploader's Nitro limit and the guild's boost tier. The documented default is 20 MiB per file (`[v]`, raised from 10 MiB in September 2026); the 25 MiB figure elsewhere in Discord's docs is the per-message request size, a different limit. Anything larger means the operator pulls the file from disk and the message says exactly where it is.
+
+Trusting a hardcoded constant here would be wrong twice over: it drifts when Discord raises the floor, and it is per-user, so a Nitro subscriber and a free user in the same guild have different real limits in the same request.
 
 Formats:
 
