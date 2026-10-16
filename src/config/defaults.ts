@@ -31,6 +31,9 @@ export interface WizardState {
   readonly steps: Readonly<Record<string, WizardStepState>>;
   readonly started_at: string | null;
   readonly done_at: string | null;
+  /** the user who opened the wizard. its controls refuse anyone else (D4PLAN
+   *  10.4); running /setup again hands it over. */
+  readonly opened_by: string | null;
 }
 
 /** the verification panel the wizard builds (D4PLAN 10.3). `button_mode` is the
@@ -95,6 +98,7 @@ export const DEFAULT_WIZARD: Readonly<WizardState> = Object.freeze({
   steps: Object.freeze({}),
   started_at: null,
   done_at: null,
+  opened_by: null,
 });
 
 export const DEFAULT_BRANDING: Readonly<BrandingSettings> = Object.freeze({
@@ -207,6 +211,7 @@ export function readWizardState(stored: unknown): WizardState {
     steps,
     started_at: nullableIso().read(stored.started_at),
     done_at: nullableIso().read(stored.done_at),
+    opened_by: snowflake(stored.opened_by),
   };
 }
 

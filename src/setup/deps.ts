@@ -8,9 +8,10 @@
 // the boot assertion in boot.ts can prove every produced id has a handler.
 
 import type { ContainerComponent, ModalComponent } from "oceanic.js";
-import type { GuildSettings, WizardState } from "../config/defaults.ts";
+import type { GuildSettings, VerifyPanelSettings, WizardState } from "../config/defaults.ts";
 import type { JsonObject } from "../db/types.ts";
 import { customID } from "../discord/components/row.ts";
+import type { StateStore } from "../discord/interactions/state.ts";
 import type { Logger } from "../lib/log.ts";
 
 export const SETUP_SURFACE = "setup";
@@ -30,18 +31,16 @@ export const SETUP_OBJECT = {
 /** the action slot, per object. kept as one table because the handler registry
  *  keys on (surface, action) and a stray verb is a boot failure, not a 404. */
 export const SETUP_ACTION = {
-  // navigation: cursor carries the target step key
+  // navigation: the cursor carries the target step key
   jump: "jump",
   next: "next",
   prev: "prev",
   skip: "skip",
   finish: "finish",
-  cancel: "cancel",
   status: "status",
   // admins
   add: "add",
   remove: "remove",
-  list: "list",
   // logs
   testfire: "testfire",
   toggle: "toggle",
@@ -52,9 +51,6 @@ export const SETUP_ACTION = {
   preview: "preview",
   send: "send",
   discard: "discard",
-  // data
-  export: "export",
-  dbcopy: "dbcopy",
 } as const;
 
 export interface SetupCustomIdInput {
@@ -209,6 +205,28 @@ export interface ImageApplier {
   setDisplayName(name: string): Promise<void>;
 }
 
+/** reads an uploaded file's bytes. from discord's cdn, which is the one fetch
+ *  outside the rest client (AGENTS.md rule 6). */
+export interface FileReader {
+  read(attachmentId: string): Promise<{
+    readonly bytes: Uint8Array;
+    readonly filename: string;
+    readonly contentType: string;
+  }>;
+}
+
+/** the outcome of one test fire. `said` is discord's own words when the post
+ *  failed, never a paraphrase (non-negotiable 5). */
+export interface LogTestResult {
+  readonly posted: boolean;
+  readonly said: string;
+  readonly fix: string | null;
+}
+
+export type LogTest = (guildId: string) => Promise<LogTestResult>;
+
+export type PanelPoster = (panel: VerifyPanelSettings, channelId: string) => Promise<void>;
+
 export interface SetupDeps {
   readonly log: Logger;
   /** epoch ms. injected so a page renders a stable timestamp in a test. */
@@ -220,7 +238,17 @@ export interface SetupDeps {
   readonly app: AppFacts;
   readonly portal: Portal;
   readonly images: ImageApplier;
+  readonly files: FileReader;
   readonly docs: DocReader;
+  /** short-lived payloads too large for a customID (D4PLAN 9.3). a destructive
+   *  confirmation keeps its one-time nonce and its target here. */
+  readonly state: StateStore;
+  /** posts one log-channel test event (D4PLAN 16 destination 1). the logging
+   *  module owns the real fan-out; this is the whole edge the wizard needs. */
+  readonly logs: LogTest;
+  /** posts the verification panel into a channel (D4PLAN 10.3, 13.1). the verify
+   *  surface owns the panel's lifecycle; the wizard only places the first one. */
+  readonly postPanel: PanelPoster;
 }
 
 // ---- the step module contract ---------------------------------------------
@@ -233,7 +261,12 @@ export interface StepContext {
   readonly deps: SetupDeps;
 }
 
-/** a modal's submitted fields: each control's customID mapped to its value. */
+/** what a step gets back from a submission. keys are the full customID strings
+ *  the step produced with setupCustomId(), so a step reads values by building
+ *  the same id rather than by inventing a key naming scheme. a text input, a
+ *  radio group, and a file upload (the id of its first attachment) contribute a
+ *  string, a select and a checkbox group contribute a string array, and a bare
+ *  checkbox contributes "true" or "false". a button contributes nothing. */
 export type StepValues = Readonly<Record<string, string | readonly string[] | undefined>>;
 
 export interface StepModule {
@@ -250,9 +283,6 @@ export interface StepModule {
   ): Promise<Partial<GuildSettings>> | Partial<GuildSettings>;
   /** the modal this step's controls open, if any. */
   modal?(ctx: StepContext): { title: string; components: ModalComponent[] } | null;
-  /** extra customIDs this step produces beyond its own key, so the boot
-   *  assertion covers them. */
-  readonly specs?: readonly string[];
 }
 
 /** a validation failure the user can act on. the message is ours, the detail is

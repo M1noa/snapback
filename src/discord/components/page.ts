@@ -5,6 +5,7 @@ import {
   ButtonStyles,
   type ContainerComponent,
   type MessageActionRow,
+  type MessageActionRowComponent,
   SeparatorSpacingSize,
 } from "oceanic.js";
 import { STATUS, type Status } from "./colors.ts";
@@ -89,33 +90,53 @@ export interface ListRowOptions {
   parts: Omit<CustomIDParts, "action" | "cursor">;
   page: number;
   pages: number;
+  /** which verbs to render, in the fixed order above. a surface that has nothing
+   *  to export omits "export" rather than shipping a button that cannot fire. */
+  actions?: readonly ListAction[];
 }
+
+/** the five verbs, in the order every list row shows them. */
+export type ListAction = "page-prev" | "page" | "page-next" | "filter" | "export";
+
+export const LIST_ACTIONS: readonly ListAction[] = Object.freeze([
+  "page-prev",
+  "page",
+  "page-next",
+  "filter",
+  "export",
+]);
 
 // the one control row every list surface uses: previous, page N of M, next,
 // filter, export. identical everywhere on purpose (AGENTS.md consistency).
 export function listRow(opts: ListRowOptions): MessageActionRow {
-  const { parts, page: current, pages } = opts;
+  const { parts, page: current, pages, actions = LIST_ACTIONS } = opts;
   const at = (action: string, cursor: string) => customID({ ...parts, action, cursor });
-  return actionRow([
-    button({
-      id: at("page-prev", String(current - 1)),
-      label: "previous",
-      style: ButtonStyles.SECONDARY,
-      disabled: current <= 1,
-    }),
-    button({
-      id: at("page", String(current)),
-      label: `page ${current} of ${pages}`,
-      style: ButtonStyles.SECONDARY,
-      disabled: true,
-    }),
-    button({
-      id: at("page-next", String(current + 1)),
-      label: "next",
-      style: ButtonStyles.SECONDARY,
-      disabled: current >= pages,
-    }),
-    button({ id: at("filter", String(current)), label: "filter", style: ButtonStyles.SECONDARY }),
-    button({ id: at("export", String(current)), label: "export", style: ButtonStyles.SECONDARY }),
-  ]);
+  const builders: Readonly<Record<ListAction, () => MessageActionRowComponent>> = {
+    "page-prev": () =>
+      button({
+        id: at("page-prev", String(current - 1)),
+        label: "previous",
+        style: ButtonStyles.SECONDARY,
+        disabled: current <= 1,
+      }),
+    page: () =>
+      button({
+        id: at("page", String(current)),
+        label: `page ${current} of ${pages}`,
+        style: ButtonStyles.SECONDARY,
+        disabled: true,
+      }),
+    "page-next": () =>
+      button({
+        id: at("page-next", String(current + 1)),
+        label: "next",
+        style: ButtonStyles.SECONDARY,
+        disabled: current >= pages,
+      }),
+    filter: () =>
+      button({ id: at("filter", String(current)), label: "filter", style: ButtonStyles.SECONDARY }),
+    export: () =>
+      button({ id: at("export", String(current)), label: "export", style: ButtonStyles.SECONDARY }),
+  };
+  return actionRow(actions.map((action) => builders[action]()));
 }
