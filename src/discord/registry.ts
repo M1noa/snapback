@@ -22,11 +22,22 @@ export const OPTION_TYPE = {
   attachment: 11,
 } as const;
 
+export interface CommandChoice {
+  readonly name: string;
+  readonly value: string | number;
+}
+
 export interface CommandOption {
   readonly name: string;
   readonly description: string;
   readonly type: number;
   readonly required?: boolean;
+  // a choice list is part of the option: discord rejects a value that is not in
+  // the registered set, so a renamed choice has to re-register.
+  readonly choices?: readonly CommandChoice[];
+  // same for the bounds: discord refuses an out-of-range value with a 50035.
+  readonly min_value?: number;
+  readonly max_value?: number;
   readonly options?: readonly CommandOption[];
 }
 
@@ -158,6 +169,20 @@ function compareOptions(
     if (required !== liveRequired) {
       fields.push(`${path}.${option.name}.required: ${required} -> ${liveRequired}`);
     }
+    const choices = choiceKey(option.choices);
+    const liveChoices = choiceKey(current.choices);
+    if (choices !== liveChoices) {
+      fields.push(`${path}.${option.name}.choices: ${choices} -> ${liveChoices}`);
+    }
+    for (const bound of ["min_value", "max_value"] as const) {
+      const defined = option[bound];
+      const registered = current[bound];
+      if (defined !== registered) {
+        fields.push(
+          `${path}.${option.name}.${bound}: ${boundText(defined)} -> ${boundText(registered)}`,
+        );
+      }
+    }
     fields.push(
       ...compareOptions(`${path}.${option.name}`, option.options ?? [], current.options ?? []),
     );
@@ -168,6 +193,18 @@ function compareOptions(
     }
   }
   return fields;
+}
+
+// order matters here: discord shows the choices in the registered order, so a
+// reordered list is a change worth re-registering.
+function choiceKey(choices: readonly CommandChoice[] | undefined): string {
+  if (!choices || choices.length === 0) return "none";
+  return choices.map((choice) => `${choice.name}=${choice.value}`).join(",");
+}
+
+// absent bounds read as absent, not as 0.
+function boundText(value: number | undefined): string {
+  return value === undefined ? "none" : String(value);
 }
 
 export interface AccessInput {

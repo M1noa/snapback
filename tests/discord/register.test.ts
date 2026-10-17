@@ -159,6 +159,83 @@ describe("syncCommands", () => {
     expect(changed).toEqual(["snapback.options.status.description: status -> something else"]);
   });
 
+  // discord rejects a value that is not in the registered choice set, so a
+  // renamed or added choice has to reach the api, not sit in the diff as unchanged.
+  test("a changed choice list is reported, so a renamed choice re-registers", async () => {
+    const defined: CommandDefinition[] = [
+      {
+        name: "setup",
+        description: "the wizard",
+        options: [
+          {
+            name: "guide",
+            description: "read a guide",
+            type: 3,
+            choices: [
+              { name: "setup", value: "setup" },
+              { name: "privacy", value: "privacy" },
+            ],
+          },
+        ],
+      },
+    ];
+    const { client } = fakeClient(() => [
+      {
+        id: "6",
+        name: "setup",
+        description: defined[0]!.description,
+        options: [
+          {
+            name: "guide",
+            description: "read a guide",
+            type: 3,
+            choices: [{ name: "setup", value: "setup" }],
+          },
+        ],
+      },
+    ]);
+    const log = recordingLogger();
+    await syncCommands(
+      createCommandsRest(client, APPLICATION_ID),
+      defined,
+      { kind: "global" },
+      log,
+    );
+
+    const changed = log.records[0]?.fields.changed as string[];
+    expect(changed).toEqual([
+      "setup.options.guide.choices: setup=setup,privacy=privacy -> setup=setup",
+    ]);
+  });
+
+  test("a changed option bound is reported", async () => {
+    const defined: CommandDefinition[] = [
+      {
+        name: "setup",
+        description: "the wizard",
+        options: [{ name: "page", description: "page", type: 4, min_value: 1, max_value: 999 }],
+      },
+    ];
+    const { client } = fakeClient(() => [
+      {
+        id: "6",
+        name: "setup",
+        description: defined[0]!.description,
+        options: [{ name: "page", description: "page", type: 4, min_value: 1 }],
+      },
+    ]);
+    const log = recordingLogger();
+    await syncCommands(
+      createCommandsRest(client, APPLICATION_ID),
+      defined,
+      { kind: "global" },
+      log,
+    );
+
+    const changed = log.records[0]?.fields.changed as string[];
+    expect(changed).toEqual(["setup.options.page.max_value: 999 -> none"]);
+  });
+
   test("guild scope reports instant propagation", async () => {
     const { client } = fakeClient(() => []);
     const log = recordingLogger();
