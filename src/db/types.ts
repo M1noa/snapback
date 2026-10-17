@@ -129,6 +129,24 @@ export interface OauthStateRow {
   client_ip: string | null;
 }
 
+/** a backup's post-write self check (D4PLAN 11.6). null while the backup is open. */
+export interface SelfCheck {
+  /** false marks the backup incomplete; it still restores, with a warning. */
+  ok: boolean;
+  /** one line per broken invariant. */
+  failures: string[];
+  /** what the capture deliberately skipped, so "incomplete" is never a mystery. */
+  skipped: Skip[];
+}
+
+/** one recorded skip, the shape services/backup/types.ts writes. declared here so
+ *  the stored blob and the capture layer cannot drift. */
+export interface Skip {
+  category: string;
+  what: string;
+  why: string;
+}
+
 /** one sealed snapshot of a guild. assets live on disk; urls here. */
 export interface BackupRow {
   backup_id: string;
@@ -152,6 +170,7 @@ export interface BackupRow {
   welcome_screen_json: JsonObject | null;
   widget_json: JsonObject | null;
   afk_json: JsonObject | null;
+  self_check_json: SelfCheck | null;
   created_at: string;
   created_by: string;
 }

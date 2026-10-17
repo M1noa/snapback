@@ -6,6 +6,8 @@
 //
 // no reflection, no deep walk: each converter does one column, explicitly.
 
+import type { SelfCheck, Skip } from "./types.ts";
+
 /** the shapes a driver can hand back for one column. */
 export type SqlValue = string | number | bigint | boolean | Date | null | undefined;
 
@@ -105,4 +107,28 @@ export function parseJson<T>(value: SqlValue): T | null {
 export function stringifyJson(value: unknown): string | null {
   if (value === null || value === undefined) return null;
   return JSON.stringify(value);
+}
+
+// a self_check_json column: a backup's own validation result (D4PLAN 11.6). null
+// stays null, meaning the backup is still open. the shape is rebuilt rather than
+// trusted, so a hand-edited blob cannot hand back a missing failures array.
+export function toSelfCheck(value: SqlValue): Maybe<SelfCheck> {
+  if (value === null || value === undefined) return value;
+  const parsed = parseJson<SelfCheck>(value);
+  if (parsed === null) return null;
+  return {
+    ok: parsed.ok === true,
+    failures: Array.isArray(parsed.failures) ? parsed.failures.filter(isText) : [],
+    skipped: Array.isArray(parsed.skipped) ? parsed.skipped.filter(isSkip) : [],
+  };
+}
+
+function isText(value: unknown): value is string {
+  return typeof value === "string" && value !== "";
+}
+
+function isSkip(value: unknown): value is Skip {
+  if (value === null || typeof value !== "object") return false;
+  const skip = value as Partial<Skip>;
+  return isText(skip.category) && isText(skip.what) && isText(skip.why);
 }

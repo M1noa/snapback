@@ -1,9 +1,11 @@
 // the backup-defaults wizard step (D4PLAN 10.1 #6, 6.1). turns scheduled
-// capture on, sets the interval and the per-backup message ceiling, and turns
-// the join notice on. all four are per-guild settings_json values, not env.
+// capture on, sets the interval and the per-backup message ceiling, turns the
+// join notice on, and picks the default include set and message types a capture
+// keeps (D4PLAN 8 "default include set", 11.5). every one is a per-guild
+// settings_json value, not env.
 //
 // the two ceilings are edited from a modal so a typed number goes through
-// clampInt; the two toggles are checkboxes on the page.
+// clampInt; everything else is a control on the page.
 
 import {
   ButtonStyles,
@@ -11,7 +13,14 @@ import {
   type ModalComponent,
   TextInputStyles,
 } from "oceanic.js";
-import { type GuildSettings, LIMITS } from "../../config/defaults.ts";
+import {
+  BACKUP_INCLUDE_KEYS,
+  type BackupInclude,
+  type GuildSettings,
+  LIMITS,
+  MESSAGE_TYPE_NAMES,
+  normaliseMessageTypes,
+} from "../../config/defaults.ts";
 import type { ContainerChild } from "../../discord/components/container.ts";
 import { textDisplay } from "../../discord/components/fields.ts";
 import { page } from "../../discord/components/page.ts";
@@ -19,6 +28,7 @@ import {
   actionRow,
   button,
   checkbox,
+  checkboxGroup,
   label,
   modal,
   textInput,
@@ -34,6 +44,19 @@ import {
 } from "../deps.ts";
 
 const STEP = "backup";
+
+// what each category carries, shown under its checkbox. the labels come from
+// BACKUP_INCLUDE_KEYS so a category cannot be a toggle here without a line here.
+const INCLUDE_WHAT: Readonly<Record<string, string>> = {
+  roles: "names, colours, permissions, hoist, role icons",
+  channels: "categories, channels, permission overwrites, threads",
+  messages: "history up to the per-channel and per-backup ceilings",
+  members: "who was in the guild, for the member restore",
+  bans: "the ban list with reasons",
+  emojis: "custom emoji, with the image files",
+  stickers: "stickers, with the image files",
+  onboarding: "onboarding prompts and default channels",
+};
 
 // the modal-open control and the modal itself share one id; the two text inputs
 // carry their own cursors, which apply() reads.
@@ -51,6 +74,12 @@ function idAuto(guildId: string): string {
 }
 function idNotify(guildId: string): string {
   return setupCustomId({ guildId, object: SETUP_OBJECT.step, action: STEP, cursor: "notify" });
+}
+function idInclude(guildId: string): string {
+  return setupCustomId({ guildId, object: SETUP_OBJECT.step, action: STEP, cursor: "include" });
+}
+function idTypes(guildId: string): string {
+  return setupCustomId({ guildId, object: SETUP_OBJECT.step, action: STEP, cursor: "types" });
 }
 
 // a checkbox contributes its value only when it is part of the submission, so a
@@ -112,6 +141,32 @@ export const backupStep: StepModule = {
       checkbox({
         id: idNotify(ctx.guildId),
         default: s.notify_on_join,
+      }) as unknown as ContainerChild,
+      textDisplay(
+        "**what a backup captures.** a category turned off here is skipped by `/backup create` and recorded as a skip, so a restored guild never looks complete when it is not.",
+      ),
+      // a checkbox group is a modal control on discord's side, but the page child
+      // union predates its type; the cast keeps it as a page control and apply()
+      // reads the same id either way.
+      checkboxGroup({
+        id: idInclude(ctx.guildId),
+        options: BACKUP_INCLUDE_KEYS.map((key) => ({
+          label: key,
+          value: key,
+          description: INCLUDE_WHAT[key],
+          default: s.backup_include[key],
+        })),
+      }) as unknown as ContainerChild,
+      textDisplay(
+        `**message types.** kept: ${describeTypes(s.backup_message_types)}. joins, boosts and pins are off by default because they replay as noise in a restored channel. types not listed here are kept at their stored value, not cleared.`,
+      ),
+      checkboxGroup({
+        id: idTypes(ctx.guildId),
+        options: Object.entries(MESSAGE_TYPE_NAMES).map(([type, name]) => ({
+          label: name,
+          value: type,
+          default: s.backup_message_types.includes(Number(type)),
+        })),
       }) as unknown as ContainerChild,
     ];
 
@@ -175,6 +230,41 @@ export const backupStep: StepModule = {
         LIMITS.auto_backup_message_count,
         ctx.settings.auto_backup_message_count,
       ),
+      backup_include: readInclude(values[idInclude(ctx.guildId)], ctx.settings.backup_include),
+      backup_message_types: readTypes(
+        values[idTypes(ctx.guildId)],
+        ctx.settings.backup_message_types,
+      ),
     };
   },
 };
+
+// an unchecked box contributes nothing, so a category the group does not carry
+// (a stored key from a newer build) keeps its stored value rather than flipping
+// off. the group is the authority for the keys it does offer.
+function readInclude(raw: unknown, fallback: BackupInclude): BackupInclude {
+  if (raw === undefined) return fallback;
+  const selected = new Set(
+    (Array.isArray(raw) ? raw : [raw]).filter((item): item is string => typeof item === "string"),
+  );
+  const out = { ...fallback } as Record<string, boolean>;
+  for (const key of BACKUP_INCLUDE_KEYS) out[key] = selected.has(key);
+  return out as unknown as BackupInclude;
+}
+
+// the group submits strings; the range rule lives in normaliseMessageTypes so
+// this and the stored-row reader cannot disagree about what is in range.
+function readTypes(raw: unknown, fallback: readonly number[]): readonly number[] {
+  if (raw === undefined) return fallback;
+  const asNumbers = (Array.isArray(raw) ? raw : [raw])
+    .filter((item): item is string => typeof item === "string" && /^\d+$/.test(item))
+    .map((item) => Number.parseInt(item, 10));
+  return normaliseMessageTypes(asNumbers);
+}
+
+// a stored type with no label in MESSAGE_TYPE_NAMES has no checkbox, so name it
+// by number rather than hiding it from the summary.
+function describeTypes(types: readonly number[]): string {
+  if (types.length === 0) return "none";
+  return types.map((type) => MESSAGE_TYPE_NAMES[type] ?? `type ${type}`).join(", ");
+}

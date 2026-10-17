@@ -61,6 +61,56 @@ export interface BrandingSettings {
   readonly banner_set: boolean;
 }
 
+/** what a backup captures by default (D4PLAN 8 "default include set"). a
+ *  category here is one D4PLAN 11 gives its own step; turning one off is
+ *  recorded in the backup's skip list rather than silently dropped. */
+export interface BackupInclude {
+  roles: boolean;
+  channels: boolean;
+  messages: boolean;
+  members: boolean;
+  bans: boolean;
+  emojis: boolean;
+  stickers: boolean;
+  onboarding: boolean;
+}
+
+export const BACKUP_INCLUDE_KEYS = Object.freeze([
+  "roles",
+  "channels",
+  "messages",
+  "members",
+  "bans",
+  "emojis",
+  "stickers",
+  "onboarding",
+] as const);
+
+/** discord message types worth naming in a toggle. anything else in range is
+ *  still storable by number; it just has no label in the ui. */
+export const MESSAGE_TYPE_NAMES: Readonly<Record<number, string>> = Object.freeze({
+  0: "normal",
+  3: "call",
+  6: "pinned",
+  7: "member join",
+  8: "boost",
+  18: "thread created",
+  19: "reply",
+  20: "slash command",
+  21: "thread starter",
+  22: "invite reminder",
+  23: "context menu command",
+  24: "automod action",
+});
+
+// discord's message type range. a filter outside it can never match a message,
+// so the upper bound is what stops a hand-edited value from capturing nothing.
+export const MESSAGE_TYPE_RANGE: Readonly<Range> = Object.freeze({ min: 0, max: 31 });
+
+/** the three types that are actual conversation (D4PLAN 11.5). everything else
+ *  replays as noise in a restored channel, so it is off until someone asks. */
+export const DEFAULT_BACKUP_MESSAGE_TYPES: readonly number[] = Object.freeze([0, 19, 20]);
+
 export interface GuildSettings {
   ephemeral_default: boolean;
   log_channel_id: string | null;
@@ -69,6 +119,10 @@ export interface GuildSettings {
   auto_backup_enabled: boolean;
   auto_backup_interval_hours: number;
   auto_backup_message_count: number;
+  /** the default include set /backup create prechecks (D4PLAN 11.1). */
+  backup_include: BackupInclude;
+  /** which message types a capture keeps (D4PLAN 11.5). */
+  backup_message_types: readonly number[];
   auto_restore_enabled: boolean;
   restore_clear_before: boolean;
   restore_message_timestamp_suffix: boolean;
@@ -106,6 +160,12 @@ export const DEFAULT_BRANDING: Readonly<BrandingSettings> = Object.freeze({
   avatar_set: false,
   banner_set: false,
 });
+
+// everything on: a backup that quietly stopped capturing a category because a
+// default changed is the failure mode this avoids.
+export const DEFAULT_BACKUP_INCLUDE: Readonly<BackupInclude> = Object.freeze(
+  Object.fromEntries(BACKUP_INCLUDE_KEYS.map((key) => [key, true])) as unknown as BackupInclude,
+);
 
 export const DEFAULT_VERIFY_PANEL: Readonly<VerifyPanelSettings> = Object.freeze({
   channel_id: null,
@@ -250,6 +310,41 @@ function urlOrNull(value: unknown): string | null {
   return /^https:\/\/\S+$/.test(trimmed) ? trimmed : null;
 }
 
+// a missing key keeps the default, an explicit false turns the category off.
+function readBackupInclude(stored: unknown): BackupInclude {
+  const out = { ...DEFAULT_BACKUP_INCLUDE } as Record<string, boolean>;
+  if (!isRecord(stored)) return out as unknown as BackupInclude;
+  for (const key of BACKUP_INCLUDE_KEYS) {
+    const value = stored[key];
+    if (typeof value === "boolean") out[key] = value;
+  }
+  return out as unknown as BackupInclude;
+}
+
+// ids only, deduped and ordered, so two selections that differ in order are the
+// same stored value and the golden json does not churn. an id outside discord's
+// range is dropped rather than clamped: clamping 999 to 31 would silently start
+// capturing a type nobody asked for.
+//
+// exported because the wizard step turns the same submission into the same
+// value, and two copies of the range rule would drift.
+export function normaliseMessageTypes(values: readonly unknown[]): readonly number[] {
+  const kept: number[] = [];
+  for (const item of values) {
+    if (typeof item !== "number" || !Number.isInteger(item)) continue;
+    if (item < MESSAGE_TYPE_RANGE.min || item > MESSAGE_TYPE_RANGE.max) continue;
+    if (!kept.includes(item)) kept.push(item);
+  }
+  return Object.freeze(kept.sort((a, b) => a - b));
+}
+
+function messageTypeList(fallback: readonly number[]): Field<readonly number[]> {
+  return {
+    default: fallback,
+    read: (v) => (Array.isArray(v) ? normaliseMessageTypes(v) : fallback),
+  };
+}
+
 // one entry per field. typed against GuildSettings, so adding a field without a
 // default is a type error rather than a silent hole in the stored row.
 export const FIELDS: {
@@ -261,6 +356,8 @@ export const FIELDS: {
   auto_backup_enabled: bool(false),
   auto_backup_interval_hours: int(24, LIMITS.auto_backup_interval_hours),
   auto_backup_message_count: int(1000, LIMITS.auto_backup_message_count),
+  backup_include: { default: DEFAULT_BACKUP_INCLUDE, read: readBackupInclude },
+  backup_message_types: messageTypeList(DEFAULT_BACKUP_MESSAGE_TYPES),
   auto_restore_enabled: bool(false),
   restore_clear_before: bool(false),
   restore_message_timestamp_suffix: bool(false),

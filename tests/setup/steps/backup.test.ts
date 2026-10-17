@@ -1,10 +1,12 @@
 import { describe, expect, test } from "bun:test";
 import { ComponentTypes, type ContainerComponent, type TextInput } from "oceanic.js";
 import {
+  BACKUP_INCLUDE_KEYS,
   DEFAULT_GUILD_SETTINGS,
   DEFAULT_WIZARD,
   type GuildSettings,
   LIMITS,
+  MESSAGE_TYPE_NAMES,
 } from "../../../src/config/defaults.ts";
 import { STATUS } from "../../../src/discord/components/colors.ts";
 import { countComponents, PAGE_LIMIT } from "../../../src/discord/components/page.ts";
@@ -101,6 +103,7 @@ interface Node {
   components?: Node[];
   accessory?: Node;
   component?: Node;
+  options?: { label?: string; value?: string; default?: boolean }[];
 }
 
 function walk(node: unknown, visit: (n: Node) => void): void {
@@ -118,6 +121,29 @@ function text(tree: unknown): string {
     if (typeof n.content === "string") out.push(n.content);
   });
   return out.join("\n");
+}
+
+// apply is declared as a patch or a promise of one because a sibling step is
+// async; this one is synchronous, so a test reads it straight.
+function patchOf(
+  values: Record<string, string | readonly string[]>,
+  s: GuildSettings = DEFAULT_GUILD_SETTINGS,
+): Partial<GuildSettings> {
+  return backupStep.apply!(stepCtx(fakeDeps(), s), values) as Partial<GuildSettings>;
+}
+
+// a checkbox group by its custom id, so a test can read the options it offers.
+function group(tree: unknown, wanted: string): { label: string; value: string; on: boolean }[] {
+  let found: { label: string; value: string; on: boolean }[] = [];
+  walk(tree, (n) => {
+    if (n.type !== ComponentTypes.CHECKBOX_GROUP || n.customID !== wanted) return;
+    found = (n.options ?? []).map((option) => ({
+      label: option.label ?? "",
+      value: option.value ?? "",
+      on: option.default === true,
+    }));
+  });
+  return found;
 }
 
 describe("backupStep", () => {
@@ -186,28 +212,109 @@ describe("backupStep", () => {
   });
 
   test("apply maps the two toggles from the checkbox ids", () => {
-    const patch = backupStep.apply!(stepCtx(fakeDeps()), {
+    const patch = patchOf({
       [id("auto")]: "true",
       [id("notify")]: "true",
       [id("interval")]: "6",
       [id("count")]: "500",
-    }) as {
-      auto_backup_enabled: boolean;
-      notify_on_join: boolean;
-      auto_backup_interval_hours: number;
-      auto_backup_message_count: number;
-    };
+    });
     expect(patch).toEqual({
       auto_backup_enabled: true,
       notify_on_join: true,
       auto_backup_interval_hours: 6,
       auto_backup_message_count: 500,
+      backup_include: DEFAULT_GUILD_SETTINGS.backup_include,
+      backup_message_types: DEFAULT_GUILD_SETTINGS.backup_message_types,
     });
   });
 
   test("an absent toggle key keeps the stored value", () => {
     const s = { ...DEFAULT_GUILD_SETTINGS, auto_backup_enabled: true } as GuildSettings;
-    const patch = backupStep.apply!(stepCtx(fakeDeps(), s), {}) as { auto_backup_enabled: boolean };
-    expect(patch.auto_backup_enabled).toBe(true);
+    expect(patchOf({}, s).auto_backup_enabled).toBe(true);
+  });
+
+  test("the include group offers a box for every category, all on by default", () => {
+    const tree = backupStep.render(stepCtx(fakeDeps())) as ContainerComponent;
+    const boxes = group(tree, id("include"));
+    expect(boxes.map((b) => b.value)).toEqual([...BACKUP_INCLUDE_KEYS]);
+    expect(boxes.every((b) => b.on)).toBe(true);
+    expect(boxes.every((b) => b.label !== "")).toBe(true);
+  });
+
+  test("the include group checks what the stored settings turned on", () => {
+    const s = {
+      ...DEFAULT_GUILD_SETTINGS,
+      backup_include: { ...DEFAULT_GUILD_SETTINGS.backup_include, messages: false },
+    } as GuildSettings;
+    const boxes = group(backupStep.render(stepCtx(fakeDeps(), s)), id("include"));
+    expect(boxes.filter((b) => b.on).map((b) => b.value)).not.toContain("messages");
+    expect(boxes.filter((b) => b.on)).toHaveLength(BACKUP_INCLUDE_KEYS.length - 1);
+  });
+
+  test("apply turns off only the categories the group left unchecked", () => {
+    const patch = patchOf({ [id("include")]: ["roles", "channels", "messages"] });
+    expect(patch.backup_include).toEqual({
+      roles: true,
+      channels: true,
+      messages: true,
+      members: false,
+      bans: false,
+      emojis: false,
+      stickers: false,
+      onboarding: false,
+    });
+  });
+
+  test("an absent include key keeps the stored set rather than clearing it", () => {
+    const s = {
+      ...DEFAULT_GUILD_SETTINGS,
+      backup_include: { ...DEFAULT_GUILD_SETTINGS.backup_include, bans: false },
+    } as GuildSettings;
+    expect(patchOf({}, s).backup_include).toEqual(s.backup_include);
+  });
+
+  test("a category the group does not offer keeps its stored value", () => {
+    // a key added by a newer build is not in this group; the group must not be
+    // read as "everything unsent was turned off".
+    const s = {
+      ...DEFAULT_GUILD_SETTINGS,
+      backup_include: { ...DEFAULT_GUILD_SETTINGS.backup_include, messages: false },
+    } as GuildSettings;
+    const patch = patchOf({ [id("include")]: ["roles"] }, s);
+    expect(patch.backup_include?.roles).toBe(true);
+    expect(patch.backup_include?.messages).toBe(false);
+  });
+
+  test("the type group offers the named types with the defaults checked", () => {
+    const boxes = group(backupStep.render(stepCtx(fakeDeps())), id("types"));
+    expect(boxes.map((b) => b.value)).toEqual(Object.keys(MESSAGE_TYPE_NAMES));
+    expect(boxes.filter((b) => b.on).map((b) => b.value)).toEqual(["0", "19", "20"]);
+    expect(boxes.every((b) => b.label !== "")).toBe(true);
+  });
+
+  test("apply stores the chosen types as sorted, deduped numbers", () => {
+    const patch = patchOf({ [id("types")]: ["20", "0", "20", "19"] });
+    expect(patch.backup_message_types).toEqual([0, 19, 20]);
+  });
+
+  test("apply drops a type outside discord's range instead of clamping it", () => {
+    const patch = patchOf({ [id("types")]: ["7", "999", "-1", "soon"] });
+    expect(patch.backup_message_types).toEqual([7]);
+  });
+
+  test("an absent type key keeps the stored list", () => {
+    const s = {
+      ...DEFAULT_GUILD_SETTINGS,
+      backup_message_types: [0] as readonly number[],
+    } as GuildSettings;
+    expect(patchOf({}, s).backup_message_types).toEqual([0]);
+  });
+
+  test("a stored type with no label still shows in the summary", () => {
+    const s = {
+      ...DEFAULT_GUILD_SETTINGS,
+      backup_message_types: [0, 12] as readonly number[],
+    } as GuildSettings;
+    expect(text(backupStep.render(stepCtx(fakeDeps(), s)))).toContain("type 12");
   });
 });

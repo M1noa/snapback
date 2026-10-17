@@ -215,6 +215,14 @@ export function parseEnv(read: EnvSource): EnvResult {
         pullFailureCooldownMinutes: int("PULL_FAILURE_COOLDOWN_MINUTES", 60, 1, 1440),
       }),
 
+      storage: Object.freeze({
+        // backups/<id>/assets/ lands under here. the db file's sibling by default.
+        backupDir: optional("BACKUP_DIR", "./data/backups"),
+        // D4PLAN 11.1: a file over this is recorded with its url and no bytes
+        // rather than downloaded. 0 means record every asset and download none.
+        maxAssetBytes: int("MAX_ASSET_BYTES", 8 * 1024 * 1024, 0, 100 * 1024 * 1024),
+      }),
+
       app: Object.freeze({
         logLevel: pick<LogLevel>("LOG_LEVEL", ["debug", "info", "warn", "error"], "info"),
         automationEnabled: bool("AUTOMATION_ENABLED", true),

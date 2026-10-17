@@ -1,5 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
+  BACKUP_INCLUDE_KEYS,
+  DEFAULT_BACKUP_INCLUDE,
   DEFAULT_GUILD_SETTINGS,
   DEFAULT_VERIFY_PANEL,
   LOG_EVENT_FAMILIES,
@@ -131,6 +133,63 @@ describe("the wizard and panel fields", () => {
     expect(
       readGuildSettings({ auto_backup_message_count: 999_999 }).auto_backup_message_count,
     ).toBe(10_000);
+  });
+});
+
+describe("the backup fields", () => {
+  test("every category is captured by default", () => {
+    const settings = readGuildSettings({});
+    for (const key of BACKUP_INCLUDE_KEYS) {
+      expect(settings.backup_include[key]).toBe(true);
+    }
+  });
+
+  test("one category can be turned off without touching the others", () => {
+    const include = readGuildSettings({
+      backup_include: { messages: false, members: false },
+    }).backup_include;
+    expect(include.messages).toBe(false);
+    expect(include.members).toBe(false);
+    expect(include.roles).toBe(true);
+    expect(include.bans).toBe(true);
+  });
+
+  test("a non-boolean category falls back to on, and an unknown key is dropped", () => {
+    const include = readGuildSettings({
+      backup_include: { roles: "no", sounds: false },
+    }).backup_include;
+    expect(include.roles).toBe(true);
+    expect(Object.keys(include).sort()).toEqual([...BACKUP_INCLUDE_KEYS].sort());
+  });
+
+  test("message types default to conversation only", () => {
+    expect(readGuildSettings({}).backup_message_types).toEqual([0, 19, 20]);
+  });
+
+  test("message types are deduped, sorted, and kept inside the discord range", () => {
+    expect(
+      readGuildSettings({ backup_message_types: [20, 0, 20, 19] }).backup_message_types,
+    ).toEqual([0, 19, 20]);
+    expect(readGuildSettings({ backup_message_types: [7, 999, -1] }).backup_message_types).toEqual([
+      7,
+    ]);
+    expect(readGuildSettings({ backup_message_types: "all" }).backup_message_types).toEqual([
+      0, 19, 20,
+    ]);
+    // a fractional id is not a type, and dropping is not the same as defaulting
+    expect(readGuildSettings({ backup_message_types: [19.5, 0] }).backup_message_types).toEqual([
+      0,
+    ]);
+    expect(readGuildSettings({ backup_message_types: [] }).backup_message_types).toEqual([]);
+  });
+
+  test("the two backup fields survive a patch like any other field", () => {
+    const merged = mergeGuildSettings(readGuildSettings({}), {
+      backup_include: { ...DEFAULT_BACKUP_INCLUDE, messages: false },
+      backup_message_types: [0, 7, 19, 20],
+    });
+    expect(merged.backup_include.messages).toBe(false);
+    expect(merged.backup_message_types).toEqual([0, 7, 19, 20]);
   });
 });
 

@@ -8,7 +8,7 @@
 import type { Database, MetaRow } from "./types.ts";
 
 // bump only when a migration is added; schema.sql's shape is version 1.
-export const SCHEMA_VERSION = 1;
+export const SCHEMA_VERSION = 2;
 
 export interface Migration {
   readonly version: number;
@@ -16,8 +16,17 @@ export interface Migration {
 }
 
 // each entry is numbered above the baseline, lowest first, and runs only if the
-// recorded version is below it. empty until the schema changes after this ships.
-export const MIGRATIONS: readonly Migration[] = [];
+// recorded version is below it.
+export const MIGRATIONS: readonly Migration[] = [
+  // 2: D4PLAN 11.6 keeps a failed self-check on the row. schema.sql shipped as the
+  // version 1 baseline without it, so the column is added here, never by editing
+  // that file. both duckdb and postgres accept add column if not exists, so this
+  // is idempotent like the baseline.
+  {
+    version: 2,
+    sql: "ALTER TABLE backups ADD COLUMN IF NOT EXISTS self_check_json TEXT",
+  },
+];
 
 const SCHEMA_KEY = "schema_version";
 const SCHEMA_FILE = new URL("./schema.sql", import.meta.url);
