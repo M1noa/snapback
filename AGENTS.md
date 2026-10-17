@@ -18,7 +18,7 @@ bun test                  # tests only
 
 `DISCORD_DEV_GUILD_ID` set means guild-scoped command registration (instant). Unset means global (up to an hour).
 
-Verified working on this machine, milestone 0: Bun 1.3.14, oceanic.js 1.15.0, `@duckdb/node-api` 1.5.6-r.1, TypeScript 7.0.2, Biome 2.5.15. `@duckdb/node-api` returns JS `bigint` for `BIGINT` and accepts a multi-statement DDL script in one call; `Bun.sql` is present, so Postgres needs no extra dependency. Both findings have a runnable record in `scripts/spike/`. Paths in this file are relative to `src/`.
+Verified working on this machine, milestone 0: Bun 1.4.3, oceanic.js 1.15.0, `@duckdb/node-api` 1.5.6-r.1, TypeScript 7.0.2, Biome 2.5.15. `@duckdb/node-api` returns JS `bigint` for `BIGINT` and accepts a multi-statement DDL script in one call; `Bun.sql` is present, so Postgres needs no extra dependency. Both findings have a runnable record in `scripts/spike/`. Paths in this file are relative to `src/`.
 
 `Bun.randomUUIDv7()` exists, so the UUIDv7 application-generated primary keys (`D4PLAN.md` 5) need no helper module and no dependency.
 
