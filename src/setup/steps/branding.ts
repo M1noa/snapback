@@ -59,7 +59,7 @@ function idName(guildId: string): string {
   });
 }
 
-// a file upload contributes the id of its first attachment as a string.
+// a file upload contributes its first attachment's cdn url as a string.
 function firstValue(value: unknown): string | undefined {
   if (typeof value === "string") return value === "" ? undefined : value;
   if (Array.isArray(value)) {
@@ -71,10 +71,10 @@ function firstValue(value: unknown): string | undefined {
 
 async function readAndPrepare(
   deps: SetupDeps,
-  attachmentId: string,
+  url: string,
   field: "avatar" | "banner",
 ): Promise<string> {
-  const file = await deps.files.read(attachmentId);
+  const file = await deps.files.read(url);
   try {
     return prepareImage(file.bytes, { maxBytes: MAX_IMAGE_BYTES, square: true }).dataUri;
   } catch (error) {

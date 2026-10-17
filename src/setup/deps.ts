@@ -205,10 +205,11 @@ export interface ImageApplier {
   setDisplayName(name: string): Promise<void>;
 }
 
-/** reads an uploaded file's bytes. from discord's cdn, which is the one fetch
- *  outside the rest client (AGENTS.md rule 6). */
+/** reads an uploaded file's bytes. the value is the attachment's cdn url, which
+ *  the transport resolves before a step ever sees it: an id alone cannot be
+ *  fetched. the one fetch outside the rest client (AGENTS.md rule 6). */
 export interface FileReader {
-  read(attachmentId: string): Promise<{
+  read(url: string): Promise<{
     readonly bytes: Uint8Array;
     readonly filename: string;
     readonly contentType: string;
@@ -264,8 +265,8 @@ export interface StepContext {
 /** what a step gets back from a submission. keys are the full customID strings
  *  the step produced with setupCustomId(), so a step reads values by building
  *  the same id rather than by inventing a key naming scheme. a text input, a
- *  radio group, and a file upload (the id of its first attachment) contribute a
- *  string, a select and a checkbox group contribute a string array, and a bare
+ *  radio group, and a file upload (the cdn url of its first attachment) contribute
+ *  a string, a select and a checkbox group contribute a string array, and a bare
  *  checkbox contributes "true" or "false". a button contributes nothing. */
 export type StepValues = Readonly<Record<string, string | readonly string[] | undefined>>;
 

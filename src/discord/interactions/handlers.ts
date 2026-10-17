@@ -95,6 +95,17 @@ function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
+// the cdn url for one uploaded attachment id. discord resolves uploads into the
+// interaction alongside the components, and a modal submit that carries no
+// resolved block (nothing was uploaded) yields undefined.
+function resolvedAttachmentUrl(
+  interaction: ComponentInteraction | ModalSubmitInteraction,
+  id: string | undefined,
+): string | undefined {
+  if (id === undefined || !interaction.isModalSubmitInteraction()) return undefined;
+  return interaction.data.resolved.attachments.get(id)?.url;
+}
+
 // one submitted control, whatever type it was. the modal wrapper already flattens
 // rows and labels, so this reads a flat list rather than walking the tree.
 function submittedValues(
@@ -110,9 +121,14 @@ function submittedValues(
       else if (typeof node.value === "boolean") out[node.customID] = String(node.value);
       else if (Array.isArray(node.values)) {
         const strings = node.values.filter((value): value is string => typeof value === "string");
-        // a file upload carries attachment ids; the step reads the first one.
+        // a file upload carries attachment ids; the step reads the first one. an id
+        // alone cannot be downloaded, so it is resolved to the cdn url discord
+        // already sent alongside it. an unresolved upload contributes nothing,
+        // which the step reads as "no file chosen".
         out[node.customID] =
-          component.type === ComponentTypes.FILE_UPLOAD ? (strings[0] ?? undefined) : strings;
+          component.type === ComponentTypes.FILE_UPLOAD
+            ? resolvedAttachmentUrl(interaction, strings[0])
+            : strings;
       }
     }
     return out;

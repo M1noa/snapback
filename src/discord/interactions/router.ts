@@ -144,7 +144,7 @@ export interface ReplyRequest {
 
 // one submitted control's value. a text input and a select option are strings, a
 // select and a checkbox group are string arrays, and a file upload contributes
-// the id of its first attachment. a bare checkbox arrives as a boolean from
+// the cdn url of its first attachment. a bare checkbox arrives as a boolean from
 // discord, and the transport normalises it to "true"/"false" before it gets here.
 export type SubmittedValue = string | readonly string[] | undefined;
 
