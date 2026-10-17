@@ -129,14 +129,22 @@ Answers marked here were resolved from the Discord docs and are recorded in `D4P
 
 ## Phase 4 - `/setup` wizard
 
-- [ ] resumable state machine in `guilds.settings_json` under `wizard`, each step `{done, skipped, at}`. Re-running edits rather than duplicating.
-- [ ] steps 0-11 from `D4PLAN.md` 10.1, plus a subcommand for each: `status`, `app`, `web`, `admins`, `backup`, `restore`, `verify`, `branding`, `logs`, `privacy`, `data`, `guide`.
-- [ ] file upload for avatar and banner through the modal `file_upload` component, size checked and non-square centre-cropped before upload, GIF accepted for the avatar.
-- [ ] `app` page: exact redirect string to paste, intents list, `app test` self-test, tunnel pointer.
-- [ ] `verify` page: the panel builder from `D4PLAN.md` 10.3, live preview posted to the wizard channel only.
-- [ ] every save writes an `audit_log` row and confirms ephemerally with the new value.
-- [ ] every save clamps numbers and validates colours before writing.
-- [ ] check: a full pass saves, a re-run shows prefilled values, audit rows exist, a partial setup resumes after a restart.
+- [x] resumable state machine in `guilds.settings_json` under `wizard`, each step `{done, skipped, at}`. Re-running edits rather than duplicating.
+      `src/setup/state.ts` holds the twelve steps as data plus the pure transitions, `wizard.steps.<key>` is `{done, skipped, at}`, and `openSetup` reopens at the first incomplete step. `tests/setup/state.test.ts`.
+- [~] steps 0-11 from `D4PLAN.md` 10.1, plus a subcommand for each: `status`, `app`, `web`, `admins`, `backup`, `restore`, `verify`, `branding`, `logs`, `privacy`, `data`, `guide`.
+      All twelve steps ship under `src/setup/steps/`, and `/setup` carries `open`, `status`, `guide`, and one subcommand per step, derived from `WIZARD_STEPS` so a new step cannot be added without one. `welcome`, `scopes`, and `finish` need none: `D4PLAN.md` 8 lists none of them and the step machine drives them. **`data` is not registered.** There is no `data` step, and the two verbs that make the page worth opening (back up the database, export everything to JSON) need the export path from a later phase; a status-and-size page would repeat the database line `/snapback diagnostics` already prints, so it waits for rows it can export. `docs/commands.md` keeps its `/setup data` row, because that file mirrors `D4PLAN.md` 8 including unshipped groups.
+- [x] file upload for avatar and banner through the modal `file_upload` component, size checked and non-square centre-cropped before upload, GIF accepted for the avatar.
+      `src/setup/image.ts` sniffs the real format from the bytes rather than trusting the declared type, enforces the size ceiling, and centre-crops a non-square PNG. A non-square jpeg or gif is refused with one fix ("this build has no jpeg decoder, so a non-square jpeg is not cropped: crop it and re-upload") rather than silently mangled, and a square gif is accepted as an avatar. The transport resolves the uploaded attachment to its cdn url before a step sees it, because an id alone cannot be fetched. `tests/setup/image.test.ts`.
+- [x] `app` page: exact redirect string to paste, intents list, `app test` self-test, tunnel pointer.
+      `src/setup/steps/app.ts` renders the exact `<public_base_url>/callback` string to paste and the intent list with the one privileged toggle called out. `src/setup/selftest.ts` runs the scripted `D4PLAN.md` 7.6 check, one line per step, and every failing line carries a fix in Discord's own words. The tunnel and proxy-depth guidance sits on the `web` step (`src/setup/steps/web.ts`), where the flag lives. `tests/setup/selftest.test.ts`.
+- [x] `verify` page: the panel builder from `D4PLAN.md` 10.3, live preview posted to the wizard channel only.
+      `src/setup/panel.ts` builds the panel from one settings object and renders those same components as the preview, inside the wizard's own message. Only the send button posts, and only into the channel the operator picked; a failed post reports Discord's code and message verbatim. `tests/setup/panel.test.ts`.
+- [x] every save writes an `audit_log` row and confirms ephemerally with the new value.
+      `SettingsStore.save` (`src/setup/wiring.ts`) is the one write path for `settings_json`: merge, clamp, persist, then one `audit_log` row naming the actor, the action, and the fields the patch moved. A patch that moved nothing writes no row, so re-running a step with identical values cannot claim a change. Every step answer is ephemeral.
+- [x] every save clamps numbers and validates colours before writing.
+      `mergeGuildSettings` reads every field back through its own reader, so an out-of-range number lands inside its range and a malformed colour falls back to the shipped default before the row is written (`src/config/defaults.ts`). `tests/setup/wiring.test.ts` asserts the clamp and the colour on the real store.
+- [x] check: a full pass saves, a re-run shows prefilled values, audit rows exist, a partial setup resumes after a restart.
+      `tests/setup/end-to-end.test.ts` drives the real step modules and the real handlers over a temp-file DuckDB: a full pass persists every value entered, a second pass renders each step prefilled from what was saved, one audit row lands per save with the field that moved, and a second identical pass changes no value. The restart is real rather than simulated: the handle is closed, the same file reopened, and fresh deps built, which then resume at the step the first pass stopped on with the earlier answers intact and no network call made. The production store is covered separately in `tests/setup/wiring.test.ts`.
 
 ## Phase 5 - backup
 

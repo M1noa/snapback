@@ -13,6 +13,7 @@ import { getAdmin } from "./db/queries/admins.ts";
 import { DiscordClient } from "./discord/client.ts";
 import { buildDefinitions, diagnosticsCommand, statusCommand } from "./discord/commands/index.ts";
 import { createCommandsRest, syncCommands } from "./discord/commands/register.ts";
+import { setupCommands } from "./discord/commands/setup/index.ts";
 import type { SlashCommand } from "./discord/commands/types.ts";
 import { DiscordApiError, formatDiscordError } from "./discord/errors.ts";
 import { Gateway, installProcessErrorHandlers } from "./discord/gateway.ts";
@@ -20,11 +21,14 @@ import { createAuthorizer, createInteractionHandler } from "./discord/interactio
 import { type CustomIdSpec, Router } from "./discord/interactions/router.ts";
 import { resolveScope } from "./discord/registry.ts";
 import { createLogger, type Logger } from "./lib/log.ts";
+import { registerSetupHandlers, SETUP_SPECS } from "./setup/handlers.ts";
+import { createSetupDeps } from "./setup/wiring.ts";
 
 // every customID surface this build produces. the boot assertion below refuses to
-// start when one has no handler (D4PLAN 9.3). it is empty until the first
-// component ships, and grows with each surface, not with each button.
-const CUSTOM_ID_SPECS: readonly CustomIdSpec[] = [];
+// start when one has no handler (D4PLAN 9.3). the /setup wizard is the first
+// surface, so this is its whole vocabulary (SETUP_SPECS); it grows with each new
+// surface, not with each button.
+const CUSTOM_ID_SPECS: readonly CustomIdSpec[] = [...SETUP_SPECS];
 
 const READY_TIMEOUT_MS = 30_000;
 
@@ -128,6 +132,19 @@ export async function boot(): Promise<Boot> {
     authorize: createAuthorizer({ ownerId: env.discord.ownerId, isGuildAdmin }),
   });
 
+  // the /setup surface. built once here and used twice below: to register the
+  // component handlers and to build the /setup command. every input it needs (the
+  // database, the rest client, the gateway) exists by this point, and registration
+  // runs before assertComplete so a control with no handler stops the boot.
+  const setupDeps = createSetupDeps({
+    db,
+    client,
+    gateway,
+    log,
+    ownerId: env.discord.ownerId,
+  });
+  registerSetupHandlers(router, setupDeps);
+
   // the probes read the same wiring the commands do: a selected handle, the live
   // gateway, the limiter, and the configured paths. nothing here opens anything.
   const probeDeps = {
@@ -156,6 +173,7 @@ export async function boot(): Promise<Boot> {
         handlerKeys: router.registeredKeys(),
       }),
     ),
+    ...setupCommands(setupDeps),
   ];
   const definitions = buildDefinitions(commands);
 
