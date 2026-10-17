@@ -10,6 +10,7 @@ import type { SlashCommand } from "./types.ts";
 // one description per top-level command. a group with no entry here is a bug the
 // buildDefinitions call below reports rather than inventing a description.
 export const GROUP_DESCRIPTIONS: Readonly<Record<string, string>> = {
+  setup: "the setup wizard, its steps, and the operator docs",
   snapback: "snapback bot status, diagnostics, and version",
 };
 

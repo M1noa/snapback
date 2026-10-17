@@ -16,7 +16,7 @@ The wizard. Stateful and resumable; the subcommands jump straight to a step.
 
 | Subcommand | Does |
 |---|---|
-| `/setup` | opens the wizard at the first incomplete step |
+| `/setup open` | opens the wizard at the first incomplete step |
 | `/setup status` | one page: every subsystem with a green, amber, or red dot, and for amber or red a button that jumps to the fix |
 | `/setup app` | Developer Panel checklist and the `app test` self-test |
 | `/setup web` | `PUBLIC_BASE_URL`, port, tunnel checkbox, live IP probe |
