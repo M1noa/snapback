@@ -40,6 +40,15 @@ export type RecordEventKind =
   | "note";
 export type ExportKind = "backup" | "records" | "all";
 
+/** how many backups a guild keeps, by age or count, filtered by kind (17.2). */
+export interface RetentionRow {
+  guild_id: string;
+  keep_days: number | null;
+  keep_count: number | null;
+  keep_kind_json: BackupKind[] | null;
+  enabled: boolean;
+}
+
 /** process metadata. one row per key; holds schema_version for migrations. */
 export interface MetaRow {
   key: string;
