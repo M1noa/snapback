@@ -2,7 +2,6 @@
 // urls and the settings blobs. self_check_json stays null until the backup is
 // sealed (D4PLAN 11.6), so a null there is also how "still open" is read.
 
-import { type GuildSettings, readGuildSettings } from "../../config/defaults.ts";
 import {
   parseJson,
   type SqlValue,
@@ -48,10 +47,10 @@ const SET = COLUMNS.slice(1)
   .map((column) => `${column} = ?`)
   .join(", ");
 
-function toSettings(value: SqlValue): GuildSettings | null {
-  return value === null || value === undefined
-    ? null
-    : readGuildSettings(parseJson<unknown>(value));
+// the guild's own settings blob as captured, handed back as it was stored: it is
+// discord's payload, not ours to normalise on the way out.
+function toSettings(value: SqlValue): JsonObject | null {
+  return parseJson<JsonObject>(value);
 }
 
 function toBackupRow(raw: Record<string, SqlValue>): BackupRow {

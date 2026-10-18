@@ -1,0 +1,287 @@
+{
+  "schema_version": 1,
+  "exported_at": "2024-06-01T00:00:00.000Z",
+  "backup": {
+    "backup_id": "0190a000-0000-7000-8000-0000000000f1",
+    "guild_id": "1000000000000000001",
+    "label": "fixture",
+    "kind": "manual",
+    "guild_name": "fixture guild",
+    "icon_url": null,
+    "banner_url": null,
+    "splash_url": null,
+    "discovery_splash_url": null,
+    "owner_user_id": null,
+    "member_count": 0,
+    "message_count": 0,
+    "channel_count": 0,
+    "role_count": 0,
+    "size_bytes": 0,
+    "schema_version": 1,
+    "guild_settings_json": null,
+    "onboarding_json": null,
+    "welcome_screen_json": null,
+    "widget_json": null,
+    "afk_json": null,
+    "self_check_json": null,
+    "created_at": "2024-01-01T00:00:00.000Z",
+    "created_by": "1000000000000000001"
+  },
+  "roles": [
+    {
+      "backup_id": "0190a000-0000-7000-8000-0000000000f1",
+      "source_role_id": "144102483157850112",
+      "name": "@everyone",
+      "color": 0,
+      "hoist": false,
+      "mentionable": false,
+      "position": 0,
+      "permissions": "9223372036854775807",
+      "is_everyone": true,
+      "is_bot_managed": false,
+      "bot_id": null,
+      "integration_id": null,
+      "icon_url": null,
+      "unicode_emoji": null,
+      "tags_json": null
+    },
+    {
+      "backup_id": "0190a000-0000-7000-8000-0000000000f1",
+      "source_role_id": "300",
+      "name": "mods",
+      "color": 16711680,
+      "hoist": true,
+      "mentionable": false,
+      "position": 1,
+      "permissions": "0",
+      "is_everyone": false,
+      "is_bot_managed": false,
+      "bot_id": null,
+      "integration_id": null,
+      "icon_url": null,
+      "unicode_emoji": null,
+      "tags_json": null
+    }
+  ],
+  "channels": [
+    {
+      "backup_id": "0190a000-0000-7000-8000-0000000000f1",
+      "source_channel_id": "10",
+      "parent_source_id": null,
+      "type": 4,
+      "name": "a category",
+      "position": 0,
+      "topic": null,
+      "nsfw": false,
+      "rate_limit_per_user": null,
+      "bitrate": null,
+      "user_limit": null,
+      "rtc_region": null,
+      "video_quality_mode": null,
+      "default_auto_archive_duration": null,
+      "default_thread_rate_limit_per_user": null,
+      "default_sort_order": null,
+      "default_forum_layout": null,
+      "available_tags_json": null,
+      "flags": null,
+      "is_news": false
+    },
+    {
+      "backup_id": "0190a000-0000-7000-8000-0000000000f1",
+      "source_channel_id": "20",
+      "parent_source_id": "10",
+      "type": 0,
+      "name": "general",
+      "position": 0,
+      "topic": "the channel",
+      "nsfw": false,
+      "rate_limit_per_user": 5,
+      "bitrate": null,
+      "user_limit": null,
+      "rtc_region": null,
+      "video_quality_mode": null,
+      "default_auto_archive_duration": 1440,
+      "default_thread_rate_limit_per_user": null,
+      "default_sort_order": null,
+      "default_forum_layout": null,
+      "available_tags_json": null,
+      "flags": 0,
+      "is_news": false
+    }
+  ],
+  "overwrites": [
+    {
+      "backup_id": "0190a000-0000-7000-8000-0000000000f1",
+      "source_channel_id": "20",
+      "target_type": "role",
+      "source_target_id": "300",
+      "target_name": "mods",
+      "allow": "1024",
+      "deny": "9223372036854775807"
+    }
+  ],
+  "threads": [
+    {
+      "backup_id": "0190a000-0000-7000-8000-0000000000f1",
+      "source_thread_id": "30",
+      "source_parent_id": "20",
+      "type": 11,
+      "name": "a thread",
+      "archived": false,
+      "locked": false,
+      "auto_archive_duration": 1440,
+      "rate_limit_per_user": 0,
+      "applied_tags_json": null
+    }
+  ],
+  "members": [
+    {
+      "backup_id": "0190a000-0000-7000-8000-0000000000f1",
+      "user_id": "144102483157850112",
+      "username": "someone",
+      "global_name": "Some One",
+      "discriminator": "0",
+      "nickname": "nick",
+      "avatar_url": "https://cdn.discordapp.com/avatars/144102483157850112/hash.png",
+      "joined_at": "2024-01-01T00:00:00.000Z",
+      "is_bot": false,
+      "role_ids_json": [
+        "300"
+      ],
+      "pending": false,
+      "timed_out_until": null,
+      "premium_since": null,
+      "flags": 0,
+      "source_role_names_json": [
+        "mods"
+      ]
+    }
+  ],
+  "messages": [
+    {
+      "backup_id": "0190a000-0000-7000-8000-0000000000f1",
+      "channel_source_id": "20",
+      "message_id": "50",
+      "author_id": "144102483157850112",
+      "author_username": "someone",
+      "author_global_name": "Some One",
+      "author_nickname": "nick",
+      "author_avatar_url": null,
+      "author_is_bot": false,
+      "author_webhook_id": null,
+      "content": "a message that was posted",
+      "embeds_json": [],
+      "attachments_json": [
+        {
+          "url": null,
+          "path": null,
+          "size": 4096,
+          "contentType": "image/png",
+          "filename": "shot.png"
+        }
+      ],
+      "stickers_json": [],
+      "components_json": [],
+      "reactions_json": [
+        {
+          "emoji": {
+            "id": null,
+            "name": "👍"
+          },
+          "count": 2
+        }
+      ],
+      "reference_json": null,
+      "thread_source_id": null,
+      "flags": 0,
+      "pinned": false,
+      "type": 0,
+      "created_at": "2024-01-01T00:00:00.000Z",
+      "edited_at": null
+    }
+  ],
+  "bans": [
+    {
+      "backup_id": "0190a000-0000-7000-8000-0000000000f1",
+      "user_id": "223456789012345678",
+      "username": "banned",
+      "global_name": null,
+      "reason": "spam"
+    }
+  ],
+  "emojis": [
+    {
+      "backup_id": "0190a000-0000-7000-8000-0000000000f1",
+      "source_emoji_id": "60",
+      "name": "party",
+      "animated": false,
+      "managed": false,
+      "available": true,
+      "roles_json": [],
+      "url": "https://cdn.discordapp.com/emojis/60.png"
+    }
+  ],
+  "stickers": [
+    {
+      "backup_id": "0190a000-0000-7000-8000-0000000000f1",
+      "source_sticker_id": "70",
+      "name": "wave",
+      "description": null,
+      "tags": "wave",
+      "format_type": 1,
+      "url": "https://cdn.discordapp.com/stickers/70.png"
+    }
+  ],
+  "sounds": [
+    {
+      "backup_id": "0190a000-0000-7000-8000-0000000000f1",
+      "source_sound_id": "80",
+      "name": "boop",
+      "volume": 1,
+      "emoji_name": "party",
+      "emoji_id": "60",
+      "url": "https://cdn.discordapp.com/soundboard-sounds/80"
+    }
+  ],
+  "automod": [
+    {
+      "backup_id": "0190a000-0000-7000-8000-0000000000f1",
+      "source_rule_id": "90",
+      "name": "no invites",
+      "event_type": 1,
+      "trigger_type": 1,
+      "trigger_metadata_json": {
+        "keyword_filter": [
+          "discord.gg"
+        ]
+      },
+      "actions_json": [
+        {
+          "type": 1
+        }
+      ],
+      "enabled": true,
+      "exempt_roles_json": [
+        "300"
+      ],
+      "exempt_channels_json": []
+    }
+  ],
+  "events": [
+    {
+      "backup_id": "0190a000-0000-7000-8000-0000000000f1",
+      "source_event_id": "95",
+      "name": "an event",
+      "description": null,
+      "scheduled_start": "2024-01-01T00:00:00.000Z",
+      "scheduled_end": null,
+      "privacy_level": 2,
+      "entity_type": 3,
+      "entity_metadata_json": {
+        "location": "somewhere"
+      },
+      "status": 1,
+      "cover_url": null
+    }
+  ]
+}

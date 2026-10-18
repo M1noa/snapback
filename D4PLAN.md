@@ -358,6 +358,11 @@ PULL_DAILY_LIMIT_PER_ACCOUNT=100 # 100-500; trips cooldown at the cap
 PULL_COOLDOWN_HOURS=24
 PULL_FAILURE_COOLDOWN_MINUTES=60 # consecutive 403/429 burst cooldown
 
+# ---- storage ----
+BACKUP_DIR=./data/backups      # backups/<id>/assets/ lands here
+EXPORT_DIR=./data/exports      # written export files land here, swept by expiry
+MAX_ASSET_BYTES=8388608        # 8 MiB; a bigger asset is recorded, not downloaded. 0 keeps urls only
+
 # ---- optional ----
 LOG_LEVEL=info
 AUTOMATION_ENABLED=true   # false = scheduler off, every job is manual
@@ -380,6 +385,12 @@ log_channel_id: null
 auto_backup_enabled: false
 auto_backup_interval_hours: 24
 auto_backup_message_count: 1000
+# the default include set (`11.1`). every category on: a backup that quietly
+# stopped capturing one because a default changed is the failure mode this avoids.
+backup_include: { roles: true, channels: true, messages: true, members: true,
+                  bans: true, emojis: true, stickers: true, onboarding: true }
+# which message types a capture keeps (`11.5`). 0 normal, 19 reply, 20 slash command
+backup_message_types: [0, 19, 20]
 auto_restore_enabled: false
 restore_clear_before: false
 restore_message_timestamp_suffix: false

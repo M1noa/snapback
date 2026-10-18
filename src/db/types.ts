@@ -165,7 +165,13 @@ export interface BackupRow {
   role_count: number;
   size_bytes: number;
   schema_version: number;
-  guild_settings_json: GuildSettings | null;
+  /**
+   * the guild's own settings as discord returns them (D4PLAN 11 step 1), applied
+   * on restore: verification level, content filter, notifications, locale, the
+   * system channel pair. the bot's per-guild settings are a different thing and
+   * live in guilds.settings_json.
+   */
+  guild_settings_json: JsonObject | null;
   onboarding_json: JsonObject | null;
   welcome_screen_json: JsonObject | null;
   widget_json: JsonObject | null;

@@ -218,6 +218,8 @@ export function parseEnv(read: EnvSource): EnvResult {
       storage: Object.freeze({
         // backups/<id>/assets/ lands under here. the db file's sibling by default.
         backupDir: optional("BACKUP_DIR", "./data/backups"),
+        // a written export lands here and is swept by expiry (D4PLAN 17.4).
+        exportDir: optional("EXPORT_DIR", "./data/exports"),
         // D4PLAN 11.1: a file over this is recorded with its url and no bytes
         // rather than downloaded. 0 means record every asset and download none.
         maxAssetBytes: int("MAX_ASSET_BYTES", 8 * 1024 * 1024, 0, 100 * 1024 * 1024),
