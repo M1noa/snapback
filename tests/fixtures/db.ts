@@ -58,11 +58,16 @@ export function makeBackup(overrides: Partial<BackupRow> = {}): BackupRow {
   };
 }
 
+/**
+ * a fresh backup_id per insert: a suite that seeds several backups in one database
+ * must not collide on the primary key. makeBackup's fixed id stays available for a
+ * caller that wants a predictable one.
+ */
 export async function insertFixtureBackup(
   db: Database,
   overrides: Partial<BackupRow> = {},
 ): Promise<BackupRow> {
-  const row = makeBackup(overrides);
+  const row = makeBackup({ backup_id: Bun.randomUUIDv7(), ...overrides });
   await insertBackup(db, row);
   return row;
 }
