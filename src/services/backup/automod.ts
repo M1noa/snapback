@@ -3,6 +3,7 @@
 
 import { insertBackupAutomods } from "../../db/queries/backup-automod.ts";
 import type { BackupAutomodRow, JsonObject } from "../../db/types.ts";
+import { DiscordApiError } from "../../discord/errors.ts";
 import type { BackupContext, Capture } from "./types.ts";
 import { skipFor } from "./types.ts";
 
@@ -42,6 +43,9 @@ export const captureAutomod: Capture = async (ctx) => {
     });
   } catch (error) {
     // the endpoint needs MANAGE_GUILD: a 403 is one skip carrying discord's words.
+    // anything else is a bug here, and belongs in the pipeline's failure list
+    // rather than in the skip list (AGENTS.md: never catch and swallow).
+    if (!(error instanceof DiscordApiError)) throw error;
     ctx.skips.add(skipFor("automod", "all auto-moderation rules", error));
     return { written: 0 };
   }

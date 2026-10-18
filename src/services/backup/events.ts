@@ -3,6 +3,7 @@
 
 import { insertBackupEvents } from "../../db/queries/backup-events.ts";
 import type { BackupEventRow, JsonObject } from "../../db/types.ts";
+import { DiscordApiError } from "../../discord/errors.ts";
 import type { BackupContext, Capture } from "./types.ts";
 import { skipFor } from "./types.ts";
 
@@ -54,6 +55,10 @@ export const captureEvents: Capture = async (ctx) => {
       route: `/guilds/${ctx.guildId}/scheduled-events?with_user_count=true`,
     });
   } catch (error) {
+    // a guild with no scheduled events answers with an empty list, so a refusal
+    // here is a permission or a guild the bot was removed from. a bug of ours is
+    // neither, and the pipeline must see it.
+    if (!(error instanceof DiscordApiError)) throw error;
     ctx.skips.add(skipFor("events", "all scheduled events", error));
     return { written: 0 };
   }

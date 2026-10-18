@@ -168,6 +168,7 @@ export const captureEmojis: Capture = async (ctx: BackupContext) => {
       route: `/guilds/${ctx.guildId}/emojis`,
     });
   } catch (error) {
+    if (!(error instanceof DiscordApiError)) throw error;
     ctx.skips.add(skip("emojis", "all custom emojis", error));
     return { written: 0 };
   }
@@ -225,6 +226,7 @@ export const captureStickers: Capture = async (ctx: BackupContext) => {
       route: `/guilds/${ctx.guildId}/stickers`,
     });
   } catch (error) {
+    if (!(error instanceof DiscordApiError)) throw error;
     ctx.skips.add(skip("stickers", "all stickers", error));
     return { written: 0 };
   }
@@ -280,6 +282,7 @@ export const captureSounds: Capture = async (ctx: BackupContext) => {
   } catch (error) {
     // a 403 here means the guild has soundboard sounds disabled. that is one
     // skip, not a failed backup.
+    if (!(error instanceof DiscordApiError)) throw error;
     ctx.skips.add(skip("sounds", "all soundboard sounds", error));
     return { written: 0 };
   }

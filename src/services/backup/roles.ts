@@ -6,6 +6,7 @@
 
 import { insertBackupRoles } from "../../db/queries/backup-roles.ts";
 import type { BackupRoleRow, JsonObject } from "../../db/types.ts";
+import { DiscordApiError } from "../../discord/errors.ts";
 import type { BackupContext, Capture } from "./types.ts";
 import { included, skipFor } from "./types.ts";
 
@@ -74,6 +75,9 @@ export const captureRoles: Capture = async (ctx) => {
   } catch (error) {
     // a bot without MANAGE_ROLES gets a 403 here. that is one skip, not a backup
     // that fails: everything else in the guild is still worth capturing.
+    // anything that is not discord's own refusal is a bug in this code, and a bug
+    // recorded as a skip is how a broken capture reads as complete.
+    if (!(error instanceof DiscordApiError)) throw error;
     ctx.skips.add(skipFor("roles", "all roles", error));
     return { written: 0 };
   }

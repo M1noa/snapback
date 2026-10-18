@@ -309,6 +309,11 @@ export function makeGuild(overrides: Partial<FixtureGuild> = {}): FixtureGuild {
         },
         { ...message(50, 7, ""), author: user(USER_PENDING, "pending") },
       ],
+      // an empty channel and an empty thread are part of the fixture: a walk that
+      // finds nothing is normal, and a 404 for them would be a lie about discord.
+      [CHANNEL_MEMES]: [],
+      [THREAD_ACTIVE]: [],
+      [THREAD_ARCHIVED]: [],
     },
 
     bans: [{ user: user(USER_NICK, "nickname"), reason: "fixture ban" }],

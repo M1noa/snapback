@@ -187,7 +187,9 @@ export async function sealBackup(input: SealInput): Promise<SealResult> {
     self_check_json: selfCheck,
   };
   await updateBackup(input.db, backup);
-  return { backup, check };
+  // the merged result, not runSelfCheck's: a caller asking "is this backup
+  // complete" must get the same answer the row carries.
+  return { backup, check: { ok: selfCheck.ok, failures } };
 }
 
 // the bytes on disk, not a sum of what the downloads reported: a file that was

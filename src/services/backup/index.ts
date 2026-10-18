@@ -1,11 +1,19 @@
 // the capture pipeline (D4PLAN 11). one job per backup, steps in a fixed order
 // with a checkpoint each, then a self-check and a seal.
 //
-// order is not cosmetic. channels before messages (a message needs its channel),
-// roles before members (a member needs its role names), members before messages
-// (a message author's nickname comes from the member list). welcome screen and
-// the guild's own assets ride the guild step, because neither depends on another
-// step having run.
+// order is not cosmetic. every constraint the plan states holds here: roles before
+// members (a member needs its role names), members before messages (a message
+// author's nickname comes from the member list), channels before messages (a
+// message needs its channel).
+//
+// members also run before channels, which is the plan's table read one way too
+// far: a channel overwrite on a member resolves its name from that member's row,
+// and the table's own order would leave every member overwrite unresolved (11.3
+// asks for the name, not just the id). nothing in the plan's dependency list
+// needs the other order.
+//
+// the welcome screen and the guild's own images ride the guild step: neither
+// depends on another step having run.
 
 import { join } from "node:path";
 import type { GuildSettings } from "../../config/defaults.ts";
@@ -66,22 +74,22 @@ export interface BackupRunResult {
   readonly counts: StoredCounts;
 }
 
-// one entry per D4PLAN 11 step, in the plan's order. `counts` names the one
-// category whose written total the self-check compares against the stored rows;
-// steps that write no counted table leave it null.
+// one entry per step, in the order the constraints above require. `counts` names
+// the one category whose written total the self-check compares against the stored
+// rows; steps that write no counted table leave it null.
 const STEPS: readonly { step: string; capture: Capture; counts: CountedCategory | null }[] = [
   { step: "guild", capture: captureGuild, counts: null },
   { step: "roles", capture: captureRoles, counts: "roles" },
   { step: "emojis", capture: captureEmojis, counts: null },
   { step: "stickers", capture: captureStickers, counts: null },
   { step: "sounds", capture: captureSounds, counts: null },
+  { step: "members", capture: captureMembers, counts: "members" },
+  { step: "bans", capture: captureBans, counts: null },
   { step: "channels", capture: captureChannels, counts: "channels" },
   { step: "threads", capture: captureThreads, counts: null },
   { step: "onboarding", capture: captureOnboarding, counts: null },
   { step: "automod", capture: captureAutomod, counts: null },
   { step: "events", capture: captureEvents, counts: null },
-  { step: "bans", capture: captureBans, counts: null },
-  { step: "members", capture: captureMembers, counts: "members" },
   { step: "messages", capture: captureMessages, counts: "messages" },
 ];
 

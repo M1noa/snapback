@@ -7,6 +7,7 @@
 
 import { getBackup, updateBackup } from "../../db/queries/backups.ts";
 import type { BackupRow, JsonObject } from "../../db/types.ts";
+import { DiscordApiError } from "../../discord/errors.ts";
 import type { BackupContext, Capture } from "./types.ts";
 import { skipFor } from "./types.ts";
 
@@ -142,11 +143,13 @@ async function saveAsset(ctx: BackupContext, name: string, url: string | null): 
 }
 
 // a read that is allowed to fail: the skip carries discord's own words and the
-// step carries on. none of these endpoints is worth losing a backup over.
+// step carries on. none of these endpoints is worth losing a backup over, and
+// none of them is a bug of ours either, so a non-discord error still throws.
 async function optional<T>(ctx: BackupContext, route: string, what: string): Promise<T | null> {
   try {
     return await ctx.client.request<T>({ method: "GET", route });
   } catch (error) {
+    if (!(error instanceof DiscordApiError)) throw error;
     ctx.skips.add(skipFor("guild", what, error));
     return null;
   }

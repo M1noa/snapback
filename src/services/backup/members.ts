@@ -15,7 +15,7 @@ import { insertBackupMembers } from "../../db/queries/backup-members.ts";
 import { listBackupRolesByBackup } from "../../db/queries/backup-roles.ts";
 import type { BackupBanRow, BackupMemberRow } from "../../db/types.ts";
 import { DiscordApiError } from "../../discord/errors.ts";
-import { type BackupContext, type Capture, included } from "./types.ts";
+import { type BackupContext, type Capture, included, skipFor } from "./types.ts";
 
 // both endpoints cap limit at 1-1000; 1000 is one page.
 const PAGE = 1000;
@@ -129,7 +129,8 @@ async function* fetchPages<T>(
       page = await ctx.client.request<T[]>({ method: "GET", route: route(after) });
     } catch (error) {
       if (error instanceof DiscordApiError && error.status === 403) {
-        ctx.skips.add({ category, what, why: error.message });
+        // discord's own code and message, not a paraphrase (rule 5).
+        ctx.skips.add(skipFor(category, what, error));
         return;
       }
       throw error;

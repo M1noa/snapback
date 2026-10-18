@@ -3,6 +3,7 @@
 
 import { getBackup, updateBackup } from "../../db/queries/backups.ts";
 import type { JsonObject } from "../../db/types.ts";
+import { DiscordApiError } from "../../discord/errors.ts";
 import type { Capture } from "./types.ts";
 import { included, skipFor } from "./types.ts";
 
@@ -24,7 +25,9 @@ export const captureOnboarding: Capture = async (ctx) => {
     });
   } catch (error) {
     // a guild without COMMUNITY gets a 404 here, and a bot without MANAGE_GUILD a
-    // 403. both are one skip: the rest of the backup is still worth having.
+    // 403. both are one skip: the rest of the backup is still worth having. a bug
+    // of ours is neither and must reach the pipeline.
+    if (!(error instanceof DiscordApiError)) throw error;
     ctx.skips.add(skipFor("onboarding", "onboarding", error));
     return { written: 0 };
   }
