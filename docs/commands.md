@@ -34,13 +34,13 @@ The wizard. Stateful and resumable; the subcommands jump straight to a step.
 
 | Subcommand | Options | Does |
 |---|---|---|
-| `/backup create` | `label`, `messages` (bool), `members` (bool), `message_limit` (int, clamped) | queues a backup job |
-| `/backup list` | `page` | paginated table with a per-row select and delete button |
-| `/backup info` | `backup` (autocomplete) | counts, size, age, contents summary, restore button |
-| `/backup restore` | `backup`, `target_guild` | hands off to `/restore` with the selection UI prefilled |
-| `/backup delete` | `backup`, `confirm` | hard-deletes rows and asset files |
-| `/backup export` | `backup`, `format` | writes JSON or a zip into the export directory and returns it as a file component |
-| `/backup prune` | `dry_run` | applies the retention policy and reports what would go |
+| `/backup create` | `label`, `messages` (bool), `members` (bool), `message_limit` (int, clamped), `dry_run` (bool) | queues a backup job; a dry run writes nothing |
+| `/backup list` | `page` | paginated list with a per-row select that opens the backup |
+| `/backup info` | `backup` (autocomplete) | counts, size, age, contents summary, the self-check's failures and skips |
+| `/backup restore` | `backup`, `target_guild` | hands off to `/restore`; not registered until the restore phase lands |
+| `/backup delete` | `backup` (autocomplete), `confirm` | arms a one-time nonce, then hard-deletes the rows and the asset files |
+| `/backup export` | `backup` (autocomplete), `format` | writes JSON into the export directory and reports the path and its size |
+| `/backup prune` | `dry_run` (default on) | shows the retention policy's plan, and acts on the second press |
 
 ## /restore
 

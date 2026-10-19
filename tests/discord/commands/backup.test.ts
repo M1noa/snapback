@@ -7,11 +7,7 @@
 import { describe, expect, test } from "bun:test";
 import type { ContainerComponent } from "oceanic.js";
 import { DEFAULT_GUILD_SETTINGS } from "../../../src/config/defaults.ts";
-import { countComponents, PAGE_LIMIT } from "../../../src/discord/components/page.ts";
-import { parseCustomId } from "../../../src/discord/interactions/router.ts";
-import { MemoryStateStore } from "../../../src/discord/interactions/state.ts";
-import { createLogger } from "../../../src/lib/log.ts";
-import { DEFAULT_RETENTION } from "../../../src/services/retention/index.ts";
+import type { BackupRow } from "../../../src/db/types.ts";
 import {
   BACKUP_ACTION,
   BACKUP_OBJECT,
@@ -20,10 +16,13 @@ import {
   type BackupDeps,
   backupCustomId,
 } from "../../../src/discord/commands/backup/deps.ts";
-import { backupCommands, expectedConfirm } from "../../../src/discord/commands/backup/index.ts";
 import { registerBackupHandlers } from "../../../src/discord/commands/backup/handlers.ts";
-import { Router } from "../../../src/discord/interactions/router.ts";
-import type { BackupRow } from "../../../src/db/types.ts";
+import { backupCommands, expectedConfirm } from "../../../src/discord/commands/backup/index.ts";
+import { countComponents, PAGE_LIMIT } from "../../../src/discord/components/page.ts";
+import { parseCustomId, Router } from "../../../src/discord/interactions/router.ts";
+import { MemoryStateStore } from "../../../src/discord/interactions/state.ts";
+import { createLogger } from "../../../src/lib/log.ts";
+import { DEFAULT_RETENTION } from "../../../src/services/retention/index.ts";
 
 const GUILD = "123456789012345678";
 const USER = "987654321098765432";
@@ -196,10 +195,7 @@ describe("the boot assertion", () => {
     const router = new Router({ authorize: async () => ({ kind: "allow" }) });
     registerBackupHandlers(router, fakeDeps());
     expect(() =>
-      router.assertComplete([
-        ...BACKUP_SPECS,
-        { surface: BACKUP_SURFACE, action: "ghost" },
-      ]),
+      router.assertComplete([...BACKUP_SPECS, { surface: BACKUP_SURFACE, action: "ghost" }]),
     ).toThrow();
   });
 });

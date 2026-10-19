@@ -148,15 +148,29 @@ Answers marked here were resolved from the Discord docs and are recorded in `D4P
 
 ## Phase 5 - backup
 
-- [ ] capture in `services/backup/`: guild settings, roles, channels, overwrites by id plus name, threads, members, bans, emojis, stickers, soundboard, automod, scheduled events, onboarding, welcome screen, widget, afk.
-- [ ] message capture newest to oldest via `before` cursor, `limit: min(100, remaining)`, per-channel cap and global 10k cap both enforced in code, counted outside the parallel map.
-- [ ] messages store authorId, type, messageReference, editedAt, reactions, stickerIds, flags, attachments with url, size, contentType.
-- [ ] `services/backup/assets.ts` downloads icon, banner, splash, emojis, stickers, soundboard, role icons, and attachments under the size cap into `backups/<id>/assets/`, storing the relative path next to the url.
-- [ ] `services/backup/` honours `doNotBackup`: roles, channels, messages, members, bans, emojis, stickers, onboarding.
-- [ ] every skip is recorded in `skipped[]`, never silent.
-- [ ] self-check before sealing, with a per-item failure list (`D4PLAN.md` 11.6).
-- [ ] `/backup create`, `/backup list` with a per-row select, `/backup info`, `/backup export`, `/backup delete`, `/backup prune`.
-- [ ] check: a scratch guild round-trips counts, an over-limit channel clamps at the cap and not a page past it, the JSON matches the golden file.
+- [x] capture in `services/backup/`: guild settings, roles, channels, overwrites by id plus name, threads, members, bans, emojis, stickers, soundboard, automod, scheduled events, onboarding, welcome screen, widget, afk.
+      one module per category, in the order the plan's dependencies require: `guild.ts`, `roles.ts`, `members.ts` (members and bans), `channels.ts` (channels, overwrites and threads), `onboarding.ts`, `automod.ts`, `events.ts`, `messages.ts` and `assets.ts` (the store plus emojis, stickers and sounds). The plan's table puts channels before members; that order leaves every member overwrite unresolved, because a channel overwrite on a member resolves its name from that member's row, so members run first. Nothing the plan's dependency list asks for needs the other order.
+- [x] message capture newest to oldest via `before` cursor, `limit: min(100, remaining)`, per-channel cap and global 10k cap both enforced in code, counted outside the parallel map.
+      `src/services/backup/messages.ts` asks for `min(100, remaining)` on every page, stops at the per-channel cap and the global cap without reading a page past either, and keeps one counter for the whole capture incremented in one place.
+- [x] messages store authorId, type, messageReference, editedAt, reactions, stickerIds, flags, attachments with url, size, contentType.
+      every column of `backup_messages`, with the attachments as `{url, path, size, contentType, filename}`. A message with no content but with reactions or components is still stored, because dropping those loses poll results and button messages (`D4PLAN.md` 11.5).
+- [x] `services/backup/assets.ts` downloads icon, banner, splash, emojis, stickers, soundboard, role icons, and attachments under the size cap into `backups/<id>/assets/`, storing the relative path next to the url.
+      the store writes atomically (temp file, then rename) and names a file `assets/<kind>/<name><ext>`, so a row that keeps only the url still finds its file. Over the ceiling, a non-cdn url or a 404 returns nothing and is recorded as a limitation rather than a failure. `MAX_ASSET_BYTES` (8 MiB) and `BACKUP_DIR` are in `.env.example`.
+- [x] `services/backup/` honours `doNotBackup`: roles, channels, messages, members, bans, emojis, stickers, onboarding.
+      the include set is a per-guild setting, `backup_include`, and every category is a toggle in `/setup backup` (`D4PLAN.md` 8, 11.5). A category turned off is skipped, never silently dropped.
+- [x] every skip is recorded in `skipped[]`, never silent.
+      `self_check_json.skipped` holds the list next to the failures. A skip carries Discord's own code and message when Discord is the one that said no, and a bug of ours is never recorded as a skip: the capture rethrows it and the pipeline makes the backup incomplete.
+- [x] self-check before sealing, with a per-item failure list (`D4PLAN.md` 11.6).
+      `src/services/backup/selfcheck.ts` checks every channel's parent, every member's role ids, every overwrite target, every message's channel, and that the recorded counts match the rows written. A backup that fails is stored, sealed, and marked incomplete with the failures listed.
+- [x] `/backup create`, `/backup list` with a per-row select, `/backup info`, `/backup export`, `/backup delete`, `/backup prune`.
+      `src/discord/commands/backup/`. A delete is two steps and a one-time nonce, a prune shows its plan before it acts, and the option that names a backup is completed while it is being typed. `/backup restore` is not registered: it hands off to `/restore`, which is the next phase, and a command that cannot work is worse than a missing one.
+- [x] check: a scratch guild round-trips counts, an over-limit channel clamps at the cap and not a page past it, the JSON matches the golden file.
+      `tests/services/backup/pipeline.test.ts` drives the real pipeline over the fixture guild and a real database: the counts on the sealed row are the counts in the tables, an over-limit channel asks for exactly what was left and reads no page past it, a refused endpoint is a skip, and a broken step makes the backup incomplete. The golden file is `tests/fixtures/golden-backup.json`, compared byte for byte, and biome is told to leave it alone.
+
+Still open in this phase:
+
+- [~] a live job message. `/backup create` answers with the job's page and a refresh button, and the job's progress is in `job_progress`, but nothing edits one message in the channel while the capture runs. The plan's "live progress on one edited message" is phase 6's executor wording, and the job message for a capture belongs with it.
+- [~] the export is written to disk and reported with its path and size, but it is not returned as a Discord File component. `D4PLAN.md` 17.3 wants the file attached when it fits, and the size ceiling is read off the interaction, not hardcoded. The row in `pending_exports` is written with its 24 hour expiry, so the sweep in phase 11 can find it.
 
 ## Phase 6 - restore
 
