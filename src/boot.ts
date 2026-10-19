@@ -23,6 +23,7 @@ import {
   getRecord,
   listRecords,
 } from "./db/queries/verify-records.ts";
+import { canSurface } from "./discord/access.ts";
 import { DiscordClient } from "./discord/client.ts";
 import { BACKUP_SPECS, type BackupDeps } from "./discord/commands/backup/deps.ts";
 import { registerBackupHandlers } from "./discord/commands/backup/handlers.ts";
@@ -171,9 +172,17 @@ export async function boot(): Promise<Boot> {
   // 2. rest. all discord traffic goes through this client (AGENTS.md rule 6).
   const client = new DiscordClient({ token: env.discord.token, log });
 
-  const isGuildAdmin = async (userId: string, guildId: string): Promise<boolean> => {
+  // the admin row carries a grant per capability, and the surface says which
+  // capability is being asked for: reading records is not the same grant as
+  // running a backup (D4PLAN 19.1, and the table in 5.1).
+  const isGuildAdmin = async (
+    userId: string,
+    guildId: string,
+    surface: string,
+  ): Promise<boolean> => {
     const row = await getAdmin(db, guildId, userId);
-    return row !== null;
+    if (row === null) return false;
+    return canSurface(row, surface);
   };
 
   // 3. gateway. oceanic owns the connection (D4PLAN 2, 4).
@@ -245,7 +254,7 @@ export async function boot(): Promise<Boot> {
     },
     backupDir: env.storage.backupDir,
     exportDir: env.storage.exportDir,
-    authorize: isGuildAdmin,
+    authorize: (userId, guildId) => isGuildAdmin(userId, guildId, "backup"),
     audit: async (input) => {
       await insertAudit(db, {
         id: Bun.randomUUIDv7(),
@@ -282,7 +291,7 @@ export async function boot(): Promise<Boot> {
       const row = await getBackup(db, backupId);
       return row !== null && row.guild_id === guildId ? row : null;
     },
-    authorize: isGuildAdmin,
+    authorize: (userId, guildId) => isGuildAdmin(userId, guildId, "restore"),
     audit: async (input) => {
       await insertAudit(db, {
         id: Bun.randomUUIDv7(),
@@ -346,7 +355,7 @@ export async function boot(): Promise<Boot> {
     },
     refresh: async () => ({ checked: 0, refreshed: 0, failed: 0 }),
     ownerId: env.discord.ownerId,
-    authorize: isGuildAdmin,
+    authorize: (userId, guildId) => isGuildAdmin(userId, guildId, "verify"),
     audit: async (input) => {
       await insertAudit(db, {
         id: Bun.randomUUIDv7(),
@@ -369,7 +378,7 @@ export async function boot(): Promise<Boot> {
     now: () => Date.now(),
     ipStorage: env.privacy.ipStorage,
     exportDir: env.storage.exportDir,
-    authorize: isGuildAdmin,
+    authorize: (userId, guildId) => isGuildAdmin(userId, guildId, "users"),
     audit: async (input) => {
       await insertAudit(db, {
         id: Bun.randomUUIDv7(),
@@ -411,7 +420,7 @@ export async function boot(): Promise<Boot> {
       failureCooldownMinutes: env.limits.pullFailureCooldownMinutes,
       restrictedHours: 24,
     },
-    authorize: isGuildAdmin,
+    authorize: (userId, guildId) => isGuildAdmin(userId, guildId, "pull"),
     audit: async (input) => {
       await insertAudit(db, {
         id: Bun.randomUUIDv7(),
@@ -502,7 +511,7 @@ export async function boot(): Promise<Boot> {
     router,
     ownerId: env.discord.ownerId,
     log,
-    isGuildAdmin,
+    isGuildAdmin: (userId, guildId) => isGuildAdmin(userId, guildId, "command"),
   });
   gateway.client.on("interactionCreate", onInteraction);
 

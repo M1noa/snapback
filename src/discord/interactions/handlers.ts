@@ -48,7 +48,16 @@ export interface InteractionDeps {
 /** what every access decision needs. the two paths share one predicate. */
 export interface AccessDeps {
   readonly ownerId: string;
-  readonly isGuildAdmin: (userId: string, guildId: string) => Promise<boolean> | boolean;
+  /**
+   * is this person allowed to drive this surface? the surface is the id's, so
+   * the check can be per capability: reading records is not the same grant as
+   * running a backup (D4PLAN 19.1).
+   */
+  readonly isGuildAdmin: (
+    userId: string,
+    guildId: string,
+    surface: string,
+  ) => Promise<boolean> | boolean;
 }
 
 // options arrive nested under a subcommand, and a subcommand group adds another
@@ -173,7 +182,7 @@ export function createAuthorizer(deps: AccessDeps): AuthHook {
     if (id.guild !== identity.guildId) {
       return deny(GUILD_MISMATCH, "this control was made for a different server.");
     }
-    return await accessDecision(deps, identity.userId, identity.guildId);
+    return await accessDecision(deps, identity.userId, identity.guildId, id.surface);
   };
 }
 
@@ -233,7 +242,7 @@ async function runAutocomplete(
 
   // access is re-checked here too: a person who lost admin rights between the
   // command being registered and the typing must not see the records (rule 8).
-  const access = await accessDecision(deps, interaction.user.id, guildId);
+  const access = await accessDecision(deps, interaction.user.id, guildId, "users");
   if (access.kind !== "allow") {
     await interaction.result([]);
     return;
@@ -253,12 +262,14 @@ async function accessDecision(
   deps: AccessDeps,
   userId: string,
   guildId: string,
+  surface: string,
 ): Promise<AuthDecision> {
   const access = await checkAccess({
     userId,
     guildId,
     ownerId: deps.ownerId,
-    isGuildAdmin: deps.isGuildAdmin,
+    isGuildAdmin: async (user: string, guild: string) =>
+      await deps.isGuildAdmin(user, guild, surface),
   });
   if (access.kind === "allow") return { kind: "allow" };
   return deny(ACCESS_DENIED, access.denial.body, access.denial.needs);
@@ -305,7 +316,7 @@ async function runCommand(
     return;
   }
 
-  const decision = await accessDecision(deps, interaction.user.id, guildId);
+  const decision = await accessDecision(deps, interaction.user.id, guildId, interaction.data.name);
   if (decision.kind === "deny") {
     await responder.reply(interaction, v2Payload(deniedPage(decision.reason), true));
     return;
