@@ -109,6 +109,10 @@ export interface ReportPageInput {
   readonly refreshId: string;
   /** null when no pull is running, so there is nothing to cancel. */
   readonly cancelId: string | null;
+  /** null when no pull is running, so there is nothing to hold. */
+  readonly pauseId: string | null;
+  /** true when the run is already held, so the button says so. */
+  readonly paused: boolean;
 }
 
 /** the report. what happened, per account, and what the counters are holding. */
@@ -139,6 +143,15 @@ export function reportPage(input: ReportPageInput): ContainerComponent {
 
   const first: MessageActionRowComponent[] = [];
   first.push(button({ id: input.refreshId, label: "refresh", style: ButtonStyles.SECONDARY }));
+  if (input.pauseId !== null) {
+    first.push(
+      button({
+        id: input.pauseId,
+        label: input.paused ? "resume" : "pause",
+        style: ButtonStyles.SECONDARY,
+      }),
+    );
+  }
   if (input.cancelId !== null) {
     first.push(button({ id: input.cancelId, label: "cancel", style: ButtonStyles.DANGER }));
   }

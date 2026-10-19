@@ -320,6 +320,47 @@ describe("the report", () => {
   });
 });
 
+describe("the report", () => {
+  test("offers pause and cancel while a run is going", async () => {
+    const deps = fakeDeps();
+    (deps.db as unknown as { query: (sql: string) => Promise<unknown[]> }).query = async (
+      sql: string,
+    ) => {
+      if (sql.includes("FROM jobs")) {
+        return [
+          {
+            id: "job-9",
+            guild_id: GUILD,
+            kind: "pull",
+            status: "running",
+            requested_by: OWNER,
+            payload_json: JSON.stringify({ excludeRevoked: true, max: null }),
+            progress_json: null,
+            error_code: null,
+            error_body: null,
+            created_at: AT,
+            started_at: AT,
+            finished_at: null,
+            attempts: 1,
+          },
+        ];
+      }
+      return [];
+    };
+
+    const status = pullCommands(deps).find((command) => command.subcommand === "status");
+    const result = await status?.run({ guildId: GUILD, userId: OWNER, options: {} });
+    const ids: string[] = [];
+    walk(result?.page, (node) => {
+      if (typeof node.customID === "string") ids.push(node.customID);
+    });
+
+    expect(ids.some((id) => id.includes(`:${PULL_ACTION.pause}:`))).toBe(true);
+    expect(ids.some((id) => id.includes(`:${PULL_ACTION.cancel}:`))).toBe(true);
+    expect(JSON.stringify(result?.page)).toContain("pause");
+  });
+});
+
 describe("the pull job", () => {
   test("pulls only the accounts that hold a token they granted", async () => {
     const harness: FakeHarness = { enqueued: [], pulled: [], skipped: [] };

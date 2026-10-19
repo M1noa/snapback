@@ -53,7 +53,7 @@ Where to open what.
 | what are the SQL statements for a table | `src/db/queries/<table>.ts` |
 | what does a Discord error look like | `src/discord/errors.ts` |
 | how is a command defined and grouped | `src/discord/commands/index.ts` |
-| what does a command page look like | `src/discord/commands/<group>/pages.ts` |
+| what does a command page look like | `src/discord/commands/backup/pages.ts` |
 | how is a button's custom id parsed and routed | `src/discord/interactions/router.ts` |
 | how is a page laid out | `src/discord/components/page.ts` |
 | what does a capture read and what does it skip | `src/services/backup/<category>.ts` |
@@ -87,7 +87,7 @@ Every step is a `Capture`: a function that takes one context and returns how man
 
 The asset store is one seam. `ctx.assets.save(kind, name, url)` downloads a CDN url into `backups/<backup_id>/assets/<kind>/` and returns the stored path, or null when the file was over the ceiling, already gone, or not a CDN url. A null is a recorded limitation, not an error.
 
-Exporting is a second job. `/backup export` enqueues an `export` job, `services/export/job.ts` calls `buildExport`, and `writeExport` writes `backup.json` and copies the asset tree beside it. The file is recorded in `pending_exports` with an expiry 24 hours out, and the scheduler sweep deletes it when it passes.
+Exporting is a second job. `/backup export` enqueues an `export` job, `src/services/export/job.ts` calls `buildExport`, and `writeExport` writes `backup.json` and copies the asset tree beside it. The file is recorded in `pending_exports` with an expiry 24 hours out, and the scheduler sweep deletes it when it passes.
 
 ## A restore
 
@@ -115,9 +115,11 @@ jobs(id, guild_id, kind, status, requested_by, payload_json,
 
 Three things follow from that.
 
-**The handler returns immediately.** The interaction answers with a job page, and the runner edits that page as the job progresses. A capture of ten thousand messages takes far longer than an interaction is worth spending, and the operator should be able to close the client and come back.
+**The handler returns immediately.** The interaction answers with a job page that carries a refresh control, and the page reads the job row again when the operator presses it. Capturing ten thousand messages takes far longer than an interaction should hold open, and the operator should be able to close the client and come back.
 
-**A restart does not lose the job.** The progress goes into `job_progress`, one row per step, with a cursor, a done count, and a total. `JobRunner.start()` re-queues every job that was queued, running, or paused when the process died, and the handler picks up from its last checkpoint. A capture of a hundred channels resumes at the channel it was on.
+**A restart does not lose the job.** The progress goes into `job_progress`, one row per step, with a cursor, a done count, and a total. `JobRunner.start()` re-queues every job that was queued, running, or paused when the process died, so the work is picked up again rather than left half done.
+
+What the handler does with that progress is the next thing. The backup and the restore handlers both start their pipeline again at the first step. The progress rows record where the work got to, and the job page reads them, but nothing reads the cursor back to skip the work that was already done. A backup that was killed halfway starts its capture again, and a restore re-runs its phases from the guild down.
 
 **The runner enforces the limits.** At most `MAX_CONCURRENT_JOBS` jobs across all guilds, and at most one job per guild, because two restores into one guild fight over channel names and two backups of one guild are pointless.
 
@@ -133,7 +135,7 @@ The places where one side meets another. These are the boundaries to keep clean.
 
 **Database.** `src/db/types.ts` defines the `Database` interface, and both drivers implement it. Nothing in the app talks to a driver directly. `src/db/rows.ts` is the only place a driver's `bigint` becomes a string, and the only place a string becomes a `bigint` on the way in.
 
-**Query modules.** `src/db/queries/` is one module per table, and no module writes SQL inline. That is what keeps the export shape from drifting away from the tables.
+**Query modules.** `src/db/queries/` is one module per table, and the app reads and writes through them. The two places that write SQL directly are the token columns and the health probe's `SELECT 1`. Routing the export through the query modules is what keeps the export shape from drifting away from the tables.
 
 **Command surface.** `src/discord/commands/index.ts` holds `buildDefinitions`, and the boot and the registration diff both read the same list. `src/discord/registry.ts` resolves the scope: a guild id means guild-scoped registration, no guild id means global.
 

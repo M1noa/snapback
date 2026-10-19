@@ -66,7 +66,6 @@ interface Metadata {
   readonly recordSize: number;
   readonly ipVersion: number;
   readonly searchTreeSize: number;
-  readonly databaseType: string;
 }
 
 interface Budget {
@@ -130,7 +129,9 @@ function recordFrom(value: unknown): CountryRecord {
   }
   const rawAsn = map.autonomous_system_number;
   const asn =
-    typeof rawAsn === "number" && Number.isFinite(rawAsn) ? String(rawAsn) : asText(rawAsn);
+    typeof rawAsn === "number" && Number.isFinite(rawAsn)
+      ? String(rawAsn)
+      : (asText(rawAsn)?.replace(/^AS/i, "") ?? null);
   const isp = asText(map.isp);
   return {
     countryCode: code !== null && /^[A-Za-z]{2}$/.test(code) ? code.toLowerCase() : null,
@@ -432,13 +433,7 @@ function readMetadata(bytes: Uint8Array, markerAt: number): Metadata {
   const searchTreeSize = nodeCount * ((recordSize * 2) / 8);
   const stated = map.search_tree_size;
   if (stated !== undefined && stated !== searchTreeSize) throw invalid();
-  return {
-    nodeCount,
-    recordSize,
-    ipVersion,
-    searchTreeSize,
-    databaseType: asText(map.database_type) ?? "",
-  };
+  return { nodeCount, recordSize, ipVersion, searchTreeSize };
 }
 
 /** opens the country database. a file that is not a maxmind database is an

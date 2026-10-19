@@ -233,6 +233,16 @@ export async function reportPageFor(
             cursor: latest.id,
           })
         : null,
+    pauseId:
+      running && latest !== undefined
+        ? pullCustomId({
+            guildId,
+            object: PULL_OBJECT.report,
+            action: PULL_ACTION.pause,
+            cursor: latest.id,
+          })
+        : null,
+    paused: latest?.status === "paused",
   });
 }
 

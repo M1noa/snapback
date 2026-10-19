@@ -12,7 +12,7 @@
 import type { Logger } from "../../lib/log.ts";
 import { type AsMetadata, loadAsMetadata } from "./asmetadata.ts";
 import { type Classification, classify } from "./classify.ts";
-import { type CountryDatabase, type CountryRecord, openCountryDatabase } from "./dbip.ts";
+import { type CountryDatabase, openCountryDatabase } from "./dbip.ts";
 
 // the only third party this module talks to. it answers where the address is,
 // and nothing about it is sent anywhere else.
@@ -164,31 +164,6 @@ async function lookupIpverse(address: string, deps: IntelDeps): Promise<Geo | nu
   }
 }
 
-/** the local answer, before the call that adds the city and the region. */
-function localAnswer(
-  record: CountryRecord | null,
-  network: { readonly name: string | null } | null,
-): {
-  readonly countryCode: string | null;
-  readonly countryName: string | null;
-  readonly isp: string | null;
-  readonly asn: string | null;
-  readonly asOrg: string | null;
-  readonly classified: Classification;
-} {
-  const asn = record?.asn ?? null;
-  const asOrg = network?.name ?? record?.asOrg ?? null;
-  const isp = record?.isp ?? network?.name ?? null;
-  const countryCode = record?.countryCode ?? null;
-  const countryName = record?.countryName ?? null;
-  const classified = classify({
-    country: countryName ?? countryCode,
-    asOrg,
-    isp,
-  });
-  return { countryCode, countryName, isp, asn, asOrg, classified };
-}
-
 /** the intel service for one configuration. */
 export function createIntelService(options: IntelOptions, deps: IntelDeps = {}): IntelService {
   const key = `${options.countryMmdb}\u0000${options.asCsv}`;
@@ -198,19 +173,22 @@ export function createIntelService(options: IntelOptions, deps: IntelDeps = {}):
     async lookup(address: string): Promise<IntelResult | null> {
       if (!options.enabled) return null;
 
+      // the country and the network come from the operator's own files. the
+      // call only adds what the files do not have.
       const record = loaded.database?.lookup(address) ?? null;
       const geo = await lookupIpverse(address, deps);
 
       const asn = record?.asn ?? geo?.asn ?? null;
       const network = asn === null ? null : (loaded.metadata?.lookup(asn) ?? null);
-      const local = localAnswer(record, network);
-      const asOrg = local.asOrg ?? geo?.asOrg ?? null;
-      const isp = local.isp ?? network?.name ?? null;
+      const asOrg = network?.name ?? record?.asOrg ?? geo?.asOrg ?? null;
+      const isp = record?.isp ?? network?.name ?? null;
+      const countryCode = record?.countryCode ?? geo?.countryCode ?? null;
+      const countryName = record?.countryName ?? geo?.countryName ?? null;
 
       return {
-        ...local.classified,
-        countryCode: local.countryCode ?? geo?.countryCode ?? null,
-        countryName: local.countryName ?? geo?.countryName ?? null,
+        ...classify({ country: countryName ?? countryCode, asOrg, isp }),
+        countryCode,
+        countryName,
         isp,
         asn,
         asOrg,

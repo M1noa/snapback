@@ -5,6 +5,7 @@
 // press, so a control rendered for an admin last week fails closed today
 // (AGENTS.md rule 8).
 
+import { getJob } from "../../../db/queries/jobs.ts";
 import { failurePage } from "../../interactions/dispatch.ts";
 import type { Handler, HandlerContext, HandlerResult, Router } from "../../interactions/router.ts";
 import { PULL_ACTION, PULL_SURFACE, type PullDeps } from "./deps.ts";
@@ -108,10 +109,31 @@ function cancelHandler(deps: PullDeps): Handler {
   };
 }
 
+/** hold the run, or let it go again when it is already held. */
+function pauseHandler(deps: PullDeps): Handler {
+  return async (ctx) => {
+    const jobId = ctx.id.cursor;
+    const job = await getJob(deps.db, jobId);
+    if (job === null) {
+      return await answer(ctx, failurePage("that job is gone", "the job row is not there."));
+    }
+    if (job.status === "paused") await deps.jobs.resume(jobId);
+    else await deps.jobs.pause(jobId);
+    await deps.audit({
+      guildId: ctx.id.guild,
+      actorUserId: ctx.identity.userId,
+      action: job.status === "paused" ? "pull.job.resume" : "pull.job.pause",
+      target: jobId,
+    });
+    return await answer(ctx, await reportPageFor(deps, ctx.id.guild));
+  };
+}
+
 export function registerPullHandlers(router: Router, deps: PullDeps): void {
   router.register(PULL_SURFACE, PULL_ACTION.confirm, confirmHandler(deps));
   router.register(PULL_SURFACE, PULL_ACTION.back, backHandler(deps));
   router.register(PULL_SURFACE, PULL_ACTION.cancel, cancelHandler(deps));
+  router.register(PULL_SURFACE, PULL_ACTION.pause, pauseHandler(deps));
   router.register(PULL_SURFACE, PULL_ACTION.refresh, refreshHandler(deps));
   router.register(PULL_SURFACE, PULL_ACTION.plan, planHandler(deps));
 }

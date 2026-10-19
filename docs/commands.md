@@ -62,11 +62,11 @@ The wizard. Stateful and resumable; the subcommands jump straight to a step.
 
 `D4PLAN.md` 8 specifies more than this build registers: a data-export step in the wizard, a records browser, a pull engine, a user lookup, and the version and help pages under the bot group. The plan is where they are written down. They are not in this file because they are not commands an operator can run yet, and a doc that lists them would send people looking for a surface that is not there.
 
-The verify command module in `src/discord/commands/verify/` holds the panel builder, the record browser, the refresh sweep, and the delete path. It is not wired into the boot, so those commands do not appear in Discord.
+The verify command module in `src/discord/commands/verify/` holds the panel builder, the record list, the record page, the refresh sweep, and the delete path. It is not wired into the boot, so those commands do not appear in Discord.
 
 ## Guides
 
-`/setup guide` renders the guides listed in `src/setup/guide.ts`. A guide that is not in that list is shipped but not reachable from Discord.
+`/setup guide` renders the guides listed in `src/setup/guide.ts`. The four newest guides in the table below are not in that list yet, so they are shipped but not reachable from Discord.
 
 | Guide | Covers |
 |---|---|

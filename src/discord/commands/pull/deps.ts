@@ -33,6 +33,8 @@ export const PULL_ACTION = {
   back: "back",
   /** stop the run that is going. */
   cancel: "cancel",
+  /** hold the run, and let it go again. */
+  pause: "pause",
   /** the report again, with a fresh read. */
   refresh: "refresh",
   /** open the plan page. */
@@ -119,6 +121,7 @@ export const PULL_SPECS: readonly CustomIdSpec[] = [
   { surface: PULL_SURFACE, action: PULL_ACTION.confirm },
   { surface: PULL_SURFACE, action: PULL_ACTION.back },
   { surface: PULL_SURFACE, action: PULL_ACTION.cancel },
+  { surface: PULL_SURFACE, action: PULL_ACTION.pause },
   { surface: PULL_SURFACE, action: PULL_ACTION.refresh },
   { surface: PULL_SURFACE, action: PULL_ACTION.plan },
 ];
