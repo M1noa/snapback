@@ -247,18 +247,22 @@ Still open in this phase:
 - [x] `/verify delete`: the only path that erases captured data, owner only, `scope` of record/ip/token/all, typed confirm, audit row.
       `src/discord/commands/verify/`. the instance owner alone may do it, the page says how much of the record goes, and the operator types the person's name before it happens. every one of them writes an audit row.
 - [~] `/verify export`, `/verify stats`, `/users lookup`, `/users export`, `/users blacklist`.
-      the export and the lookup are the users group's, and the blacklist has no table: D4PLAN 5.1 defines none, and the open research item at the bottom of this file is still open about where the list lives. `/verify stats` is not written.
+      `/users lookup` and `/users export` are written, and the export names the storage mode so a reader can tell a hash from an address. the blacklist has no table: D4PLAN 5.1 defines none, and the open research item at the bottom of this file is still open about where the list lives. `/verify export` and `/verify stats` are not written.
 - [~] check: a 200 record refresh reports the right unauthorized count, the message edits without tripping a 429, a revoked user keeps ip and email.
       the refresh sweep is tested record by record, and a revoked user keeps its ip and email because the token is the only thing that goes. the 200 record run and the edit rate are not measured: that needs a real guild and a real application.
 
 ## Phase 9 - intel
 
-- [ ] `services/intel/dbip.ts`: mmdb reader for country, region, city, asn.
-- [ ] `services/intel/asmetadata.ts`: ipverse `as-metadata` CSV reader, ASN to org name and type.
-- [ ] `services/intel/classify.ts`: `ip_type` from the ASN type, `vpn` and `hosting` booleans, `tor` from a bundled exit list or an ASN name match.
-- [ ] wording in the UI is a likelihood, never a verdict. Show the ASN and org as the evidence.
-- [ ] missing data files skip geo with a `/snapback status` warning, never a crash.
-- [ ] check: known IPs classify correctly for a hosting provider, a residential ISP, and a mobile carrier.
+- [x] `services/intel/dbip.ts`: mmdb reader for country, region, city, asn.
+      `src/services/intel/dbip.ts`. a file that is not a maxmind database is refused with one fixed `SB_` code, never answered wrongly.
+- [x] `services/intel/asmetadata.ts`: ipverse `as-metadata` CSV reader, ASN to org name and type.
+- [x] `services/intel/classify.ts`: `ip_type` from the ASN type, `vpn` and `hosting` booleans, `tor` from a bundled exit list or an ASN name match.
+- [x] wording in the UI is a likelihood, never a verdict. Show the ASN and org as the evidence.
+      the record page shows the network and the organisation, and the type beside them, so the reader sees what the verdict was made from.
+- [x] missing data files skip geo with a `/snapback status` warning, never a crash.
+      the intel returns null when it is off, and a missing file is a note rather than a throw.
+- [~] check: known IPs classify correctly for a hosting provider, a residential ISP, and a mobile carrier.
+      the classification is tested against a hosting network, an ordinary network and a mobile one, with the mmdb reader proved against a hand-built database. the reader has not been run against a real db-ip lite file, so the country half of the check is unproven against the real data.
 
 ## Phase 10 - pull engine
 
