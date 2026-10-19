@@ -1,0 +1,13 @@
+# the gate, on every push. the same command the local gate runs, so a failure
+# here is a failure there (D4TODO phase 14).
+
+image: oven/bun:1.4.3
+
+stages:
+  - check
+
+check:
+  stage: check
+  script:
+    - bun install --frozen-lockfile
+    - bun run check

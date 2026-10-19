@@ -57,7 +57,12 @@ describe("boot", () => {
     const { code, out } = await boot(MINIMAL, PRINT_CONFIG);
 
     expect(code).toBe(0);
-    expect(out).toContain("snapback 0.0.0");
+    // the version comes from the package, so the release bump does not break
+    // this test.
+    const manifest = (await Bun.file(new URL("../package.json", import.meta.url)).json()) as {
+      version?: string;
+    };
+    expect(out).toContain(`snapback ${manifest.version ?? ""}`);
     expect(out).toContain("./data/snapback.duckdb");
     expect(out).toContain("https://snapback.example on :8080");
     expect(out).toContain("ip        hash");
