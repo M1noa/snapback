@@ -17,6 +17,7 @@
 
 import { join } from "node:path";
 import type { GuildSettings } from "../../config/defaults.ts";
+import { purgeBackupRows } from "../../db/queries/backup-purge.ts";
 import { insertBackup } from "../../db/queries/backups.ts";
 import type { BackupKind, BackupRow, Database } from "../../db/types.ts";
 import type { DiscordClient } from "../../discord/client.ts";
@@ -159,6 +160,11 @@ export async function runBackup(
     },
     now,
   };
+
+  // a capture that runs again writes the same rows again, and the tables are
+  // keyed on (backup_id, source id). clearing the children first makes every
+  // step idempotent, so a capture that was interrupted can simply be run again.
+  await purgeBackupRows(deps.db, backupId);
 
   for (const { step, capture, counts } of STEPS) {
     try {

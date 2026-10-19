@@ -216,11 +216,12 @@ export const captureMessages: Capture = async (ctx) => {
       // for the next one. a short page means the channel is exhausted; a page of
       // filtered-out noise still advances the cursor, so no page is read twice.
       const oldest = page[page.length - 1];
+      // the checkpoint is per page, so a capture that is interrupted says how far
+      // it got rather than only which step it was in.
+      await ctx.checkpoint("messages", { done: stored, total });
       if (oldest === undefined || page.length < remaining) break;
       before = oldest.id;
     }
-
-    await ctx.checkpoint("messages", { done: stored, total });
   }
 
   return { written: stored, counts: { messages: stored } };

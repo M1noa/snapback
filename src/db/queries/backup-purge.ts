@@ -21,6 +21,31 @@ import { deleteBackupTagsByBackup } from "./backup-tags.ts";
 import { deleteBackupThreadsByBackup } from "./backup-threads.ts";
 import { deleteBackup } from "./backups.ts";
 
+/**
+ * the child rows of a backup, without the row itself.
+ *
+ * a capture that is run again writes the same rows again, and the tables are
+ * keyed on (backup_id, source id), so the second run would hit a duplicate key.
+ * clearing the children first makes every step of the capture idempotent, which
+ * is what lets a crashed backup be captured again instead of failing on the
+ * rows it wrote the first time.
+ */
+export async function purgeBackupRows(db: Database, backupId: string): Promise<void> {
+  await deleteBackupRolesByBackup(db, backupId);
+  await deleteBackupChannelsByBackup(db, backupId);
+  await deleteBackupChannelOverwritesByBackup(db, backupId);
+  await deleteBackupThreadsByBackup(db, backupId);
+  await deleteBackupMembersByBackup(db, backupId);
+  await deleteBackupMessagesByBackup(db, backupId);
+  await deleteBackupBansByBackup(db, backupId);
+  await deleteBackupEmojisByBackup(db, backupId);
+  await deleteBackupStickersByBackup(db, backupId);
+  await deleteBackupSoundsByBackup(db, backupId);
+  await deleteBackupAutomodsByBackup(db, backupId);
+  await deleteBackupEventsByBackup(db, backupId);
+  await deleteBackupTagsByBackup(db, backupId);
+}
+
 // children first, the row last: if a delete fails half way, the backup row is
 // still there to name what is left behind rather than a row pointing at nothing.
 export async function purgeBackup(db: Database, backupId: string): Promise<void> {
