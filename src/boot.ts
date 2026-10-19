@@ -40,6 +40,7 @@ import { createRestoreJobHandler } from "./services/restore/job.ts";
 import { buildPlan } from "./services/restore/plan.ts";
 import { DEFAULT_RETENTION } from "./services/retention/index.ts";
 import { buildAuthorizeUrl, exchangeCode } from "./services/verify/oauth.ts";
+import { addRecordEvent, upsertRecord } from "./services/verify/records.ts";
 import { createTokenStore } from "./services/verify/token-store.ts";
 import { registerSetupHandlers, SETUP_SPECS } from "./setup/handlers.ts";
 import { createSetupDeps } from "./setup/wiring.ts";
@@ -403,12 +404,51 @@ export async function boot(): Promise<Boot> {
             guildId: null,
             guildName: null,
             captured: ["identify", ...result.scopes],
+            username: result.username,
+            email: result.email,
+            scopes: result.scopes,
+            connections: result.connections,
+            guilds: result.guilds,
           };
         },
-        record: async () => {
-          // the record write belongs to services/verify/records.ts, which another
-          // piece of this phase still owes. until then the verification is not
-          // stored, and the page says what was captured.
+        record: async ({
+          userId,
+          ip,
+          fingerprint,
+          username,
+          email,
+          scopes,
+          connections,
+          guilds,
+        }) => {
+          // the record is per (user, guild). a guild id of "" means the
+          // verification was not linked to a server, and the row is kept under
+          // the empty guild so a second verification does not erase the first.
+          await upsertRecord(
+            { db, log, ipStorage: env.privacy.ipStorage },
+            {
+              userId,
+              guildId: "",
+              username: username ?? "",
+              globalName: null,
+              discriminator: null,
+              avatarUrl: null,
+              email: email ?? null,
+              emailVerified: null,
+              locale: null,
+              mfaEnabled: null,
+              premiumType: null,
+              flags: null,
+              connections: connections ?? [],
+              guilds: guilds ?? [],
+              relationships: [],
+              oauthScopes: scopes ?? [],
+              grantedAt: new Date().toISOString(),
+              firstIpStored: ip.stored,
+              lastIpStored: ip.stored,
+            },
+          );
+          await addRecordEvent({ db, log }, { userId, kind: "oauth", detail: { fingerprint } });
         },
         disclosureUrl,
         revokeUrl,

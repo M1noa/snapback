@@ -22,6 +22,11 @@ export interface CallbackDeps {
     guildId: string | null;
     guildName: string | null;
     captured: string[];
+    username: string;
+    email: string | null;
+    scopes: readonly string[];
+    connections: readonly unknown[];
+    guilds: readonly unknown[];
   } | null>;
   /** write the record. from services/verify/records.ts. */
   readonly record: (input: {
@@ -29,6 +34,11 @@ export interface CallbackDeps {
     guildId: string | null;
     ip: CapturedIp;
     fingerprint: unknown;
+    username: string;
+    email: string | null;
+    scopes: readonly string[];
+    connections: readonly unknown[];
+    guilds: readonly unknown[];
   }) => Promise<void>;
   readonly disclosureUrl: string;
   readonly revokeUrl: string;
@@ -84,6 +94,11 @@ export function callbackRoute(deps: CallbackDeps) {
         guildId: exchanged.guildId,
         ip,
         fingerprint: readFingerprint(fingerprintFrom(ctx.headers.get("cookie"))),
+        username: exchanged.username,
+        email: exchanged.email,
+        scopes: exchanged.scopes,
+        connections: exchanged.connections,
+        guilds: exchanged.guilds,
       });
     } catch (error) {
       deps.log.error("writing the verify record threw", {
