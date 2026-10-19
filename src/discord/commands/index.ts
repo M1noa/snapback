@@ -12,6 +12,8 @@ import type { SlashCommand } from "./types.ts";
 export const GROUP_DESCRIPTIONS: Readonly<Record<string, string>> = {
   setup: "the setup wizard, its steps, and the operator docs",
   snapback: "snapback bot status, diagnostics, and version",
+  backup: "capture this server, and read what was captured",
+  restore: "put a backup back into a server, category by category",
 };
 
 export interface CommandManifest {

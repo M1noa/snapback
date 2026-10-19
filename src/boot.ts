@@ -13,7 +13,7 @@ import { close as closeDatabase, getDatabase, migrate, SCHEMA_VERSION } from "./
 import { getAdmin } from "./db/queries/admins.ts";
 import { insertAudit } from "./db/queries/audit.ts";
 import { getBackup, listBackupsByGuild } from "./db/queries/backups.ts";
-import { getGuildSettings } from "./db/queries/guilds.ts";
+import { getGuildSettings, listActiveGuilds } from "./db/queries/guilds.ts";
 import { getRetentionPolicy } from "./db/queries/retention.ts";
 import { DiscordClient } from "./discord/client.ts";
 import { BACKUP_SPECS, type BackupDeps } from "./discord/commands/backup/deps.ts";
@@ -21,6 +21,9 @@ import { registerBackupHandlers } from "./discord/commands/backup/handlers.ts";
 import { backupCommands } from "./discord/commands/backup/index.ts";
 import { buildDefinitions, diagnosticsCommand, statusCommand } from "./discord/commands/index.ts";
 import { createCommandsRest, syncCommands } from "./discord/commands/register.ts";
+import { RESTORE_SPECS, type RestoreDeps } from "./discord/commands/restore/deps.ts";
+import { registerRestoreHandlers } from "./discord/commands/restore/handlers.ts";
+import { restoreCommands } from "./discord/commands/restore/index.ts";
 import { setupCommands } from "./discord/commands/setup/index.ts";
 import type { SlashCommand } from "./discord/commands/types.ts";
 import { DiscordApiError, formatDiscordError } from "./discord/errors.ts";
@@ -33,6 +36,8 @@ import { createLogger, type Logger } from "./lib/log.ts";
 import { createBackupJobHandler } from "./services/backup/job.ts";
 import { createExportJobHandler } from "./services/export/job.ts";
 import { JobRunner } from "./services/jobs/runner.ts";
+import { createRestoreJobHandler } from "./services/restore/job.ts";
+import { buildPlan } from "./services/restore/plan.ts";
 import { DEFAULT_RETENTION } from "./services/retention/index.ts";
 import { registerSetupHandlers, SETUP_SPECS } from "./setup/handlers.ts";
 import { createSetupDeps } from "./setup/wiring.ts";
@@ -41,7 +46,11 @@ import { createSetupDeps } from "./setup/wiring.ts";
 // start when one has no handler (D4PLAN 9.3). the /setup wizard is the first
 // surface, so this is its whole vocabulary (SETUP_SPECS); it grows with each new
 // surface, not with each button.
-const CUSTOM_ID_SPECS: readonly CustomIdSpec[] = [...SETUP_SPECS, ...BACKUP_SPECS];
+const CUSTOM_ID_SPECS: readonly CustomIdSpec[] = [
+  ...SETUP_SPECS,
+  ...BACKUP_SPECS,
+  ...RESTORE_SPECS,
+];
 
 const READY_TIMEOUT_MS = 30_000;
 
@@ -182,6 +191,10 @@ export async function boot(): Promise<Boot> {
     }),
   );
   jobs.register("export", createExportJobHandler({ db, log, exportDir: env.storage.exportDir }));
+  jobs.register(
+    "restore",
+    createRestoreJobHandler({ db, client, log, backupDir: env.storage.backupDir }),
+  );
   await jobs.start();
 
   // the /backup surface. the same access check the router runs for every other
@@ -222,6 +235,38 @@ export async function boot(): Promise<Boot> {
   };
   registerBackupHandlers(router, backupDeps);
 
+  // the /restore surface. the same access check, the same state store, and the
+  // plan builder the dry run reads.
+  const restoreDeps: RestoreDeps = {
+    db,
+    log,
+    jobs,
+    now: () => Date.now(),
+    settings: async (guildId) => (await getGuildSettings(db, guildId)) ?? DEFAULT_GUILD_SETTINGS,
+    state: new MemoryStateStore(),
+    backups: async (guildId) => await listBackupsByGuild(db, guildId),
+    guilds: async () =>
+      (await listActiveGuilds(db)).map((row) => ({ id: row.guild_id, name: row.name })),
+    lookup: async (guildId, backupId) => {
+      const row = await getBackup(db, backupId);
+      return row !== null && row.guild_id === guildId ? row : null;
+    },
+    authorize: isGuildAdmin,
+    audit: async (input) => {
+      await insertAudit(db, {
+        id: Bun.randomUUIDv7(),
+        guild_id: input.guildId,
+        actor_user_id: input.actorUserId,
+        action: input.action,
+        target: input.target,
+        detail_json: input.detail ?? null,
+        created_at: new Date().toISOString(),
+      });
+    },
+    plan: async (backupId, options) => await buildPlan(db, backupId, options),
+  };
+  registerRestoreHandlers(router, restoreDeps);
+
   // the probes read the same wiring the commands do: a selected handle, the live
   // gateway, the limiter, and the configured paths. nothing here opens anything.
   const probeDeps = {
@@ -252,6 +297,7 @@ export async function boot(): Promise<Boot> {
     ),
     ...setupCommands(setupDeps),
     ...backupCommands(backupDeps),
+    ...restoreCommands(restoreDeps),
   ];
   const definitions = buildDefinitions(commands);
 
