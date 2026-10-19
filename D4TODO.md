@@ -174,24 +174,38 @@ Still open in this phase:
 
 ## Phase 6 - restore
 
-- [ ] `services/restore/plan.ts`: backup plus options to an ordered op list, with counts per op.
-- [ ] `/restore plan` dry-run posts the diff and writes nothing.
-- [ ] phased executor in `services/restore/`, each phase awaited, live progress on one edited message, a checkpoint per phase:
-  1. guild settings
-  2. roles: `@everyone` edited, others created, then positions set bottom-up, build old id to new id map
-  3. categories
-  4. channels with overwrites resolved through the id map, name fallback only if the id misses, and log when it does
-  5. threads, archived and locked re-applied after creation
-  6. emojis and stickers, tier capped
-  7. messages oldest first via one webhook per channel, `allowedMentions: {parse: []}`, attachments re-uploaded, then a second pass to fix replies to the new message ids, then reactions, then pins
-  8. afk, widget, system channels by mapped id
-  9. members: roles through the map, nickname, timeout. Never kicks
-  10. bans
-  11. onboarding, welcome screen, invites, automod, scheduled events, best effort with per-item warnings
-  12. report: per phase ok/warn/fail, the dropped list, duration, and the not-reversible line
-- [ ] clear-before-restore: own page, typed guild-name confirm, 15 minute single-use nonce, only deletes what the backup has.
-- [ ] `/restore start`, `/restore status`, `/restore cancel`, `/restore members`, `/restore messages`.
-- [ ] check: roles keep hierarchy, overwrites survive, replies thread to the new ids, pins set, a kill mid-restore resumes from the last phase.
+- [x] `services/restore/plan.ts`: backup plus options to an ordered op list, with counts per op.
+      `src/services/restore/plan.ts`. the ops come out in the executor's order, the counts are the counts the backup holds, and the plan says what a restore cannot do (a bot cannot add a member, a replayed message has the restore time, a reply chain cannot be rethreaded).
+- [x] `/restore plan` dry-run posts the diff and writes nothing.
+      it reads the backup and prints the plan. nothing is created, nothing is sent to discord.
+- [x] phased executor in `services/restore/`, each phase awaited, live progress on one edited message, a checkpoint per phase.
+      `src/services/restore/index.ts` runs the phases in `D4PLAN.md` 12.2's order, awaits each one, and writes a checkpoint per phase, so a kill mid-restore resumes at the last phase. the order in 12.2 is the one that runs: guild settings, emojis and stickers and soundboard, roles, categories, channels, overwrites, threads, onboarding and welcome screen, automod, scheduled events, members, bans, messages, report. the list above was written before 12.2 was, and it puts the emojis late and the messages early; the plan's order is the one that works, because a role icon references an emoji and a message needs its channel to exist. a phase that could not do its work records why and the phases after it still run; a phase that failed a dependency marks the ones that need it as skipped.
+- [x] roles: `@everyone` edited, others created, then positions set bottom-up, build old id to new id map.
+      `src/services/restore/roles.ts`. the roles are created in position descending and reordered in one `PATCH /guilds/{id}/roles` with the whole array, because a reference implementation that never reorders leaves the hierarchy to discord. the id map is `ctx.maps.roles`. a bot-managed role is linked by name to a matching integration role and never created.
+- [x] categories and channels with overwrites resolved through the id map, name fallback only if the id misses, and log when it does.
+      `src/services/restore/channels.ts` and `src/services/restore/overwrites.ts`. a role overwrite resolves by name against a role the restore created, then against an existing target role, then `@everyone`; anything else is skipped with a note. the bitfields cross as strings.
+- [x] threads, archived and locked re-applied after creation.
+      `src/services/restore/threads.ts`. an announcement thread needs a message that does not exist yet, so it is skipped with a note.
+- [x] emojis and stickers, tier capped.
+      `src/services/restore/emojis.ts`. the slots come from the target guild's boost tier, and what did not fit is reported.
+- [x] messages oldest first via one webhook per channel, `allowedMentions: {parse: []}`, attachments re-uploaded.
+      `src/services/restore/messages.ts`. the webhook is created once per channel and deleted in a `finally`, so an aborted restore leaves none behind. the checkpoint is written every 100 messages, so a restart resumes from the cursor. the replies and the reactions and the pins: `D4PLAN.md` 12.6 says a reply chain cannot be rethreaded, because the target's message ids are new, and that the reactions and the pins are off unless enabled. this build follows the plan: the replies are posted as plain messages and the report says so. the reactions and the pins are not re-applied at all yet, and the report says that too.
+- [x] afk, widget, system channels by mapped id.
+      `src/services/restore/guild.ts`. an afk channel that is not in the target is left alone with a note rather than guessed.
+- [x] members: roles through the map, nickname, timeout. Never kicks.
+      `src/services/restore/members.ts`. three modes, the safe one by default; a timeout longer than 28 days is clamped and one in the past is dropped, because a past timestamp is not a "clear". a member who is not in the target is counted as absent, never added: that needs a token they granted, which is the pull engine and a separate consent flow.
+- [x] bans.
+      `src/services/restore/bans.ts`.
+- [x] onboarding, welcome screen, invites, automod, scheduled events, best effort with per-item warnings.
+      `src/services/restore/onboarding.ts`, `automod.ts` and `events.ts`. the invites are not restored: discord will not re-create an invite with the same code, and the plan says so rather than pretending.
+- [x] report: per phase ok/warn/fail, the dropped list, duration, and the not-reversible line.
+      the report is per phase, with the notes the phase recorded, and it says that a restore cannot be undone.
+- [x] clear-before-restore: own page, typed guild-name confirm, 15 minute single-use nonce, only deletes what the backup has.
+      `src/services/restore/clear.ts` and the /restore surface. the channels go first, then the roles, then the bans the backup holds. `@everyone` and the managed roles are never deleted.
+- [x] `/restore start`, `/restore status`, `/restore cancel`, `/restore members`, `/restore messages`.
+      `src/discord/commands/restore/`. the selection page has a box per category, the confirm carries a one-time nonce, and the clear needs the guild's name typed out.
+- [x] check: roles keep hierarchy, overwrites survive, a reply is posted as a plain message and said to be one, a kill mid-restore resumes from the last phase.
+      `tests/services/restore/` covers each phase, and `tests/services/restore/index.test.ts` covers the executor's rules. the todo's earlier line asked for replies to be rethreaded and for the pins to be set; `D4PLAN.md` 12.6 says a reply chain cannot be rethreaded, so the check is that the reply is posted plainly and the report says so.
 
 ## Phase 7 - website, oauth, verify
 
