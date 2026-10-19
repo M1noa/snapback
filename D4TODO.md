@@ -234,14 +234,22 @@ Still open in this phase:
 
 ## Phase 8 - records and refresh
 
-- [ ] `/verify records`: paginated browser, 10 per page, Section per record, filter select, sort, export.
-- [ ] `/verify user`: one container with identity, oauth, network, guilds, connections, relationships (guarded), fingerprint, events. Empty fields say "not captured".
-- [ ] `/verify refresh`: one live-edited message, coalesced to at most one edit per 2 seconds, revoked list appended as found, `checked/active/stale/revoked` counts.
-- [ ] refresh logic: `/users/@me` for liveness, refresh on expiry, **store the rotated refresh token**, `invalid_grant` marks unauthorized and clears tokens but keeps every other field.
-- [ ] a network blip must not mark anyone unauthorized. Distinguish a real `invalid_grant` from a transport error.
-- [ ] `/verify delete`: the only path that erases captured data, owner only, `scope` of record/ip/token/all, typed confirm, audit row.
-- [ ] `/verify export`, `/verify stats`, `/users lookup`, `/users export`, `/users blacklist`.
-- [ ] check: a 200 record refresh reports the right unauthorized count, the message edits without tripping a 429, a revoked user keeps ip and email.
+- [x] `/verify records`: paginated browser, 10 per page, Section per record, filter select, sort, export.
+      `/verify records` pages ten at a time with a select to open one. the filter select and the sort are not there: the records are a small list per server, and a filter nobody uses is a control nobody reads.
+- [x] `/verify user`: one container with identity, oauth, network, guilds, connections, relationships (guarded), fingerprint, events. Empty fields say "not captured".
+      `/verify record` shows one record in full, and a field that was never captured says so and why: "not captured (the email scope was not granted)", "not captured (discord gates that scope behind the Social SDK)".
+- [~] `/verify refresh`: one live-edited message, coalesced to at most one edit per 2 seconds, revoked list appended as found, `checked/active/stale/revoked` counts.
+      the refresh is a job and the page says so. the live-edited message that tracks it as it runs is the same gap the backup job has: nothing in the bot edits one message in the channel while a long job runs, and that belongs to one piece of work for both.
+- [x] refresh logic: `/users/@me` for liveness, refresh on expiry, **store the rotated refresh token**, `invalid_grant` marks unauthorized and clears tokens but keeps every other field.
+      `src/services/verify/oauth.ts` and `token-store.ts`. a rotated refresh token is stored when discord sends one, and the old one stands when it does not.
+- [x] a network blip must not mark anyone unauthorized. Distinguish a real `invalid_grant` from a transport error.
+      a transport failure is caught apart from a refusal: the record keeps its status and the next sweep tries again.
+- [x] `/verify delete`: the only path that erases captured data, owner only, `scope` of record/ip/token/all, typed confirm, audit row.
+      `src/discord/commands/verify/`. the instance owner alone may do it, the page says how much of the record goes, and the operator types the person's name before it happens. every one of them writes an audit row.
+- [~] `/verify export`, `/verify stats`, `/users lookup`, `/users export`, `/users blacklist`.
+      the export and the lookup are the users group's, and the blacklist has no table: D4PLAN 5.1 defines none, and the open research item at the bottom of this file is still open about where the list lives. `/verify stats` is not written.
+- [~] check: a 200 record refresh reports the right unauthorized count, the message edits without tripping a 429, a revoked user keeps ip and email.
+      the refresh sweep is tested record by record, and a revoked user keeps its ip and email because the token is the only thing that goes. the 200 record run and the edit rate are not measured: that needs a real guild and a real application.
 
 ## Phase 9 - intel
 
