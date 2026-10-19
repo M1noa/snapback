@@ -209,17 +209,28 @@ Still open in this phase:
 
 ## Phase 7 - website, oauth, verify
 
-- [ ] `web/server.ts` on `bun.serve`, `web/router.ts`, five routes: `/`, `/callback`, `/revoke`, `/health`, `/legal` (`D4PLAN.md` 13.1). No `/v/{slug}`, no public geo route.
-- [ ] one function builds the authorize URL, in `services/verify/oauth.ts`. Search the repo for a second copy and delete it.
-- [ ] `state`: 32 random bytes base64url, bound to guild, client ip, and expiry, single use, validated on callback. Stored in memory with the `oauth_states` table behind it. Guild id as state is banned.
-- [ ] `redirect_uri` always from `PUBLIC_BASE_URL`, byte-identical to the registered one, never from a request header.
-- [ ] code exchange server side, then `/users/@me`, then `/oauth2/@me` for the authoritative granted scopes, then email, connections, guilds per scope.
-- [ ] IP capture (`web/capture/ip.ts`): `CF-Connecting-IP` in cloudflare mode, else right-to-left walk of `X-Forwarded-For` with `TRUSTED_PROXY_DEPTH`, else socket. Validate every candidate, never store a bare string.
-- [ ] fingerprint (`web/capture/fingerprint.ts`): attributes collected client side and posted with the nonce, stored on the pending row and merged on callback.
-- [ ] tokens encrypted before insert, never returned to a command.
+- [x] `web/server.ts` on `bun.serve`, `web/router.ts`, five routes: `/`, `/callback`, `/revoke`, `/health`, `/legal` (`D4PLAN.md` 13.1). No `/v/{slug}`, no public geo route.
+      `src/web/`. everything that is not one of the five is a plain 404 with no path of ours in it, and a route that throws is a plain 500 with the detail in the log.
+- [x] one function builds the authorize URL, in `services/verify/oauth.ts`. Search the repo for a second copy and delete it.
+      `buildAuthorizeUrl` in `src/services/verify/oauth.ts` is the only one: `grep -rn "oauth2/authorize" src/` finds that one and the constant beside it.
+- [x] `state`: 32 random bytes base64url, bound to guild, client ip, and expiry, single use, validated on callback. Stored in memory with the `oauth_states` table behind it. Guild id as state is banned.
+      the state is spent before the exchange, so a replayed callback finds nothing. the in-memory store is the default and the table-backed one is for a multi-worker deploy.
+- [x] `redirect_uri` always from `PUBLIC_BASE_URL`, byte-identical to the registered one, never from a request header.
+      `buildRedirectUri` reads the public base url and nothing else.
+- [x] code exchange server side, then `/users/@me`, then `/oauth2/@me` for the authoritative granted scopes, then email, connections, guilds per scope.
+      `exchangeCode` in `src/services/verify/oauth.ts`. the granted scopes come from discord, not from what was asked for, so a scope downgrade on a cached consent screen is caught.
+- [x] IP capture (`web/capture/ip.ts`): `CF-Connecting-IP` in cloudflare mode, else right-to-left walk of `X-Forwarded-For` with `TRUSTED_PROXY_DEPTH`, else socket. Validate every candidate, never store a bare string.
+      every candidate is checked with `net.isIP` before it is believed, and the stored form is the hash or the ciphertext unless the operator asked for the plain address.
+- [x] fingerprint (`web/capture/fingerprint.ts`): attributes collected client side and posted with the nonce, stored on the pending row and merged on callback.
+      the landing page's script collects the browser's own properties into a short-lived cookie and the callback reads it back. a field with the wrong type is dropped, not coerced.
+- [x] tokens encrypted before insert, never returned to a command.
+      `src/services/verify/token-store.ts`. a store with no key refuses to hold a token, with one fixed `SB_` code.
 - [ ] panel builder per `D4PLAN.md` 10.3: channel select, modal for title and description, colour, thumbnail, button label and style, scope checkboxes with consequence lines, `?guild=` link button.
+      the service that creates, posts and edits the panel is in `src/services/verify/panel.ts`, and the row it keeps is in `verify_panels`. the command that drives it, `/verify panel`, is not registered yet: the wizard's own panel step and the command belong together, and the wizard step is phase 7's other half.
 - [ ] disclosure text generated from the panel's scope list, not typed into a template.
+      the legal route serves a text the operator wrote. deriving it from the scope list is the honest version, and it is not done: the text today is a fixed paragraph that names what is captured.
 - [ ] check: end-to-end verify with a test app, record row complete, `/revoke` clears tokens and keeps the record, tunnel mode captures a real IP not a loopback.
+      the pieces are tested one at a time (`tests/web/`, `tests/services/verify/`), not end to end against a real application. the `/revoke` route clears the token and keeps the record, and the tunnel mode is covered by the ip capture's tests, but the whole path has not been run against a test app.
 
 ## Phase 8 - records and refresh
 
