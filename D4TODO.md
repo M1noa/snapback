@@ -304,11 +304,16 @@ Still open in this phase:
 
 ## Phase 12 - hardening
 
-- [ ] failure injection at every step: `429`, `500`, `50035`, HTML body, empty body, mid-stream disconnect.
-- [ ] every one of those produces a typed error and a user message that names the fix.
-- [ ] security pass against `D4PLAN.md` 19 threat model, one line of evidence per row.
+- [~] failure injection at every step: `429`, `500`, `50035`, HTML body, empty body, mid-stream disconnect.
+      the discord client parses the body whatever it is and a refusal keeps discord's own code and message, so a 429, a 500 and a 50035 all arrive as one typed error with the fields the report needs. what is not injected is the body shapes: an html error page, an empty body and a mid-stream disconnect are not covered by a test.
+- [x] every one of those produces a typed error and a user message that names the fix.
+      `DiscordApiError` carries the status, the code, the message, the errors, the retry after, the route, the method and the body, and the pages show discord's own words with the fix beside them.
+- [x] security pass against `D4PLAN.md` 19 threat model, one line of evidence per row.
+      `docs/security-pass.md`. the pass found one gap and it is closed: every surface asked only whether the person was a row in `guild_admins`, so a row with `can_backup` and nothing else could read the records. the check is per capability now (`src/discord/access.ts`).
 - [ ] load test: 10k message backup and restore against a mock, memory measured, checkpoints proven.
-- [ ] round-trip test green, differences all on the known-lossy list.
+      the caps are enforced in code and proven by tests, but a 10k message run has not been measured, so the memory cost and the wall clock of a full guild are unknown.
+- [~] round-trip test green, differences all on the known-lossy list.
+      the known-lossy list is written and every entry has a reason (`docs/backup-format.md`). the round trip itself, a capture followed by a restore, has not been run end to end.
 - [ ] measure and record: restore duration per 1000 messages, attachment recovery rate on a realistic channel.
 - [ ] check: report the four numbers, update the UI estimates with the measured values.
 
