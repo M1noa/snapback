@@ -5,7 +5,7 @@
 // count inside the budget, and a boot assertion that covers every id).
 
 import { describe, expect, test } from "bun:test";
-import { ComponentTypes, type ContainerComponent } from "oceanic.js";
+import type { ContainerComponent } from "oceanic.js";
 import { DEFAULT_GUILD_SETTINGS } from "../../../src/config/defaults.ts";
 import { countComponents, PAGE_LIMIT } from "../../../src/discord/components/page.ts";
 import { parseCustomId } from "../../../src/discord/interactions/router.ts";
