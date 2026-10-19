@@ -49,6 +49,11 @@ export interface Env {
     readonly pullCooldownHours: number;
     readonly pullFailureCooldownMinutes: number;
   };
+  readonly oauth: {
+    /** the client secret from the developer portal. empty means the verify flow
+     *  is off: the web routes still answer, and the flow refuses. */
+    readonly clientSecret: string;
+  };
   readonly storage: {
     readonly backupDir: string;
     readonly exportDir: string;
@@ -218,6 +223,10 @@ export function parseEnv(read: EnvSource): EnvResult {
         pullDailyLimitPerAccount: int("PULL_DAILY_LIMIT_PER_ACCOUNT", 100, 100, 500),
         pullCooldownHours: int("PULL_COOLDOWN_HOURS", 24, 1, 720),
         pullFailureCooldownMinutes: int("PULL_FAILURE_COOLDOWN_MINUTES", 60, 1, 1440),
+      }),
+
+      oauth: Object.freeze({
+        clientSecret: optional("OAUTH_CLIENT_SECRET", ""),
       }),
 
       storage: Object.freeze({

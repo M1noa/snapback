@@ -39,8 +39,16 @@ import { JobRunner } from "./services/jobs/runner.ts";
 import { createRestoreJobHandler } from "./services/restore/job.ts";
 import { buildPlan } from "./services/restore/plan.ts";
 import { DEFAULT_RETENTION } from "./services/retention/index.ts";
+import { buildAuthorizeUrl, exchangeCode } from "./services/verify/oauth.ts";
+import { createTokenStore } from "./services/verify/token-store.ts";
 import { registerSetupHandlers, SETUP_SPECS } from "./setup/handlers.ts";
 import { createSetupDeps } from "./setup/wiring.ts";
+import { callbackRoute } from "./web/routes/callback.ts";
+import { healthRoute } from "./web/routes/health.ts";
+import { homeRoute } from "./web/routes/home.ts";
+import { legalRoute } from "./web/routes/legal.ts";
+import { revokeRoute } from "./web/routes/revoke.ts";
+import { createServer } from "./web/server.ts";
 
 // every customID surface this build produces. the boot assertion below refuses to
 // start when one has no handler (D4PLAN 9.3). the /setup wizard is the first
@@ -331,6 +339,105 @@ export async function boot(): Promise<Boot> {
     );
   }
 
+  // the web layer. five routes, one process. the verify flow needs the oauth
+  // client secret, and without it the routes still answer and the flow refuses.
+  const tokenStore = createTokenStore({
+    db,
+    log,
+    encryptionKey: env.privacy.encryptionKey,
+  });
+  const oauthDeps = {
+    client,
+    db,
+    log,
+    publicBaseUrl: env.web.publicBaseUrl,
+    // the client id is the application id: the bot's own application.
+    clientId: gateway.client.application?.id ?? env.discord.ownerId,
+    clientSecret: env.oauth.clientSecret,
+    tokens: tokenStore,
+    clientIp: null,
+  };
+  const disclosureUrl = `${env.web.publicBaseUrl}/legal`;
+  const revokeUrl = `${env.web.publicBaseUrl}/revoke`;
+
+  const web = createServer({
+    db,
+    log,
+    ip: {
+      behindCloudflareTunnel: env.web.behindCloudflareTunnel,
+      trustedProxyDepth: env.web.trustedProxyDepth,
+      storage: env.privacy.ipStorage,
+      hashPepper: env.privacy.ipHashPepper,
+      encryptionKey: env.privacy.encryptionKey,
+    },
+    routes: {
+      home: homeRoute({
+        db,
+        authorizeUrl: async (guildId) => {
+          if (env.oauth.clientSecret === "") return null;
+          const built = await buildAuthorizeUrl(oauthDeps, {
+            guildId,
+            userId: "web",
+            scopes: ["identify", "email", "guilds.join"],
+          });
+          return built.url;
+        },
+        disclosureUrl,
+        revokeUrl,
+      }),
+      callback: callbackRoute({
+        db,
+        log,
+        ip: {
+          behindCloudflareTunnel: env.web.behindCloudflareTunnel,
+          trustedProxyDepth: env.web.trustedProxyDepth,
+          storage: env.privacy.ipStorage,
+          hashPepper: env.privacy.ipHashPepper,
+          encryptionKey: env.privacy.encryptionKey,
+        },
+        exchange: async ({ code, state }) => {
+          const result = await exchangeCode(oauthDeps, { code, state });
+          if (result === null) return null;
+          return {
+            userId: result.userId,
+            guildId: null,
+            guildName: null,
+            captured: ["identify", ...result.scopes],
+          };
+        },
+        record: async () => {
+          // the record write belongs to services/verify/records.ts, which another
+          // piece of this phase still owes. until then the verification is not
+          // stored, and the page says what was captured.
+        },
+        disclosureUrl,
+        revokeUrl,
+      }),
+      revoke: revokeRoute({
+        db,
+        log,
+        tokens: tokenStore,
+        records: { remove: async () => {} },
+        disclosureUrl,
+        revokeUrl,
+      }),
+      health: healthRoute({
+        db,
+        log,
+        version: manifest.version,
+        startedAt,
+        schemaVersion: SCHEMA_VERSION,
+        gateway: () => (gateway.client.ready ? "ready" : "not ready"),
+        queueDepth: () => 0,
+      }),
+      legal: legalRoute({
+        disclosure: () =>
+          "verification is optional. what is captured is the account id, the username, the email address if you allowed it, the servers you are in if you allowed it, and the address you connected from. it is used to keep a server's member list honest. you can revoke it at any time.",
+      }),
+    },
+    port: env.web.port,
+  });
+
   log.info("snapback is up", {
     version: manifest.version,
     oceanic: oceanicVersion,
@@ -347,6 +454,7 @@ export async function boot(): Promise<Boot> {
       stopped = true;
       // the gateway first, so no new interaction arrives while the rest closes.
       gateway.destroy();
+      web.stop();
       await jobs.stop();
       await closeDatabase();
       await log.flush();
