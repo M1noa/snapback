@@ -295,12 +295,16 @@ Still open in this phase:
 
 ## Phase 13 - docs
 
-- [ ] `docs/setup.md`, `docs/developer-panel.md`, `docs/cloudflare-tunnel.md`, `docs/scopes.md`.
-- [ ] `docs/commands.md`, `docs/backup-format.md`, `docs/self-hosting.md`.
-- [ ] `docs/privacy.md`, `docs/troubleshooting.md`, `docs/architecture.md`, `docs/contributing.md`.
-- [ ] every guide reachable from `/setup guide` or `/snapback help` so it cannot drift.
-- [ ] `docs/commands.md` checked by a test that every registered command appears in it.
-- [ ] check: a fresh operator goes from clone to verified user using only `docs/setup.md` and `docs/cloudflare-tunnel.md`.
+- [x] `docs/setup.md`, `docs/developer-panel.md`, `docs/cloudflare-tunnel.md`, `docs/scopes.md`.
+- [x] `docs/commands.md`, `docs/backup-format.md`, `docs/self-hosting.md`.
+- [x] `docs/privacy.md`, `docs/troubleshooting.md`, `docs/architecture.md`, `docs/contributing.md`.
+      `docs/backup-format.md` is the contract: the bundle's shape, the row order, and the known-lossy list, every entry taken from the capture and restore code rather than from hope. `docs/privacy.md` says what is captured about a visitor, in which form, and how to take it back.
+- [~] every guide reachable from `/setup guide` or `/snapback help` so it cannot drift.
+      the guide list in `src/setup/guide.ts` names the docs it knows. the four new documents are not in that list yet, so a reader cannot reach them from the wizard. the test that would catch it is the one below, and it covers the commands rather than the guides.
+- [x] `docs/commands.md` checked by a test that every registered command appears in it.
+      `tests/docs/commands.test.ts` builds the command list the way the boot does and asserts that each one is in the page, and that the page names no command that does not exist.
+- [~] check: a fresh operator goes from clone to verified user using only `docs/setup.md` and `docs/cloudflare-tunnel.md`.
+      the two guides exist and the gate runs from a clean clone. the walk through them has not been done against a real application, so the last mile is untested.
 
 ## Phase 14 - release
 
