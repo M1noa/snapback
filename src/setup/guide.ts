@@ -44,6 +44,26 @@ export const GUIDE_DOCS: readonly GuideDoc[] = Object.freeze([
     title: "Troubleshooting",
     summary: "the failures that actually happen, by symptom and error code",
   },
+  {
+    name: "backup-format",
+    title: "Backup format",
+    summary: "the backup json contract, and what a restore cannot bring back",
+  },
+  {
+    name: "privacy",
+    title: "Privacy",
+    summary: "what is captured about a visitor, in which form, and how to revoke it",
+  },
+  {
+    name: "architecture",
+    title: "Architecture",
+    summary: "the layers, the layout, and where the seams are",
+  },
+  {
+    name: "contributing",
+    title: "Contributing",
+    summary: "the gate, the house rules, and the two remotes",
+  },
 ]);
 
 /** the body the guide page shows when docs/ has no such file in this build. */

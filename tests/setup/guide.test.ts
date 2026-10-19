@@ -168,7 +168,7 @@ describe("guidePage", () => {
 });
 
 describe("GUIDE_DOCS", () => {
-  test("lists the seven guides in index order", () => {
+  test("lists the guides in index order", () => {
     expect(GUIDE_DOCS.map((doc) => doc.name)).toEqual([
       "commands",
       "setup",
@@ -177,6 +177,10 @@ describe("GUIDE_DOCS", () => {
       "scopes",
       "self-hosting",
       "troubleshooting",
+      "backup-format",
+      "privacy",
+      "architecture",
+      "contributing",
     ]);
   });
 });
