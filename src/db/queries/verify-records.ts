@@ -364,3 +364,46 @@ export async function listRecordEvents(
   );
   return rows.map(toEventRow);
 }
+
+// ---- erasing what was captured ------------------------------------------------
+//
+// the delete path is the only one that removes captured data, and it can remove
+// part of a record: the tokens, the address, or the whole row (D4PLAN 8's
+// /verify delete scopes).
+
+/** the tokens go, and the record keeps everything else. */
+export async function clearRecordTokens(
+  db: Database,
+  guildId: string,
+  userId: string,
+): Promise<void> {
+  await db.run(
+    `UPDATE verify_records SET access_token_enc = NULL, refresh_token_enc = NULL,
+       token_status = 'revoked', revoked_at = ?
+     WHERE guild_id = ? AND user_id = ?`,
+    [new Date().toISOString(), guildId, userId],
+  );
+}
+
+/** the address goes, in every form it was stored in. */
+export async function clearRecordIp(db: Database, guildId: string, userId: string): Promise<void> {
+  await db.run(
+    `UPDATE verify_records SET first_ip_hash = NULL, first_ip_enc = NULL,
+       last_ip_hash = NULL, last_ip_enc = NULL, ip_history_json = NULL
+     WHERE guild_id = ? AND user_id = ?`,
+    [guildId, userId],
+  );
+}
+
+/** the whole row, and its events with it. */
+export async function deleteRecord(db: Database, guildId: string, userId: string): Promise<void> {
+  const rows = await db.query<Record<string, SqlValue>>(
+    "SELECT record_id FROM verify_records WHERE guild_id = ? AND user_id = ?",
+    [guildId, userId],
+  );
+  const recordId = toText(rows[0]?.record_id) ?? null;
+  if (recordId !== null) {
+    await db.run("DELETE FROM verify_record_events WHERE record_id = ?", [recordId]);
+  }
+  await db.run("DELETE FROM verify_records WHERE guild_id = ? AND user_id = ?", [guildId, userId]);
+}

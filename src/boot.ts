@@ -15,6 +15,14 @@ import { insertAudit } from "./db/queries/audit.ts";
 import { getBackup, listBackupsByGuild } from "./db/queries/backups.ts";
 import { getGuildSettings, listActiveGuilds } from "./db/queries/guilds.ts";
 import { getRetentionPolicy } from "./db/queries/retention.ts";
+import { listPanelsForGuild } from "./db/queries/verify-panels.ts";
+import {
+  clearRecordIp,
+  clearRecordTokens,
+  deleteRecord,
+  getRecord,
+  listRecords,
+} from "./db/queries/verify-records.ts";
 import { DiscordClient } from "./discord/client.ts";
 import { BACKUP_SPECS, type BackupDeps } from "./discord/commands/backup/deps.ts";
 import { registerBackupHandlers } from "./discord/commands/backup/handlers.ts";
@@ -26,6 +34,9 @@ import { registerRestoreHandlers } from "./discord/commands/restore/handlers.ts"
 import { restoreCommands } from "./discord/commands/restore/index.ts";
 import { setupCommands } from "./discord/commands/setup/index.ts";
 import type { SlashCommand } from "./discord/commands/types.ts";
+import { VERIFY_SPECS, type VerifyDeps } from "./discord/commands/verify/deps.ts";
+import { registerVerifyHandlers } from "./discord/commands/verify/handlers.ts";
+import { verifyCommands } from "./discord/commands/verify/index.ts";
 import { DiscordApiError, formatDiscordError } from "./discord/errors.ts";
 import { Gateway, installProcessErrorHandlers } from "./discord/gateway.ts";
 import { createAuthorizer, createInteractionHandler } from "./discord/interactions/handlers.ts";
@@ -40,6 +51,7 @@ import { createRestoreJobHandler } from "./services/restore/job.ts";
 import { buildPlan } from "./services/restore/plan.ts";
 import { DEFAULT_RETENTION } from "./services/retention/index.ts";
 import { buildAuthorizeUrl, exchangeCode } from "./services/verify/oauth.ts";
+import { createPanel, postPanel } from "./services/verify/panel.ts";
 import { addRecordEvent, upsertRecord } from "./services/verify/records.ts";
 import { createTokenStore } from "./services/verify/token-store.ts";
 import { registerSetupHandlers, SETUP_SPECS } from "./setup/handlers.ts";
@@ -59,6 +71,7 @@ const CUSTOM_ID_SPECS: readonly CustomIdSpec[] = [
   ...SETUP_SPECS,
   ...BACKUP_SPECS,
   ...RESTORE_SPECS,
+  ...VERIFY_SPECS,
 ];
 
 const READY_TIMEOUT_MS = 30_000;
@@ -276,6 +289,69 @@ export async function boot(): Promise<Boot> {
   };
   registerRestoreHandlers(router, restoreDeps);
 
+  // the /verify surface. the panel is the opt-in server backup, and the records
+  // are what it produced.
+  const verifyDeps: VerifyDeps = {
+    db,
+    log,
+    jobs,
+    now: () => Date.now(),
+    settings: async (guildId) => (await getGuildSettings(db, guildId)) ?? DEFAULT_GUILD_SETTINGS,
+    state: new MemoryStateStore(),
+    records: async (guildId, limit) => await listRecords(db, guildId, limit),
+    record: async (guildId, userId) => await getRecord(db, guildId, userId),
+    panel: async (guildId) => (await listPanelsForGuild(db, guildId))[0] ?? null,
+    savePanel: async (input) => {
+      const panel = await createPanel(
+        { client, db, log },
+        {
+          guildId: input.guildId,
+          channelId: input.channelId,
+          title: input.title,
+          description: input.description,
+          buttonLabel: input.buttonLabel,
+          buttonStyle: 1,
+          scopes: input.scopes,
+          redirectUri: `${env.web.publicBaseUrl}/callback`,
+          enabled: true,
+        },
+      );
+      await postPanel({ client, db, log }, panel);
+      return panel;
+    },
+    deleteRecord: async (input) => {
+      if (input.scope === "token") {
+        await clearRecordTokens(db, input.guildId, input.userId);
+        return { deleted: true, what: "the tokens" };
+      }
+      if (input.scope === "ip") {
+        await clearRecordIp(db, input.guildId, input.userId);
+        return { deleted: true, what: "the address" };
+      }
+      if (input.scope === "all") {
+        await clearRecordTokens(db, input.guildId, input.userId);
+        await clearRecordIp(db, input.guildId, input.userId);
+      }
+      await deleteRecord(db, input.guildId, input.userId);
+      return { deleted: true, what: input.scope === "all" ? "everything" : "the record" };
+    },
+    refresh: async () => ({ checked: 0, refreshed: 0, failed: 0 }),
+    ownerId: env.discord.ownerId,
+    authorize: isGuildAdmin,
+    audit: async (input) => {
+      await insertAudit(db, {
+        id: Bun.randomUUIDv7(),
+        guild_id: input.guildId,
+        actor_user_id: input.actorUserId,
+        action: input.action,
+        target: input.target,
+        detail_json: input.detail ?? null,
+        created_at: new Date().toISOString(),
+      });
+    },
+  };
+  registerVerifyHandlers(router, verifyDeps);
+
   // the probes read the same wiring the commands do: a selected handle, the live
   // gateway, the limiter, and the configured paths. nothing here opens anything.
   const probeDeps = {
@@ -307,6 +383,7 @@ export async function boot(): Promise<Boot> {
     ...setupCommands(setupDeps),
     ...backupCommands(backupDeps),
     ...restoreCommands(restoreDeps),
+    ...verifyCommands(verifyDeps),
   ];
   const definitions = buildDefinitions(commands);
 
