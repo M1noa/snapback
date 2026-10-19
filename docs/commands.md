@@ -8,7 +8,7 @@ Every command is owner-or-guild-admin gated by `discord/registry.ts` before the 
 
 Every option that names a backup, guild, job, user, or record has autocomplete. Every list paginates at a fixed size. Every destructive command has a `dry_run` that defaults on where a dry run is meaningful.
 
-A test asserts that every command registered at boot appears in this file, so it cannot drift.
+`tests/docs/commands.test.ts` asserts that every command registered at boot appears in this file, and that this file names no command that does not exist, so the two cannot drift.
 
 ## /setup
 
@@ -17,29 +17,27 @@ The wizard. Stateful and resumable; the subcommands jump straight to a step.
 | Subcommand | Does |
 |---|---|
 | `/setup open` | opens the wizard at the first incomplete step |
-| `/setup status` | one page: every subsystem with a green, amber, or red dot, and for amber or red a button that jumps to the fix |
-| `/setup app` | Developer Panel checklist and the `app test` self-test |
-| `/setup web` | `PUBLIC_BASE_URL`, port, tunnel checkbox, live IP probe |
-| `/setup admins` | add, remove, and list admins, with per-flag toggles |
-| `/setup backup` | default include set, message counts, auto-backup schedule |
-| `/setup restore` | restore defaults: clear-before, timestamp suffix, default selections |
-| `/setup verify` | build and manage panels, choose scopes, choose the redirect target |
-| `/setup branding` | bot avatar and banner upload (GIF accepted), bot display name |
-| `/setup logs` | log channel, event families, test-fire a log entry |
-| `/setup privacy` | IP storage mode, retention policy, website disclosure text |
-| `/setup data` | database status and size, back up the database, export everything to JSON |
-| `/setup guide` | renders `docs/setup.md` in paginated Components V2 pages |
+| `/setup status` | one page: every step with a green, amber, or red dot, and for amber or red a button that jumps to the fix |
+| `/setup app` | token, owner id, gateway, and the privileged intent |
+| `/setup web` | public base url, port, and the live ip probe |
+| `/setup branding` | bot avatar, banner, and display name |
+| `/setup admins` | who else may change settings |
+| `/setup logs` | log channel and event families |
+| `/setup backup` | include set, message limits, auto-backup schedule |
+| `/setup restore` | clear-before, timestamp suffix, default selections |
+| `/setup verify` | the panel, its colour, and its buttons |
+| `/setup privacy` | ip storage mode, retention, and the site disclosure |
+| `/setup guide` | reads the operator docs. Options: `doc` (the guide, or the index of them all) and `page` |
 
 ## /backup
 
 | Subcommand | Options | Does |
 |---|---|---|
-| `/backup create` | `label`, `messages` (bool), `members` (bool), `message_limit` (int, clamped), `dry_run` (bool) | queues a backup job; a dry run writes nothing |
-| `/backup list` | `page` | paginated list with a per-row select that opens the backup |
+| `/backup create` | `label`, `messages` (bool), `members` (bool), `message_limit` (int), `dry_run` (bool) | queues a backup job; a dry run writes nothing |
+| `/backup list` | `page` | paginated list, newest first |
 | `/backup info` | `backup` (autocomplete) | counts, size, age, contents summary, the self-check's failures and skips |
-| `/backup restore` | `backup`, `target_guild` | hands off to `/restore`; not registered until the restore phase lands |
-| `/backup delete` | `backup` (autocomplete), `confirm` | arms a one-time nonce, then hard-deletes the rows and the asset files |
-| `/backup export` | `backup` (autocomplete), `format` | writes JSON into the export directory and reports the path and its size |
+| `/backup export` | `backup` (autocomplete), `format` | writes the JSON bundle into the export directory and reports the path and its size |
+| `/backup delete` | `backup` (autocomplete), `confirm` | arms the delete on a typed value, then hard-deletes the rows and the asset files |
 | `/backup prune` | `dry_run` (default on) | shows the retention policy's plan, and acts on the second press |
 
 ## /restore
@@ -47,55 +45,28 @@ The wizard. Stateful and resumable; the subcommands jump straight to a step.
 | Subcommand | Options | Does |
 |---|---|---|
 | `/restore start` | `backup`, `target_guild` | opens the category selection UI |
-| `/restore status` | `job` | live progress page with pause and cancel |
-| `/restore cancel` | `job` | cooperative cancel at the next checkpoint |
-| `/restore plan` | `backup`, `target_guild` | dry run: prints the diff between backup and target, writes nothing |
-| `/restore members` | `backup`, `target_guild` | member-and-role-only restore, no channel or message work |
-| `/restore messages` | `backup`, `target_guild`, `channels` | message-only replay into an existing structure |
-
-## /verify
-
-| Subcommand | Options | Does |
-|---|---|---|
-| `/verify panel` | | opens the panel builder |
-| `/verify list` | | all panels in this guild, with edit, repost, and disable |
-| `/verify records` | `page`, `filter` | paginated record browser with a per-user detail view |
-| `/verify user` | `user` | the full record for one user, every captured field |
-| `/verify refresh` | `all` (bool) or `records` | re-checks every token against Discord, live-edits the message per user, reports who revoked |
-| `/verify delete` | `user`, `scope` (`record` \| `ip` \| `token` \| `all`), `confirm` | the only path that erases captured data |
-| `/verify export` | `format`, `filter` | JSON or CSV of records |
-| `/verify stats` | | verified count, revoked count, scopes in use, intel breakdown |
-
-## /pull
-
-| Subcommand | Options | Does |
-|---|---|---|
-| `/pull start` | `source_guild`, `target_guild`, `exclude_revoked`, `max` | adds verified users to a guild through `guilds.join` |
-| `/pull status` | `job` | live page with per-account counters |
-| `/pull counters` | `page` | the `account_counters` table: per user, today's attempts, cooldown state |
-| `/pull reset` | `user`, `confirm` | clears a cooldown or a daily counter by hand |
-| `/pull config` | | daily limit per account, cooldown hours, auto-pull toggle |
-
-## /users
-
-| Subcommand | Options | Does |
-|---|---|---|
-| `/users lookup` | `user` or `id` | identity, membership, record, and counters, one page |
-| `/users export` | `scope` | JSON dump of records or members |
-| `/users blacklist` | `add` / `remove` / `list` | per-guild blacklist by user id, ip hash, or asn |
+| `/restore plan` | `backup`, `target_guild` | dry run: prints what the restore would change, writes nothing |
+| `/restore status` | | how the last restore in this server is going |
+| `/restore cancel` | | stops the restore that is running, at its next checkpoint |
+| `/restore members` | `backup`, `target_guild` | members' roles and nicknames only, no channel or message work |
+| `/restore messages` | `backup`, `target_guild` | replays the message history only |
 
 ## /snapback
 
 | Subcommand | Does |
 |---|---|
-| `/snapback status` | bot uptime, gateway latency, job queue depth, database size, tracked guilds, version |
-| `/snapback diagnostics` | the full self-test plus database, disk, and permission probes; returns a copyable report |
-| `/snapback version` | version, commit, Oceanic version, schema version |
-| `/snapback help` | paginated index of `docs/` |
+| `/snapback status` | uptime, gateway, queue, database, and version at a glance |
+| `/snapback diagnostics` | runs every self-test and returns a copyable report |
+
+## Not registered yet
+
+`D4PLAN.md` 8 specifies more than this build registers: a data-export step in the wizard, a records browser, a pull engine, a user lookup, and the version and help pages under the bot group. The plan is where they are written down. They are not in this file because they are not commands an operator can run yet, and a doc that lists them would send people looking for a surface that is not there.
+
+The verify command module in `src/discord/commands/verify/` holds the panel builder, the record browser, the refresh sweep, and the delete path. It is not wired into the boot, so those commands do not appear in Discord.
 
 ## Guides
 
-`/setup guide` and `/snapback help` render these, so a guide cannot be added without being reachable.
+`/setup guide` renders the guides listed in `src/setup/guide.ts`. A guide that is not in that list is shipped but not reachable from Discord.
 
 | Guide | Covers |
 |---|---|
@@ -103,9 +74,9 @@ The wizard. Stateful and resumable; the subcommands jump straight to a step.
 | `docs/developer-panel.md` | the Discord developer portal, redirect strings, intents |
 | `docs/cloudflare-tunnel.md` | running behind a tunnel, and the loopback IP failure |
 | `docs/scopes.md` | every OAuth scope, what it grants, and why it is asked for |
-| `docs/backup-format.md` | the backup JSON contract and the known-lossy list |
 | `docs/self-hosting.md` | Postgres, retention, data files, db-ip attribution |
-| `docs/privacy.md` | what is captured, the retention policy, and how to erase it |
 | `docs/troubleshooting.md` | the failures that actually happen |
+| `docs/backup-format.md` | the backup JSON contract and the known-lossy list |
+| `docs/privacy.md` | what is captured about a visitor, the storage modes, and how to revoke |
 | `docs/architecture.md` | process layout, the job runner, the database boundary |
 | `docs/contributing.md` | the gate, the conventions, and the test expectations |
