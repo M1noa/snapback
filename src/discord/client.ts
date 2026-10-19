@@ -38,7 +38,12 @@ export interface RequestOptions {
   readonly bucketRoute?: string;
 }
 
-export type DiscordClientErrorCode = "SB_CLIENT_BAD_ROUTE" | "SB_CLIENT_BAD_REASON";
+export type DiscordClientErrorCode =
+  | "SB_CLIENT_BAD_ROUTE"
+  | "SB_CLIENT_BAD_REASON"
+  /** the request never completed: a refused connection, a timeout, a dropped
+   *  stream. that is ours, not discord's, so it gets our fixed wording. */
+  | "SB_CLIENT_TRANSPORT";
 
 export class DiscordClientError extends Error {
   readonly code: DiscordClientErrorCode;
@@ -113,12 +118,23 @@ export class DiscordClient {
       body = JSON.stringify(options.body);
     }
 
-    return await this.#fetch(`${this.#baseUrl}${route}`, {
-      method: options.method,
-      headers,
-      body,
-      signal: AbortSignal.timeout(options.timeoutMs ?? this.#timeoutMs),
-    });
+    try {
+      return await this.#fetch(`${this.#baseUrl}${route}`, {
+        method: options.method,
+        headers,
+        body,
+        signal: AbortSignal.timeout(options.timeoutMs ?? this.#timeoutMs),
+      });
+    } catch (error) {
+      // the request never landed. a transport failure is not a discord refusal,
+      // so it is one of ours with one fixed message, and the reason keeps the
+      // original error for the log.
+      const reason = error instanceof Error ? error.message : String(error);
+      throw new DiscordClientError(
+        "SB_CLIENT_TRANSPORT",
+        `the request to discord did not complete: ${reason}. check the network and try again.`,
+      );
+    }
   }
 
   async #parse<T>(response: Response, options: RequestOptions): Promise<T> {
