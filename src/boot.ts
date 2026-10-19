@@ -7,10 +7,18 @@
 // start.
 
 import { createDiagnosticsProbes, createStatusProbe } from "./boot/probes.ts";
+import { DEFAULT_GUILD_SETTINGS } from "./config/defaults.ts";
 import { env } from "./config/env.ts";
 import { close as closeDatabase, getDatabase, migrate, SCHEMA_VERSION } from "./db/index.ts";
 import { getAdmin } from "./db/queries/admins.ts";
+import { insertAudit } from "./db/queries/audit.ts";
+import { getBackup, listBackupsByGuild } from "./db/queries/backups.ts";
+import { getGuildSettings } from "./db/queries/guilds.ts";
+import { getRetentionPolicy } from "./db/queries/retention.ts";
 import { DiscordClient } from "./discord/client.ts";
+import { BACKUP_SPECS, type BackupDeps } from "./discord/commands/backup/deps.ts";
+import { registerBackupHandlers } from "./discord/commands/backup/handlers.ts";
+import { backupCommands } from "./discord/commands/backup/index.ts";
 import { buildDefinitions, diagnosticsCommand, statusCommand } from "./discord/commands/index.ts";
 import { createCommandsRest, syncCommands } from "./discord/commands/register.ts";
 import { setupCommands } from "./discord/commands/setup/index.ts";
@@ -19,8 +27,13 @@ import { DiscordApiError, formatDiscordError } from "./discord/errors.ts";
 import { Gateway, installProcessErrorHandlers } from "./discord/gateway.ts";
 import { createAuthorizer, createInteractionHandler } from "./discord/interactions/handlers.ts";
 import { type CustomIdSpec, Router } from "./discord/interactions/router.ts";
+import { MemoryStateStore } from "./discord/interactions/state.ts";
 import { resolveScope } from "./discord/registry.ts";
 import { createLogger, type Logger } from "./lib/log.ts";
+import { createBackupJobHandler } from "./services/backup/job.ts";
+import { createExportJobHandler } from "./services/export/job.ts";
+import { JobRunner } from "./services/jobs/runner.ts";
+import { DEFAULT_RETENTION } from "./services/retention/index.ts";
 import { registerSetupHandlers, SETUP_SPECS } from "./setup/handlers.ts";
 import { createSetupDeps } from "./setup/wiring.ts";
 
@@ -28,7 +41,7 @@ import { createSetupDeps } from "./setup/wiring.ts";
 // start when one has no handler (D4PLAN 9.3). the /setup wizard is the first
 // surface, so this is its whole vocabulary (SETUP_SPECS); it grows with each new
 // surface, not with each button.
-const CUSTOM_ID_SPECS: readonly CustomIdSpec[] = [...SETUP_SPECS];
+const CUSTOM_ID_SPECS: readonly CustomIdSpec[] = [...SETUP_SPECS, ...BACKUP_SPECS];
 
 const READY_TIMEOUT_MS = 30_000;
 
@@ -145,6 +158,70 @@ export async function boot(): Promise<Boot> {
   });
   registerSetupHandlers(router, setupDeps);
 
+  // the job runner. one per kind, serialised per guild, resumable from the
+  // progress rows (D4PLAN 4.1). it is started here so a job left running by the
+  // last boot is picked up.
+  const jobs = new JobRunner({
+    db,
+    log,
+    maxConcurrentJobs: env.limits.maxConcurrentJobs,
+  });
+  jobs.register(
+    "backup",
+    createBackupJobHandler({
+      db,
+      client,
+      log,
+      settings: async (guildId) => (await getGuildSettings(db, guildId)) ?? DEFAULT_GUILD_SETTINGS,
+      limits: {
+        maxMessagesPerChannel: env.limits.maxMessagesPerChannel,
+        maxMessagesTotal: env.limits.maxMessagesTotal,
+      },
+      backupDir: env.storage.backupDir,
+      maxAssetBytes: env.storage.maxAssetBytes,
+    }),
+  );
+  jobs.register("export", createExportJobHandler({ db, log, exportDir: env.storage.exportDir }));
+  await jobs.start();
+
+  // the /backup surface. the same access check the router runs for every other
+  // control, and the settings and lookups it reads.
+  const backupDeps: BackupDeps = {
+    db,
+    client,
+    log,
+    jobs,
+    now: () => Date.now(),
+    retention: async (guildId) => (await getRetentionPolicy(db, guildId)) ?? DEFAULT_RETENTION,
+    settings: async (guildId) => (await getGuildSettings(db, guildId)) ?? DEFAULT_GUILD_SETTINGS,
+    state: new MemoryStateStore(),
+    limits: {
+      maxMessagesPerChannel: env.limits.maxMessagesPerChannel,
+      maxMessagesTotal: env.limits.maxMessagesTotal,
+    },
+    backupDir: env.storage.backupDir,
+    exportDir: env.storage.exportDir,
+    authorize: isGuildAdmin,
+    audit: async (input) => {
+      await insertAudit(db, {
+        id: Bun.randomUUIDv7(),
+        guild_id: input.guildId,
+        actor_user_id: input.actorUserId,
+        action: input.action,
+        target: input.target,
+        detail_json: input.detail ?? null,
+        created_at: new Date().toISOString(),
+      });
+    },
+    lookup: async (guildId, backupId) => {
+      const row = await getBackup(db, backupId);
+      // scoped to the guild: an id from another server is not reachable here.
+      return row !== null && row.guild_id === guildId ? row : null;
+    },
+    lookupAll: async (guildId) => await listBackupsByGuild(db, guildId),
+  };
+  registerBackupHandlers(router, backupDeps);
+
   // the probes read the same wiring the commands do: a selected handle, the live
   // gateway, the limiter, and the configured paths. nothing here opens anything.
   const probeDeps = {
@@ -174,6 +251,7 @@ export async function boot(): Promise<Boot> {
       }),
     ),
     ...setupCommands(setupDeps),
+    ...backupCommands(backupDeps),
   ];
   const definitions = buildDefinitions(commands);
 
@@ -223,6 +301,7 @@ export async function boot(): Promise<Boot> {
       stopped = true;
       // the gateway first, so no new interaction arrives while the rest closes.
       gateway.destroy();
+      await jobs.stop();
       await closeDatabase();
       await log.flush();
     },

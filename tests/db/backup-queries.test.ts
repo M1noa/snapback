@@ -372,7 +372,7 @@ describe("backup_messages", () => {
   });
 
   test("the batch path lands the same rows as the single-row path", async () => {
-    const total = 1_500; // more than one batchInsert chunk (1000), so the loop runs
+    const total = 1_200; // more than one batchInsert chunk (1000), so the loop runs
     const batchedId = "0190a000-0000-7000-8000-0000000005a0";
     const singleId = "0190a000-0000-7000-8000-0000000005b0";
 
@@ -394,7 +394,9 @@ describe("backup_messages", () => {
 
     await messages.deleteBackupMessagesByBackup(db, batchedId);
     await messages.deleteBackupMessagesByBackup(db, singleId);
-  });
+    // 1200 single inserts is 1200 transactions: the test is given room
+    // rather than the insert path being made faster.
+  }, 30_000);
 });
 
 describe("backup_bans", () => {

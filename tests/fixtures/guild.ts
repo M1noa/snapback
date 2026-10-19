@@ -505,8 +505,8 @@ export function restStub(fixture: FixtureGuild): RestStub {
     [`GET /guilds/${guildId}/vanity-url`]: () => copy(fixture.vanityUrl),
     [`GET /guilds/${guildId}/auto-moderation/rules`]: () => copy(fixture.automod),
     [`GET /guilds/${guildId}/scheduled-events`]: () => copy(fixture.events),
-    [`GET /guilds/${guildId}/members`]: (query) => page(fixture.members, query, "after"),
-    [`GET /guilds/${guildId}/bans`]: (query) => page(fixture.bans, query, "after"),
+    [`GET /guilds/${guildId}/members`]: (query) => page(fixture.members, query, "after", userId),
+    [`GET /guilds/${guildId}/bans`]: (query) => page(fixture.bans, query, "after", userId),
   };
 
   for (const channelId of Object.keys(fixture.messagesByChannel)) {
@@ -559,12 +559,20 @@ export function restStub(fixture: FixtureGuild): RestStub {
   };
 }
 
+// the id a row is sorted by. a member and a ban carry theirs inside the user
+// object; a message carries its own.
+type IdOf = (row: Record<string, unknown>) => string;
+
+const ownId: IdOf = (row) => String(row.id ?? "");
+const userId: IdOf = (row) => String((row.user as { id?: string } | undefined)?.id ?? "");
+
 // the `limit`/`after` and `limit`/`before` walks both stop on a short page, so one
 // helper serves members, bans and messages. messages arrive newest first.
 function page(
   rows: Record<string, unknown>[],
   query: URLSearchParams,
   cursor: "after" | "before",
+  idOf: IdOf = ownId,
 ): unknown {
   const limit = Number.parseInt(query.get("limit") ?? "100", 10);
   const at = query.get(cursor);
@@ -572,8 +580,8 @@ function page(
   if (at !== null) {
     filtered =
       cursor === "after"
-        ? rows.filter((row) => String(row.id) > at)
-        : rows.filter((row) => String(row.id) < at);
+        ? rows.filter((row) => idOf(row) > at)
+        : rows.filter((row) => idOf(row) < at);
   }
   return copy(filtered.slice(0, Number.isFinite(limit) ? limit : 100));
 }

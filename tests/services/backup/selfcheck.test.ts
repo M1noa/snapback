@@ -231,7 +231,11 @@ describe("runSelfCheck", () => {
     await insertBackupChannelOverwrites(db, [
       overwrite(resolved.backup_id, "20", "role", "777", "a role from another guild"),
     ]);
-    const fine = await runSelfCheck(db, resolved.backup_id, await countRows(db, resolved.backup_id));
+    const fine = await runSelfCheck(
+      db,
+      resolved.backup_id,
+      await countRows(db, resolved.backup_id),
+    );
     expect(fine.failures).toEqual([]);
     // the first backup is untouched by the second one's result
     expect(id).not.toBe(resolved.backup_id);
@@ -295,9 +299,7 @@ describe("sealBackup", () => {
 
   test("the skip list is stored beside the failures", async () => {
     const id = await coherent();
-    const skips = [
-      { category: "bans", what: "the ban list", why: "50013 Missing Permissions" },
-    ];
+    const skips = [{ category: "bans", what: "the ban list", why: "50013 Missing Permissions" }];
     const { backup } = await sealBackup({
       db,
       backupId: id,

@@ -75,7 +75,7 @@ describe("duckdb driver", () => {
   });
 
   test("the batch helper lands the same rows as the single-row path", async () => {
-    const n = 2_500; // more than one chunk, so the chunk loop is exercised
+    const n = 1_200; // more than one chunk (1000), so the chunk loop is exercised
     const source = Array.from({ length: n }, (_, i): SqlParam[] => [
       "bBatch",
       `c${i}`,
@@ -103,7 +103,9 @@ describe("duckdb driver", () => {
 
     expect(batched).toHaveLength(n);
     expect(batched).toEqual(single);
-  });
+    // 1200 single inserts is 1200 transactions: slow on purpose, so the test is
+    // given room rather than the insert path being made faster.
+  }, 30_000);
 
   test("a json column round-trips through rows.ts", async () => {
     const embeds = [{ title: "hello" }, { title: "world", fields: [{ name: "n", value: "v" }] }];

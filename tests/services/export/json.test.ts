@@ -34,6 +34,7 @@ import {
   writeExport,
 } from "../../../src/services/export/json.ts";
 import { closeFixtureDb, insertFixtureBackup, openFixtureDb } from "../../fixtures/db.ts";
+import { FIXTURE_BACKUP_ID } from "../../fixtures/guild.ts";
 
 const GOLDEN_PATH = fileURLToPath(new URL("../../fixtures/golden-backup.json", import.meta.url));
 // the one normalisation the golden test allows: exported_at is injected, so a
@@ -55,7 +56,9 @@ beforeAll(async () => {
   db = await openFixtureDb();
   // one backup with a row in every child table, so the golden file is a real
   // contract: a column added to any captured table shows up as a diff here.
-  const seeded = await insertFixtureBackup(db);
+  // a fixed id: the golden file is a byte contract, and a random one would make
+  // it differ on every run.
+  const seeded = await insertFixtureBackup(db, { backup_id: FIXTURE_BACKUP_ID });
   await seedChildren(db, seeded.backup_id);
   bundle = await buildExport(db, seeded.backup_id, { now: () => NOW });
 });

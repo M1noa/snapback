@@ -9,6 +9,7 @@
 import {
   type AnyInteractionGateway,
   ApplicationCommandOptionTypes,
+  type AutocompleteInteraction,
   type CommandInteraction,
   type ComponentInteraction,
   ComponentTypes,
@@ -191,14 +192,61 @@ export function createInteractionHandler(
         await runComponent(interaction, deps, responder);
         return;
       }
-      // autocomplete and ping carry nothing to do yet; the first autocomplete
-      // source adds its branch here.
+      if (interaction.isAutocompleteInteraction()) {
+        await runAutocomplete(interaction, deps);
+        return;
+      }
+      // ping carries nothing to do.
     } catch (error) {
       // the one place an interaction failure is caught: an unhandled throw here
       // is a silent "the application did not respond" for the user.
       deps.log.error("interaction handler threw", { message: messageOf(error), error });
     }
   };
+}
+
+// discord asks for the choices of one option while it is being typed. the
+// command that owns the option answers, and the answer is the only thing sent:
+// an autocomplete interaction cannot carry a message.
+async function runAutocomplete(
+  interaction: AutocompleteInteraction,
+  deps: InteractionDeps,
+): Promise<void> {
+  const guildId = interaction.guildID;
+  if (guildId === null) {
+    await interaction.result([]);
+    return;
+  }
+
+  const focused = interaction.data.options.getFocused();
+  if (focused === undefined) {
+    await interaction.result([]);
+    return;
+  }
+
+  const invocation = invocationOf(interaction.data.options.raw);
+  const command = findCommand(deps.commands, interaction.data.name, invocation.name);
+  if (command?.autocomplete === undefined) {
+    await interaction.result([]);
+    return;
+  }
+
+  // access is re-checked here too: a person who lost admin rights between the
+  // command being registered and the typing must not see the records (rule 8).
+  const access = await accessDecision(deps, interaction.user.id, guildId);
+  if (access.kind !== "allow") {
+    await interaction.result([]);
+    return;
+  }
+
+  const choices = await command.autocomplete({
+    guildId,
+    userId: interaction.user.id,
+    option: focused.name,
+    value: String(focused.value),
+  });
+  // discord accepts at most 25 choices.
+  await interaction.result(choices.slice(0, 25));
 }
 
 async function accessDecision(

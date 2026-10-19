@@ -91,9 +91,15 @@ export interface ConfirmInput {
   readonly what: string;
   /** what it costs when it happens. */
   readonly consequence: string;
-  /** the object and action the confirm button runs. */
-  readonly object: (typeof SETUP_OBJECT)[keyof typeof SETUP_OBJECT];
-  readonly action: string;
+  /** the object and action the confirm button runs, on the setup surface. */
+  readonly object?: (typeof SETUP_OBJECT)[keyof typeof SETUP_OBJECT];
+  readonly action?: string;
+  /**
+   * the id builder for the confirm button, when the confirmation belongs to
+   * another surface. one of this or object+action is required; the destructive
+   * page itself is the same everywhere.
+   */
+  readonly buildId?: (nonce: string) => string;
   /** a one-time value minted for this page (D4PLAN 9.4). */
   readonly nonce: string;
   /** where "cancel" goes back to, as an already built customID. */
@@ -105,12 +111,20 @@ export interface ConfirmInput {
  *  same page as its confirm button, and the confirm carries a one-time nonce and
  *  an expiry (D4PLAN 9.4). */
 export function confirmPage(input: ConfirmInput): ContainerComponent {
-  const confirmId = setupCustomId({
-    guildId: input.guildId,
-    object: input.object,
-    action: input.action,
-    cursor: input.nonce,
-  });
+  const confirmId =
+    input.buildId?.(input.nonce) ??
+    (input.object !== undefined && input.action !== undefined
+      ? setupCustomId({
+          guildId: input.guildId,
+          object: input.object,
+          action: input.action,
+          cursor: input.nonce,
+        })
+      : // a programming error, thrown here rather than rendered as a button that
+        // does nothing.
+        (() => {
+          throw new Error("confirmPage: buildId or object+action is required");
+        })());
   return page({
     state: "danger",
     title: input.title,

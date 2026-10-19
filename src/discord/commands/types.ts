@@ -23,6 +23,23 @@ export interface CommandResult {
 // merge into a single definition, because discord rejects two commands sharing a
 // name: /snapback is one command with a status and a diagnostics subcommand, not
 // two commands both called snapback.
+/** what discord is typing into while it asks for choices. */
+export interface AutocompleteContext {
+  readonly guildId: string;
+  readonly userId: string;
+  /** the option being typed into. */
+  readonly option: string;
+  /** what has been typed so far. */
+  readonly value: string;
+}
+
+/** one suggested value. the name is what the person reads, the value is what
+ *  discord hands back when the choice is picked. */
+export interface AutocompleteChoice {
+  readonly name: string;
+  readonly value: string;
+}
+
 export interface SlashCommand {
   /** the top-level command name, e.g. "snapback". */
   readonly group: string;
@@ -31,6 +48,11 @@ export interface SlashCommand {
   readonly description: string;
   /** this subcommand's own options. */
   readonly options?: readonly CommandOption[];
+  /**
+   * the choices for an option that names a record. discord asks while the person
+   * is typing, so it never makes anyone copy an id (AGENTS.md quality of life).
+   */
+  readonly autocomplete?: (ctx: AutocompleteContext) => Promise<AutocompleteChoice[]>;
   run(ctx: CommandContext): Promise<CommandResult> | CommandResult;
 }
 

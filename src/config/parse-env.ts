@@ -49,6 +49,11 @@ export interface Env {
     readonly pullCooldownHours: number;
     readonly pullFailureCooldownMinutes: number;
   };
+  readonly storage: {
+    readonly backupDir: string;
+    readonly exportDir: string;
+    readonly maxAssetBytes: number;
+  };
   readonly app: {
     readonly logLevel: LogLevel;
     readonly automationEnabled: boolean;

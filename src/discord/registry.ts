@@ -39,6 +39,9 @@ export interface CommandOption {
   readonly min_value?: number;
   readonly max_value?: number;
   readonly options?: readonly CommandOption[];
+  // an option that names a record is completed while it is being typed. discord
+  // asks the application for the choices, so the flag is part of the shape.
+  readonly autocomplete?: boolean;
 }
 
 // default_member_permissions is intentionally not a field here (D4PLAN 8).
@@ -173,6 +176,11 @@ function compareOptions(
     const liveChoices = choiceKey(current.choices);
     if (choices !== liveChoices) {
       fields.push(`${path}.${option.name}.choices: ${choices} -> ${liveChoices}`);
+    }
+    if ((option.autocomplete === true) !== (current.autocomplete === true)) {
+      fields.push(
+        `${path}.${option.name}.autocomplete: ${option.autocomplete === true} -> ${current.autocomplete === true}`,
+      );
     }
     for (const bound of ["min_value", "max_value"] as const) {
       const defined = option[bound];
