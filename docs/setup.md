@@ -59,8 +59,11 @@ See `docs/self-hosting.md` for the DuckDB single-writer rule and how to move to 
 | `IP_STORAGE` | `hash` | `hash`, `encrypted`, or `plaintext` |
 | `IP_HASH_PEPPER` | unset | required when `IP_STORAGE=hash` |
 | `ENCRYPTION_KEY` | unset | 32-byte base64 key, for token encryption and `IP_STORAGE=encrypted` |
+| `OAUTH_CLIENT_SECRET` | unset | the client secret from the developer portal. empty means the verification flow is off: the web routes still answer, and the flow refuses |
 
 `IP_STORAGE=plaintext` logs a one-line warning at boot: captured IP addresses are personal data, and you are responsible for them. It is for local testing only.
+
+The client id is the application id, so there is nothing to configure for it. The secret is the only piece the developer portal hands out that the bot holds.
 
 ### Proxy awareness
 
@@ -93,6 +96,16 @@ Missing data files skip geolocation with a warning in `/snapback status`, never 
 | `PULL_FAILURE_COOLDOWN_MINUTES` | `60` | shorter cooldown after a 403/429 burst |
 
 The message counts are clamped in code, not trusted. A `.env` with `MAX_MESSAGES_TOTAL=999999` is clamped to 10000 with a warning.
+
+### Storage
+
+| Key | Default | Meaning |
+|---|---|---|
+| `BACKUP_DIR` | `./data/backups` | where `backups/<id>/assets/` lands |
+| `EXPORT_DIR` | `./data/exports` | where a written export lands, swept after 24 hours |
+| `MAX_ASSET_BYTES` | `8388608` | 8 MiB. a bigger asset is recorded with its url and not downloaded. `0` keeps the urls only |
+
+The backup directory and the database file are siblings by default, so a move of the data directory moves both.
 
 ### Optional
 
