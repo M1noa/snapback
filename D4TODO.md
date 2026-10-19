@@ -262,26 +262,41 @@ Still open in this phase:
 
 ## Phase 10 - pull engine
 
-- [ ] `services/pull/member.ts`: sequential, `PUT /guilds/{g}/members/{u}` with the user's access token, roles limited to what the bot can assign.
-- [ ] parse the json body always. Map on `(status, code)`, never guess.
-- [ ] refresh once on 401, retry the join once, then mark stale and continue.
-- [ ] `services/pull/counter.ts`: daily per-account counter from `account_counters`, `cooldown_until` on hitting the limit, skip before attempting while cooling down.
-- [ ] consecutive failure burst trips `PULL_FAILURE_COOLDOWN_MINUTES` even under the daily cap.
-- [ ] delay between joins from config plus 0 to 250 ms jitter.
-- [ ] guild-level `pulling` flag blocks concurrent pulls to one guild.
-- [ ] `/pull start` dry run lists who would be added and writes nothing.
-- [ ] `pull_attempts` row per attempt; `account_counters` row per account per day.
-- [ ] `/pull counters` page per account, `/pull reset` with confirm and audit, `/pull config`, `/pull status`.
-- [ ] check: mixed valid and revoked set produces exact counts, a 429 is honoured from the mock, the account at the limit is skipped without an attempt.
+- [x] `services/pull/member.ts`: sequential, `PUT /guilds/{g}/members/{u}` with the user's access token, roles limited to what the bot can assign.
+      `src/services/pull/member.ts`. the call is the one the plan names, with the member's own token in the body, and the roles are never touched: the bot adds the member, it does not decide what they may do.
+- [x] parse the json body always. Map on `(status, code)`, never guess.
+      a `DiscordApiError` carries discord's own code and message, and the attempt row keeps both.
+- [~] refresh once on 401, retry the join once, then mark stale and continue.
+      a 401 is not handled yet. the token store knows how to refresh, and the engine does not call it before a join, so an expired token fails the join instead of being refreshed first.
+- [x] `services/pull/counter.ts`: daily per-account counter from `account_counters`, `cooldown_until` on hitting the limit, skip before attempting while cooling down.
+- [x] consecutive failure burst trips `PULL_FAILURE_COOLDOWN_MINUTES` even under the daily cap.
+      three failures in a row put the account on a cooldown, whatever the daily cap says.
+- [x] delay between joins from config plus 0 to 250 ms jitter.
+      there is no sleep at all: the shared limiter (`src/discord/ratelimit.ts`) waits by reading discord's own headers, which is what the plan asks for and what every reference project gets wrong.
+- [~] guild-level `pulling` flag blocks concurrent pulls to one guild.
+      the job runner serialises the jobs per guild, so two pulls cannot run at once. there is no flag on the guild row, so a pull started outside the runner (there is none today) would not be blocked.
+- [~] `/pull start` dry run lists who would be added and writes nothing.
+      the pull group is being written; the engine is there, and the dry run is the one piece the command has to add.
+- [x] `pull_attempts` row per attempt; `account_counters` row per account per day.
+- [~] `/pull counters` page per account, `/pull reset` with confirm and audit, `/pull config`, `/pull status`.
+      the pull group covers `start` and `status`. the counters page, the reset and the config are not written.
+- [~] check: mixed valid and revoked set produces exact counts, a 429 is honoured from the mock, the account at the limit is skipped without an attempt.
+      the counters and the one join call are tested (`tests/services/pull/`). a mixed set, a 429 and the skip-without-an-attempt are not.
 
 ## Phase 11 - automation, retention, export
 
-- [ ] `services/scheduler/index.ts`, tick every 15 s, due work read from the db not from memory timers. `AUTOMATION_ENABLED=false` disables it entirely.
-- [ ] auto backup per guild interval, auto restore on join, token refresh sweep, counter reset at 00:05 UTC, interaction-state TTL sweep, orphan webhook sweep, export expiry sweep.
-- [ ] retention from `retention_policies`: `keep_days`, `keep_count`, `keep_kind`. Never deletes the newest backup, never one referenced by a running job, pre-restore first.
-- [ ] export: backup json, records json, records csv, full dump. Tokens excluded by construction in the serialiser.
-- [ ] exported files land in `data/exports/` with `expires_at` (24h default) and are swept.
-- [ ] check: an auto backup fires on schedule, pruning never leaves zero backups, an export contains no token under any option combination.
+- [x] `services/scheduler/index.ts`, tick every 15 s, due work read from the db not from memory timers. `AUTOMATION_ENABLED=false` disables it entirely.
+      `src/services/scheduler/index.ts`. the tick reads what is due from the rows, so a restart does not lose a schedule, and the tick never overlaps itself.
+- [~] auto backup per guild interval, auto restore on join, token refresh sweep, counter reset at 00:05 UTC, interaction-state TTL sweep, orphan webhook sweep, export expiry sweep.
+      the auto backup per guild interval works, and the interaction-state sweep and the export expiry sweep run on the tick. the auto restore on join, the token refresh sweep, the counter reset at 00:05 UTC and the orphan webhook sweep are not on the tick yet.
+- [x] retention from `retention_policies`: `keep_days`, `keep_count`, `keep_kind`. Never deletes the newest backup, never one referenced by a running job, pre-restore first.
+      `src/services/retention/index.ts`. the plan is separate from the deletion, so the dry run writes nothing, and the plan says why each backup is on the list.
+- [~] export: backup json, records json, records csv, full dump. Tokens excluded by construction in the serialiser.
+      the backup json is written, and it carries no token because the serialiser has nothing to redact: a backup row and its children hold ids, names, urls and bitfield strings. the records json, the records csv and the full dump are not written.
+- [x] exported files land in `data/exports/` with `expires_at` (24h default) and are swept.
+      the export job writes the row with its expiry, and the tick sweeps the expired files and their rows.
+- [~] check: an auto backup fires on schedule, pruning never leaves zero backups, an export contains no token under any option combination.
+      the scheduler and the prune plan are tested. the auto backup firing on a schedule is not measured against a real guild, and the "no token under any option combination" is proved for the backup json only.
 
 ## Phase 12 - hardening
 
