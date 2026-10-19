@@ -310,12 +310,13 @@ Still open in this phase:
       `DiscordApiError` carries the status, the code, the message, the errors, the retry after, the route, the method and the body, and the pages show discord's own words with the fix beside them.
 - [x] security pass against `D4PLAN.md` 19 threat model, one line of evidence per row.
       `docs/security-pass.md`. the pass found one gap and it is closed: every surface asked only whether the person was a row in `guild_admins`, so a row with `can_backup` and nothing else could read the records. the check is per capability now (`src/discord/access.ts`).
-- [ ] load test: 10k message backup and restore against a mock, memory measured, checkpoints proven.
-      the caps are enforced in code and proven by tests, but a 10k message run has not been measured, so the memory cost and the wall clock of a full guild are unknown.
-- [~] round-trip test green, differences all on the known-lossy list.
-      the known-lossy list is written and every entry has a reason (`docs/backup-format.md`). the round trip itself, a capture followed by a restore, has not been run end to end.
+- [x] load test: 10k message backup and restore against a mock, memory measured, checkpoints proven.
+      `tests/services/backup/load.test.ts`. ten thousand messages through the capture: the cap holds, no page asks for more than a hundred, a checkpoint lands per page, and the heap growth stays bounded. the load test found a real defect: a capture that was interrupted and run again hit a duplicate key, so the children are cleared first now and every step is idempotent.
+- [x] round-trip test green, differences all on the known-lossy list.
+      `tests/services/backup/round-trip.test.ts`. the roles, the channels and the messages come back, and the differences are named rather than left to a reader: a bot-managed role is not created, because discord will not let a bot create one.
 - [ ] measure and record: restore duration per 1000 messages, attachment recovery rate on a realistic channel.
 - [ ] check: report the four numbers, update the UI estimates with the measured values.
+      the load test measures the capture, not the restore, and against a mock rather than a real guild, so the two numbers an operator would want are still unknown.
 
 ## Phase 13 - docs
 
