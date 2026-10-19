@@ -72,8 +72,16 @@ export async function deleteInteractionState(db: Database, stateId: string): Pro
 
 // the TTL sweep. now is an ISO-8601 string; expires_at is text, so string order
 // is time order (schema.sql).
-export async function deleteExpiredInteractionState(db: Database, now: string): Promise<void> {
+export async function deleteExpiredInteractionState(db: Database, now: string): Promise<number> {
+  // the count is read first, so the sweep can report what it did. the driver's
+  // run does not hand back the number of rows it changed.
+  const rows = await db.query<Record<string, SqlValue>>(
+    "SELECT COUNT(*) AS n FROM interaction_state WHERE expires_at < ?",
+    [now],
+  );
+  const count = Number(rows[0]?.n ?? 0);
   await db.run("DELETE FROM interaction_state WHERE expires_at < ?", [now]);
+  return count;
 }
 
 export async function listInteractionStateForGuild(

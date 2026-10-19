@@ -88,7 +88,9 @@ function jsonObjects(values: readonly unknown[]): JsonObject[] {
 }
 
 // the ip history keeps one entry per address the record was seen from, so a
-// second verification from a different address is visible (D4PLAN 14.5).
+// second verification from a different address is visible (D4PLAN 14.5). the
+// entry holds the stored value, which is the hash in hash mode and the
+// ciphertext in encrypted mode.
 function history(previous: JsonObject[] | null, value: string | null, at: string): JsonObject[] {
   const entries = previous ?? [];
   if (value === null) return entries;

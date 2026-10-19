@@ -116,12 +116,17 @@ function accentFor(color: number): number {
 /** the panel's component tree: one container, the title, the copy, what it asks
  *  for, and the one button that starts the flow. */
 export function panelComponents(panel: VerifyPanelRow): ContainerComponent {
-  const body = textDisplay(panel.description ?? "");
+  // an empty text display is a payload discord rejects, so a panel with no
+  // copy shows the title, the disclosure and the button, and nothing else.
+  const description = (panel.description ?? "").trim();
   const children: ContainerChild[] = [textDisplay(`## ${panel.title}`)];
-  if (panel.thumbnail_url !== null) {
-    children.push(section({ texts: [body], accessory: thumbnail(panel.thumbnail_url) }));
-  } else {
-    children.push(body);
+  if (description !== "") {
+    const body = textDisplay(description);
+    if (panel.thumbnail_url !== null) {
+      children.push(section({ texts: [body], accessory: thumbnail(panel.thumbnail_url) }));
+    } else {
+      children.push(body);
+    }
   }
   children.push(textDisplay(disclosureLine(panel.scopes_json)));
   children.push(

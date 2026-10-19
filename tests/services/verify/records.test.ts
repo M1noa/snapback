@@ -306,6 +306,44 @@ describe("the refresh sweep", () => {
     expect(asked).toContain("100000000000000020");
   });
 
+  test("a user with a record in two guilds is refreshed once", async () => {
+    const user = "100000000000000040";
+    const inA = await seed(user, GUILD_A, {
+      accessTokenEnc: "enc:access",
+      refreshTokenEnc: "enc:refresh",
+      expiresAt: EXPIRED,
+      status: "valid",
+    });
+    const inB = await seed(user, GUILD_B, {
+      accessTokenEnc: "enc:access",
+      refreshTokenEnc: "enc:refresh",
+      expiresAt: EXPIRED,
+      status: "valid",
+    });
+
+    const asked: string[] = [];
+    await refreshDue(
+      {
+        db,
+        log: createLogger({ level: "error", dir: null }),
+        refresh: async (userId) => {
+          asked.push(userId);
+          return true;
+        },
+        now: () => SWEEP,
+      },
+      100,
+    );
+
+    // the token store keeps one live token per user, so the user is refreshed
+    // once and both of their due records get the outcome.
+    expect(asked.filter((id) => id === user)).toHaveLength(1);
+    for (const id of [inA, inB]) {
+      const events = await recordsDb.listRecordEvents(db, id);
+      expect(events.map((event) => event.kind)).toEqual(["oauth", "refreshed_ok"]);
+    }
+  });
+
   test("a refused refresh is an event, and the record keeps its status", async () => {
     const due = await seed("100000000000000024", GUILD_C, {
       accessTokenEnc: "enc:access",
