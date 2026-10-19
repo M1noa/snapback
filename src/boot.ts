@@ -28,12 +28,18 @@ import { BACKUP_SPECS, type BackupDeps } from "./discord/commands/backup/deps.ts
 import { registerBackupHandlers } from "./discord/commands/backup/handlers.ts";
 import { backupCommands } from "./discord/commands/backup/index.ts";
 import { buildDefinitions, diagnosticsCommand, statusCommand } from "./discord/commands/index.ts";
+import { PULL_SPECS, type PullDeps } from "./discord/commands/pull/deps.ts";
+import { registerPullHandlers } from "./discord/commands/pull/handlers.ts";
+import { pullCommands } from "./discord/commands/pull/index.ts";
 import { createCommandsRest, syncCommands } from "./discord/commands/register.ts";
 import { RESTORE_SPECS, type RestoreDeps } from "./discord/commands/restore/deps.ts";
 import { registerRestoreHandlers } from "./discord/commands/restore/handlers.ts";
 import { restoreCommands } from "./discord/commands/restore/index.ts";
 import { setupCommands } from "./discord/commands/setup/index.ts";
 import type { SlashCommand } from "./discord/commands/types.ts";
+import { USERS_SPECS, type UsersDeps } from "./discord/commands/users/deps.ts";
+import { registerUsersHandlers } from "./discord/commands/users/handlers.ts";
+import { usersCommands } from "./discord/commands/users/index.ts";
 import { VERIFY_SPECS, type VerifyDeps } from "./discord/commands/verify/deps.ts";
 import { registerVerifyHandlers } from "./discord/commands/verify/handlers.ts";
 import { verifyCommands } from "./discord/commands/verify/index.ts";
@@ -47,6 +53,7 @@ import { createLogger, type Logger } from "./lib/log.ts";
 import { createBackupJobHandler } from "./services/backup/job.ts";
 import { createExportJobHandler } from "./services/export/job.ts";
 import { JobRunner } from "./services/jobs/runner.ts";
+import { pullAccounts } from "./services/pull/index.ts";
 import { createRestoreJobHandler } from "./services/restore/job.ts";
 import { buildPlan } from "./services/restore/plan.ts";
 import { DEFAULT_RETENTION } from "./services/retention/index.ts";
@@ -72,6 +79,8 @@ const CUSTOM_ID_SPECS: readonly CustomIdSpec[] = [
   ...BACKUP_SPECS,
   ...RESTORE_SPECS,
   ...VERIFY_SPECS,
+  ...USERS_SPECS,
+  ...PULL_SPECS,
 ];
 
 const READY_TIMEOUT_MS = 30_000;
@@ -352,6 +361,100 @@ export async function boot(): Promise<Boot> {
   };
   registerVerifyHandlers(router, verifyDeps);
 
+  // the /users group: what this server holds about a person, and the export.
+  const usersDeps: UsersDeps = {
+    db,
+    log,
+    jobs,
+    now: () => Date.now(),
+    ipStorage: env.privacy.ipStorage,
+    exportDir: env.storage.exportDir,
+    authorize: isGuildAdmin,
+    audit: async (input) => {
+      await insertAudit(db, {
+        id: Bun.randomUUIDv7(),
+        guild_id: input.guildId,
+        actor_user_id: input.actorUserId,
+        action: input.action,
+        target: input.target,
+        detail_json: input.detail ?? null,
+        created_at: new Date().toISOString(),
+      });
+    },
+    records: async (guildId, limit) => await listRecords(db, guildId, limit),
+    record: async (guildId, userId) => await getRecord(db, guildId, userId),
+    member: async (guildId, userId) => {
+      // the membership comes from the bot's own cache, so "unknown" is a real
+      // answer and not a guess.
+      const member = gateway.client.guilds.get(guildId)?.members.get(userId);
+      if (member === undefined) {
+        return { state: "unknown", nickname: null, joinedAt: null };
+      }
+      return {
+        state: "member",
+        nickname: member.nick,
+        joinedAt: member.joinedAt === null ? null : member.joinedAt.toISOString(),
+      };
+    },
+  };
+  registerUsersHandlers(router, usersDeps);
+
+  // the /pull group. a member is added only with a token they granted.
+  const pullDeps: PullDeps = {
+    db,
+    log,
+    jobs,
+    now: () => Date.now(),
+    state: new MemoryStateStore(),
+    limits: {
+      dailyLimit: env.limits.pullDailyLimitPerAccount,
+      failureCooldownMinutes: env.limits.pullFailureCooldownMinutes,
+      restrictedHours: 24,
+    },
+    authorize: isGuildAdmin,
+    audit: async (input) => {
+      await insertAudit(db, {
+        id: Bun.randomUUIDv7(),
+        guild_id: input.guildId,
+        actor_user_id: input.actorUserId,
+        action: input.action,
+        target: input.target,
+        detail_json: input.detail ?? null,
+        created_at: new Date().toISOString(),
+      });
+    },
+    accounts: async (guildId) => {
+      const rows = await listRecords(db, guildId, 1000);
+      return rows.map((row) => ({
+        userId: row.user_id,
+        username: row.username,
+        tokenStatus: row.token_status,
+        scopes: row.oauth_scopes_json ?? [],
+        hasToken: row.access_token_enc !== null,
+      }));
+    },
+    token: async (userId) => {
+      // the token never comes back out of the store in a form a page could show.
+      const stored = await tokenStore.get(userId);
+      return stored?.accessToken ?? null;
+    },
+    pull: async (input) =>
+      await pullAccounts(
+        {
+          client,
+          db,
+          log,
+          limits: {
+            dailyLimit: env.limits.pullDailyLimitPerAccount,
+            failureCooldownMinutes: env.limits.pullFailureCooldownMinutes,
+            restrictedHours: 24,
+          },
+        },
+        input,
+      ),
+  };
+  registerPullHandlers(router, pullDeps);
+
   // the probes read the same wiring the commands do: a selected handle, the live
   // gateway, the limiter, and the configured paths. nothing here opens anything.
   const probeDeps = {
@@ -384,6 +487,8 @@ export async function boot(): Promise<Boot> {
     ...backupCommands(backupDeps),
     ...restoreCommands(restoreDeps),
     ...verifyCommands(verifyDeps),
+    ...usersCommands(usersDeps),
+    ...pullCommands(pullDeps),
   ];
   const definitions = buildDefinitions(commands);
 
