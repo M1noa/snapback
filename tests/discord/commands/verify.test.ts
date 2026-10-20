@@ -363,7 +363,7 @@ describe("the panel builder", () => {
     });
 
     // the button opens the modal.
-    const modals: { title: string; components: unknown[] }[] = [];
+    const modals: { title: string; components: readonly unknown[] }[] = [];
     await router.route(
       id,
       { userId: USER, guildId: GUILD, isOwner: false },
