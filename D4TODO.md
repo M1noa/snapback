@@ -227,8 +227,8 @@ Still open in this phase:
       `src/services/verify/token-store.ts`. a store with no key refuses to hold a token, with one fixed `SB_` code.
 - [x] panel builder per `D4PLAN.md` 10.3: channel select, modal for title and description, colour, thumbnail, button label and style, scope checkboxes with consequence lines, `?guild=` link button.
       `src/discord/commands/verify/` and `src/services/verify/panel.ts`. the modal carries the title, what the panel is for, the button's label, the accent and the thumbnail. the panel's own button mints the state and answers with a link to discord's consent screen, so nothing is captured before the person approves it.
-- [~] disclosure text generated from the panel's scope list, not typed into a template.
-      the panel's own disclosure line is generated from its scope list (`disclosureLine` in `src/services/verify/panel.ts`), so it cannot drift from what is asked for. the `/legal` page still serves a paragraph the operator wrote, and it does not list the scopes.
+- [x] disclosure text generated from the panel's scope list, not typed into a template.
+      the panel's own disclosure line comes from the scope catalogue, and the `/legal` page reads the panel's scope list, so neither can claim less than the panel asks discord for. the operator's paragraph follows it.
 - [ ] check: end-to-end verify with a test app, record row complete, `/revoke` clears tokens and keeps the record, tunnel mode captures a real IP not a loopback.
       the pieces are tested one at a time (`tests/web/`, `tests/services/verify/`), not end to end against a real application. the `/revoke` route clears the token and keeps the record, and the tunnel mode is covered by the ip capture's tests, but the whole path has not been run against a test app.
 
