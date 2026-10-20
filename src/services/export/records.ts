@@ -39,6 +39,19 @@ export const RECORD_CSV_COLUMNS = [
 ] as const;
 
 /** every record of one guild, with the mode named in the header. */
+/** one member of the snapshot. the ids are the source ids, because a restore
+ *  resolves them by name. */
+export interface MemberExportRow {
+  readonly user_id: string;
+  readonly username: string;
+  readonly global_name: string | null;
+  readonly nickname: string | null;
+  readonly role_ids: readonly string[];
+  readonly role_names: readonly string[];
+  readonly joined_at: string | null;
+  readonly is_bot: boolean;
+}
+
 export interface RecordsBundle {
   readonly schema_version: number;
   readonly exported_at: string;
@@ -46,6 +59,10 @@ export interface RecordsBundle {
   readonly ip_storage: IpStorage;
   readonly guild_id: string;
   readonly records: readonly RecordExportRow[];
+  /** the member snapshot, when the scope asked for it. empty otherwise. */
+  readonly members: readonly MemberExportRow[];
+  /** the backup the snapshot came from, so a reader knows which moment it was. */
+  readonly source_backup_id: string | null;
 }
 
 /**
@@ -86,6 +103,13 @@ export interface RecordsExportOptions {
    * least when the caller forgets.
    */
   readonly ipStorage?: IpStorage;
+  /**
+   * what to export. "records" is the verification records. "members" is the
+   * member snapshot of the guild's newest backup, which is the only member list
+   * that exists: there is no live members table (D4PLAN 5.1), and a backup's
+   * members are a snapshot of one moment, not a roster.
+   */
+  readonly scope?: "records" | "members";
 }
 
 /** every record of one guild, as the export holds them. */
@@ -96,6 +120,18 @@ export async function buildRecordsExport(
 ): Promise<RecordsBundle> {
   const now = options.now ?? (() => new Date().toISOString());
   const mode = options.ipStorage ?? "hash";
+  if ((options.scope ?? "records") === "members") {
+    return {
+      schema_version: RECORDS_SCHEMA_VERSION,
+      exported_at: now(),
+      ip_storage: mode,
+      guild_id: guildId,
+      records: [],
+      members: await newestBackupMembers(db, guildId),
+      // the snapshot is of one moment, and the reader has to know which.
+      source_backup_id: await newestBackupId(db, guildId),
+    };
+  }
   const rows = await listAllRecords(db, guildId);
   return {
     schema_version: RECORDS_SCHEMA_VERSION,
@@ -103,7 +139,34 @@ export async function buildRecordsExport(
     ip_storage: mode,
     guild_id: guildId,
     records: rows.map((row) => recordToExportRow(row, mode)),
+    members: [],
+    source_backup_id: null,
   };
+}
+
+/** the newest backup of the guild, which is the only member list that exists. */
+async function newestBackupId(db: Database, guildId: string): Promise<string | null> {
+  const { listBackupsByGuild } = await import("../../db/queries/backups.ts");
+  const rows = await listBackupsByGuild(db, guildId);
+  return rows[0]?.backup_id ?? null;
+}
+
+/** the member snapshot of the newest backup. */
+async function newestBackupMembers(db: Database, guildId: string): Promise<MemberExportRow[]> {
+  const backupId = await newestBackupId(db, guildId);
+  if (backupId === null) return [];
+  const { listBackupMembersByBackup } = await import("../../db/queries/backup-members.ts");
+  const rows = await listBackupMembersByBackup(db, backupId);
+  return rows.map((row) => ({
+    user_id: row.user_id,
+    username: row.username,
+    global_name: row.global_name,
+    nickname: row.nickname,
+    role_ids: row.role_ids_json,
+    role_names: row.source_role_names_json,
+    joined_at: row.joined_at,
+    is_bot: row.is_bot,
+  }));
 }
 
 /**

@@ -7,6 +7,7 @@
 // against the rows the database actually holds.
 
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { insertBackupMembers } from "../../../src/db/queries/backup-members.ts";
 import { upsertRecord } from "../../../src/db/queries/verify-records.ts";
 import type { Database, VerifyRecordRow } from "../../../src/db/types.ts";
 import {
@@ -14,7 +15,7 @@ import {
   recordsToCsv,
   recordsToJson,
 } from "../../../src/services/export/records.ts";
-import { closeFixtureDb, openFixtureDb } from "../../fixtures/db.ts";
+import { closeFixtureDb, insertFixtureBackup, openFixtureDb } from "../../fixtures/db.ts";
 
 const GUILD = "1000000000000000001";
 const OTHER_GUILD = "1000000000000000002";
@@ -393,5 +394,51 @@ describe("the csv", () => {
     const rows = parseCsv(recordsToCsv(bundle));
     // the header is one of the rows the parser sees.
     expect(rows.length - 1).toBe(bundle.records.length);
+  });
+});
+
+/** one member row, for the snapshot. */
+function member(backupId: string, userId: string, username: string) {
+  return {
+    backup_id: backupId,
+    user_id: userId,
+    username,
+    global_name: null,
+    discriminator: "0",
+    nickname: null,
+    avatar_url: null,
+    joined_at: null,
+    is_bot: false,
+    role_ids_json: [],
+    pending: false,
+    timed_out_until: null,
+    premium_since: null,
+    flags: null,
+    source_role_names_json: [],
+  };
+}
+
+describe("the members scope", () => {
+  test("it exports the member snapshot of the newest backup, and names the backup", async () => {
+    // a backup with two members, and a second backup that is newer.
+    const older = "0190a000-0000-7000-8000-0000000000e1";
+    const newer = "0190a000-0000-7000-8000-0000000000e2";
+    await insertFixtureBackup(db, { backup_id: older, created_at: "2024-01-01T00:00:00.000Z" });
+    await insertFixtureBackup(db, { backup_id: newer, created_at: "2024-06-01T00:00:00.000Z" });
+    await insertBackupMembers(db, [
+      member(older, "900", "older one"),
+      member(newer, "901", "newer one"),
+    ]);
+
+    const bundle = await buildRecordsExport(db, GUILD, { scope: "members" });
+    expect(bundle.source_backup_id).toBe(newer);
+    expect(bundle.members.map((row) => row.user_id)).toEqual(["901"]);
+    expect(bundle.records).toEqual([]);
+  });
+
+  test("with no backup there is no snapshot and no source", async () => {
+    const bundle = await buildRecordsExport(db, "999999999999999999", { scope: "members" });
+    expect(bundle.members).toEqual([]);
+    expect(bundle.source_backup_id).toBeNull();
   });
 });
