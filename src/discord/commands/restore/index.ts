@@ -109,6 +109,7 @@ export function restoreCommands(deps: RestoreDeps): SlashCommand[] {
             backupLabel: backupLabel(row),
             targetLabel: target?.name ?? targetId,
             enabled: defaultCategories(),
+            messageCount: await deps.messageCount(row.backup_id),
             // the checkbox group and the submit button carry one id, so the
             // ticked categories and the press arrive together.
             selectId: restoreCustomId({
@@ -234,6 +235,7 @@ export function restoreCommands(deps: RestoreDeps): SlashCommand[] {
             backupLabel: backupLabel(row),
             targetLabel: String(ctx.options.target_guild ?? ""),
             enabled: ["members"],
+            messageCount: 0,
             // the checkbox group and the submit button carry one id, so the
             // ticked categories and the press arrive together.
             selectId: restoreCustomId({
@@ -285,6 +287,7 @@ export function restoreCommands(deps: RestoreDeps): SlashCommand[] {
             backupLabel: backupLabel(row),
             targetLabel: String(ctx.options.target_guild ?? ""),
             enabled: ["messages"],
+            messageCount: await deps.messageCount(row.backup_id),
             // the checkbox group and the submit button carry one id, so the
             // ticked categories and the press arrive together.
             selectId: restoreCustomId({

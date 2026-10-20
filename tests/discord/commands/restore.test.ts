@@ -85,6 +85,7 @@ function fakeDeps(overrides: Partial<RestoreDeps> = {}): RestoreDeps {
     plan: async () => ({
       phases: [{ phase: "roles", ops: [{ what: "create role @mods", count: 4 }] }],
     }),
+    messageCount: async () => 0,
     ...overrides,
   };
 }

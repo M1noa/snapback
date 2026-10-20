@@ -13,6 +13,7 @@ import { close as closeDatabase, getDatabase, migrate, SCHEMA_VERSION } from "./
 import { getAdmin } from "./db/queries/admins.ts";
 import { insertAudit } from "./db/queries/audit.ts";
 import { getBackup, listBackupsByGuild } from "./db/queries/backups.ts";
+import { countBackupMessagesByBackup } from "./db/queries/backup-messages.ts";
 import { getGuildSettings, listActiveGuilds } from "./db/queries/guilds.ts";
 import { getRetentionPolicy } from "./db/queries/retention.ts";
 import { listPanelsForGuild } from "./db/queries/verify-panels.ts";
@@ -304,6 +305,7 @@ export async function boot(): Promise<Boot> {
       });
     },
     plan: async (backupId, options) => await buildPlan(db, backupId, options),
+    messageCount: async (backupId) => await countBackupMessagesByBackup(db, backupId),
   };
   registerRestoreHandlers(router, restoreDeps);
 

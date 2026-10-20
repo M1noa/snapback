@@ -82,6 +82,8 @@ export interface RestoreDeps {
   }) => Promise<void>;
   /** the plan, for the dry run. */
   readonly plan: (backupId: string, options: RestoreOptions) => Promise<unknown>;
+  /** how many messages the backup holds, for the duration estimate. */
+  readonly messageCount: (backupId: string) => Promise<number>;
 }
 
 export const RESTORE_SPECS: readonly CustomIdSpec[] = [

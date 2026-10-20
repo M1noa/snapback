@@ -12,6 +12,23 @@ import { actionRow, button, checkboxGroup } from "../../components/row.ts";
 import { formatBytes, formatDuration, relativeTimestamp } from "../types.ts";
 import { RESTORE_ACTION, RESTORE_OBJECT, restoreCustomId } from "./deps.ts";
 
+/**
+ * how long a restore of a given size takes, from discord's documented webhook
+ * rate: five requests per two seconds per channel. the ui quotes it so a
+ * thousand messages does not look like a second of work.
+ */
+export function restoreDuration(seconds: number): string {
+  if (seconds < 60) return `${Math.round(seconds)} seconds`;
+  const minutes = Math.round(seconds / 60);
+  if (minutes < 60) return `about ${minutes} minute(s)`;
+  return `about ${Math.round(minutes / 60)} hour(s)`;
+}
+
+/** the estimate for a message count, at 2.5 messages a second. */
+export function messageDuration(messages: number): string {
+  return restoreDuration(messages / 2.5);
+}
+
 /** the categories the operator can turn off, with what each one does. */
 export const CATEGORIES: readonly { key: string; label: string; what: string }[] = [
   { key: "guild", label: "guild settings", what: "name, icon, banner, verification level, afk" },
@@ -36,6 +53,8 @@ export interface SelectionPageInput {
   readonly targetLabel: string;
   /** the category keys that are on. */
   readonly enabled: readonly string[];
+  /** how many messages the restore would post, for the duration estimate. */
+  readonly messageCount: number;
   readonly selectId: string;
   readonly planId: string;
   readonly submitId: string;
@@ -55,6 +74,12 @@ export function selectionPage(input: SelectionPageInput): ContainerComponent {
       textDisplay(
         "a restore is not reversible. the target guild ends up holding what the backup held, and the members the backup knows but the target does not are still missing.",
       ),
+      // the estimate, so a big message count does not look like a second of work.
+      input.messageCount > 0
+        ? textDisplay(
+            `**the messages alone take about ${messageDuration(input.messageCount)}.** they are posted one at a time, and discord allows five webhook posts every two seconds in a channel.`,
+          )
+        : textDisplay(""),
       checkboxGroup({
         id: input.selectId,
         options: CATEGORIES.map((category) => ({
