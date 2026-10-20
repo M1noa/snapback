@@ -11,13 +11,17 @@
 // a surprise in production.
 
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import type { Database } from "../../../src/db/types.ts";
 import { insertBackupChannels } from "../../../src/db/queries/backup-channels.ts";
+import type { Database } from "../../../src/db/types.ts";
 import { captureMessages } from "../../../src/services/backup/messages.ts";
 import { restoreMessages } from "../../../src/services/restore/messages.ts";
-import { createRestoreMaps, DEFAULT_RESTORE_OPTIONS, type RestoreContext } from "../../../src/services/restore/types.ts";
-import { makeGuild, makeSettings, restStub } from "../../fixtures/guild.ts";
+import {
+  createRestoreMaps,
+  DEFAULT_RESTORE_OPTIONS,
+  type RestoreContext,
+} from "../../../src/services/restore/types.ts";
 import { closeFixtureDb, openFixtureDb } from "../../fixtures/db.ts";
+import { makeGuild, makeSettings, restStub } from "../../fixtures/guild.ts";
 
 const SOURCE_GUILD = "1000000000000000001";
 const TARGET_GUILD = "2000000000000000001";

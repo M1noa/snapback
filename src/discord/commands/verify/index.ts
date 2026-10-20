@@ -8,10 +8,13 @@ import { failurePage } from "../../interactions/dispatch.ts";
 import { type CommandOption, OPTION_TYPE } from "../../registry.ts";
 import type { CommandContext, CommandResult, SlashCommand } from "../types.ts";
 import { VERIFY_ACTION, VERIFY_OBJECT, type VerifyDeps, verifyCustomId } from "./deps.ts";
-import { DEFAULT_SCOPES, deletePage, jobPage, panelPage } from "./pages.ts";
+import { DEFAULT_SCOPES, deletePage, jobPage, panelPage, statsPage, verifyStats } from "./pages.ts";
 import { recordPageFor, recordsPageFor, refusal } from "./support.ts";
 
 const GROUP = "verify";
+
+/** how many records the stats page counts. past this the count is a floor. */
+const STATS_LIMIT = 1000;
 
 const SCOPE_OPTIONS: readonly CommandOption[] = [
   {
@@ -226,6 +229,30 @@ export function verifyCommands(deps: VerifyDeps): SlashCommand[] {
               action: VERIFY_ACTION.delete,
               cursor: userId,
             }),
+            backId: verifyCustomId({
+              guildId: ctx.guildId,
+              object: VERIFY_OBJECT.records,
+              action: VERIFY_ACTION.open,
+            }),
+          }),
+          ephemeral: true,
+        };
+      },
+    },
+
+    {
+      group: GROUP,
+      subcommand: "stats",
+      description: "the counts for this server",
+      async run(ctx: CommandContext): Promise<CommandResult> {
+        const denied = await refusal(deps, ctx);
+        if (denied !== null) return denied;
+
+        const rows = await deps.records(ctx.guildId, STATS_LIMIT);
+        return {
+          page: statsPage({
+            guildId: ctx.guildId,
+            stats: verifyStats(rows, rows.length >= STATS_LIMIT),
             backId: verifyCustomId({
               guildId: ctx.guildId,
               object: VERIFY_OBJECT.records,

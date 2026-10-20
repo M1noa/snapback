@@ -66,6 +66,23 @@ export interface GuildRow {
   settings_json: GuildSettings | null;
 }
 
+/** what a blacklist entry names (D4PLAN 8). */
+export type BlacklistKind = "user_id" | "ip_hash" | "asn";
+
+/**
+ * one per-guild blacklist entry. an entry is a signal shown to an operator.
+ * nothing is blocked on a match alone (D4PLAN 19.4), so this row carries no
+ * decision: it names something and says who put it there.
+ */
+export interface GuildBlacklistRow {
+  guild_id: string;
+  kind: BlacklistKind;
+  value: string;
+  added_by: string | null;
+  added_at: string;
+  reason: string | null;
+}
+
 /** per-flag admin grants. verify.read is not implied by restore.execute. */
 export interface GuildAdminRow {
   guild_id: string;

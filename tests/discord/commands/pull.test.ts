@@ -5,7 +5,7 @@
 // the counters gave, never dropped without a word.
 
 import { describe, expect, test } from "bun:test";
-import type { ContainerComponent } from "oceanic.js";
+import { ComponentTypes, type ContainerComponent } from "oceanic.js";
 import type { JobRow } from "../../../src/db/types.ts";
 import {
   PULL_ACTION,
@@ -65,11 +65,26 @@ interface FakeHarness {
   readonly pulled: string[];
   /** the accounts the job skipped, and why. */
   readonly skipped: { userId: string; reason: string }[];
+  /** the audit rows the surface wrote. */
+  readonly audits: { action: string; target: string; detail?: Record<string, unknown> }[];
+  /** the counter rows the surface wrote. */
+  readonly counters: {
+    userId: string;
+    day: string;
+    attempts: number;
+    successes: number;
+    failures: number;
+    restricted: boolean;
+  }[];
+}
+
+function fakeHarness(): FakeHarness {
+  return { enqueued: [], pulled: [], skipped: [], audits: [], counters: [] };
 }
 
 function fakeDeps(
   overrides: Partial<PullDeps> = {},
-  harness: FakeHarness = { enqueued: [], pulled: [], skipped: [] },
+  harness: FakeHarness = fakeHarness(),
 ): PullDeps {
   const accounts: PullAccountView[] = [
     {
@@ -98,6 +113,17 @@ function fakeDeps(
           harness.skipped.push({
             userId: String(params[2]),
             reason: String(params[6] ?? ""),
+          });
+        }
+        // the account_counters upsert binds user, guild, day, then the counters.
+        if (sql.includes("INSERT INTO account_counters") && params !== undefined) {
+          harness.counters.push({
+            userId: String(params[0]),
+            day: String(params[2]),
+            attempts: Number(params[3]),
+            successes: Number(params[4]),
+            failures: Number(params[5]),
+            restricted: params[7] === true,
           });
         }
       },
@@ -132,9 +158,12 @@ function fakeDeps(
     state: new MemoryStateStore(),
     limits: { dailyLimit: 100, failureCooldownMinutes: 60, restrictedHours: 24 },
     authorize: async () => true,
-    audit: async () => {},
+    audit: async (input) => {
+      harness.audits.push({ action: input.action, target: input.target, detail: input.detail });
+    },
     accounts: async (guildId) => (guildId === GUILD ? accounts : []),
     token: async (userId) => `token-granted-by-${userId}`,
+    refresh: async () => null,
     pull: async (input) => {
       const reports = input.accounts.map((account) => {
         harness.pulled.push(account.userId);
@@ -173,17 +202,39 @@ function walk(node: unknown, visit: (n: { customID?: string }) => void): void {
   if (Array.isArray(record.components)) for (const child of record.components) walk(child, visit);
 }
 
-function fakeSurface(): { surface: HandlerSurface; messages: string[] } {
+function idsOf(node: unknown): string[] {
+  const ids: string[] = [];
+  walk(node, (n) => {
+    if (typeof n.customID === "string") ids.push(n.customID);
+  });
+  return ids;
+}
+
+function fakeSurface(
+  options: { values?: Record<string, string>; source?: "component" | "modal" } = {},
+): {
+  surface: HandlerSurface;
+  messages: string[];
+  modals: { customID: string; title: string; components: readonly unknown[] }[];
+} {
   const messages: string[] = [];
+  const modals: { customID: string; title: string; components: readonly unknown[] }[] = [];
   const surface: HandlerSurface = {
     reply: async (request) => {
       messages.push(JSON.stringify(request.message));
     },
-    openModal: async () => {},
-    values: {},
-    source: "component",
+    openModal: async (modal) => {
+      modals.push(modal);
+    },
+    values: options.values ?? {},
+    source: options.source ?? "component",
   };
-  return { surface, messages };
+  return { surface, messages, modals };
+}
+
+/** the options the command needs, so a test can run one subcommand. */
+function optionsFor(subcommand: string | undefined): Record<string, string> {
+  return subcommand === "reset" ? { user: USER } : {};
 }
 
 describe("the /pull command group", () => {
@@ -191,29 +242,35 @@ describe("the /pull command group", () => {
     const names = pullCommands(fakeDeps())
       .map((command) => command.subcommand)
       .sort();
-    expect(names).toEqual(["start", "status"]);
+    expect(names).toEqual(["config", "counters", "reset", "start", "status"]);
   });
 
   test("every page the group renders stays inside the component budget", async () => {
     const commands = pullCommands(fakeDeps());
     for (const command of commands) {
-      const result = await command.run({ guildId: GUILD, userId: OWNER, options: {} });
+      const result = await command.run({
+        guildId: GUILD,
+        userId: OWNER,
+        options: optionsFor(command.subcommand),
+      });
       expect(countComponents(result.page as ContainerComponent)).toBeLessThanOrEqual(PAGE_LIMIT);
     }
   });
 
-  test("every id a page produces parses as a pull control", async () => {
+  test("every id a page produces parses as a pull control, and has a spec", async () => {
     const commands = pullCommands(fakeDeps());
+    const actions = PULL_SPECS.map((spec) => spec.action);
     for (const command of commands) {
-      const result = await command.run({ guildId: GUILD, userId: OWNER, options: {} });
-      const ids: string[] = [];
-      walk(result.page, (node) => {
-        if (typeof node.customID === "string") ids.push(node.customID);
+      const result = await command.run({
+        guildId: GUILD,
+        userId: OWNER,
+        options: optionsFor(command.subcommand),
       });
-      for (const produced of ids) {
+      for (const produced of idsOf(result.page)) {
         const parsed = parseCustomId(produced);
         expect(parsed?.surface).toBe(PULL_SURFACE);
         expect(parsed?.guild).toBe(GUILD);
+        expect(actions).toContain(parsed?.action);
       }
     }
   });
@@ -350,10 +407,7 @@ describe("the report", () => {
 
     const status = pullCommands(deps).find((command) => command.subcommand === "status");
     const result = await status?.run({ guildId: GUILD, userId: OWNER, options: {} });
-    const ids: string[] = [];
-    walk(result?.page, (node) => {
-      if (typeof node.customID === "string") ids.push(node.customID);
-    });
+    const ids = idsOf(result?.page);
 
     expect(ids.some((id) => id.includes(`:${PULL_ACTION.pause}:`))).toBe(true);
     expect(ids.some((id) => id.includes(`:${PULL_ACTION.cancel}:`))).toBe(true);
@@ -361,9 +415,67 @@ describe("the report", () => {
   });
 });
 
+describe("the counters page", () => {
+  test("shows today's attempts, successes and failures, per account", async () => {
+    const deps = withCounter(
+      {},
+      counterRow({ attempts: 3, successes: 2, failures: 1, cooldown_until: null }),
+    );
+    const counters = pullCommands(deps).find((command) => command.subcommand === "counters");
+    const result = await counters?.run({ guildId: GUILD, userId: OWNER, options: {} });
+
+    const text = JSON.stringify(result?.page);
+    expect(text).toContain("3 attempt(s)");
+    expect(text).toContain("2 success(es)");
+    expect(text).toContain("1 failure(s)");
+  });
+
+  test("says when the cooldown lifts, and whether the account is restricted", async () => {
+    const deps = withCounter(
+      {},
+      counterRow({
+        attempts: 3,
+        restricted: true,
+        restricted_reason: "20013 account is restricted",
+        restricted_at: AT,
+        cooldown_until: "2024-06-01T18:00:00.000Z",
+      }),
+    );
+    const counters = pullCommands(deps).find((command) => command.subcommand === "counters");
+    const result = await counters?.run({ guildId: GUILD, userId: OWNER, options: {} });
+
+    const text = JSON.stringify(result?.page);
+    expect(text).toContain("restricted");
+    expect(text).toContain("20013 account is restricted");
+    expect(text).toContain("cooldown until");
+  });
+
+  test("a guild with nobody in it says so", async () => {
+    const deps = fakeDeps({ accounts: async () => [] });
+    const counters = pullCommands(deps).find((command) => command.subcommand === "counters");
+    const result = await counters?.run({ guildId: GUILD, userId: OWNER, options: {} });
+
+    expect(JSON.stringify(result?.page)).toContain("no counters to show");
+  });
+});
+
+describe("the config page", () => {
+  test("names the limits in force and where they come from", async () => {
+    const deps = fakeDeps();
+    const config = pullCommands(deps).find((command) => command.subcommand === "config");
+    const result = await config?.run({ guildId: GUILD, userId: OWNER, options: {} });
+
+    const text = JSON.stringify(result?.page);
+    expect(text).toContain("PULL_DAILY_LIMIT_PER_ACCOUNT");
+    expect(text).toContain("PULL_FAILURE_COOLDOWN_MINUTES");
+    expect(text).toContain("PULL_COOLDOWN_HOURS");
+    expect(text).toContain("100");
+  });
+});
+
 describe("the pull job", () => {
   test("pulls only the accounts that hold a token they granted", async () => {
-    const harness: FakeHarness = { enqueued: [], pulled: [], skipped: [] };
+    const harness = fakeHarness();
     const deps = fakeDeps({}, harness);
     const job: JobRow = {
       id: "job-1",
@@ -392,7 +504,7 @@ describe("the pull job", () => {
   });
 
   test("an account with no token is skipped, and the reason is recorded", async () => {
-    const harness: FakeHarness = { enqueued: [], pulled: [], skipped: [] };
+    const harness = fakeHarness();
     const deps = fakeDeps(
       {
         accounts: async () => [
@@ -438,18 +550,14 @@ describe("the pull job", () => {
 
 describe("the confirm button", () => {
   test("is a one-time nonce, and a second press does nothing", async () => {
-    const harness: FakeHarness = { enqueued: [], pulled: [], skipped: [] };
+    const harness = fakeHarness();
     const deps = fakeDeps({}, harness);
     const router = new Router({ authorize: async () => ({ kind: "allow" }) });
     registerPullHandlers(router, deps);
 
     const start = pullCommands(deps).find((command) => command.subcommand === "start");
     const result = await start?.run({ guildId: GUILD, userId: OWNER, options: {} });
-    const ids: string[] = [];
-    walk(result?.page, (node) => {
-      if (typeof node.customID === "string") ids.push(node.customID);
-    });
-    const confirmId = ids.find((id) => id.includes(`:${PULL_ACTION.confirm}:`));
+    const confirmId = idsOf(result?.page).find((id) => id.includes(`:${PULL_ACTION.confirm}:`));
     expect(confirmId).toBeDefined();
 
     const identity = { userId: OWNER, guildId: GUILD, isOwner: true };
@@ -465,18 +573,14 @@ describe("the confirm button", () => {
   });
 
   test("a confirmation minted for someone else is not used", async () => {
-    const harness: FakeHarness = { enqueued: [], pulled: [], skipped: [] };
+    const harness = fakeHarness();
     const deps = fakeDeps({}, harness);
     const router = new Router({ authorize: async () => ({ kind: "allow" }) });
     registerPullHandlers(router, deps);
 
     const start = pullCommands(deps).find((command) => command.subcommand === "start");
     const result = await start?.run({ guildId: GUILD, userId: OWNER, options: {} });
-    const ids: string[] = [];
-    walk(result?.page, (node) => {
-      if (typeof node.customID === "string") ids.push(node.customID);
-    });
-    const confirmId = ids.find((id) => id.includes(`:${PULL_ACTION.confirm}:`));
+    const confirmId = idsOf(result?.page).find((id) => id.includes(`:${PULL_ACTION.confirm}:`));
 
     const { surface, messages } = fakeSurface();
     await router.route(
@@ -486,6 +590,129 @@ describe("the confirm button", () => {
     );
     expect(harness.enqueued).toHaveLength(0);
     expect(messages.join("")).toContain("not yours");
+  });
+});
+
+describe("the reset", () => {
+  test("its own page says what goes, and asks for a typed confirmation", async () => {
+    const harness = fakeHarness();
+    const deps = fakeDeps({}, harness);
+    const router = new Router({ authorize: async () => ({ kind: "allow" }) });
+    registerPullHandlers(router, deps);
+
+    const reset = pullCommands(deps).find((command) => command.subcommand === "reset");
+    const result = await reset?.run({
+      guildId: GUILD,
+      userId: OWNER,
+      options: { user: USER },
+    });
+
+    const text = JSON.stringify(result?.page);
+    expect(text).toContain("clears today's counters");
+    expect(text).toContain("someone");
+    expect(text).toContain("type to confirm");
+
+    const resetId = idsOf(result?.page).find((id) => id.includes(`:${PULL_ACTION.reset}:`));
+    expect(resetId).toBeDefined();
+
+    const { surface, modals } = fakeSurface();
+    await router.route(resetId!, { userId: OWNER, guildId: GUILD, isOwner: true }, surface);
+    expect(modals).toHaveLength(1);
+    expect(modals[0]?.customID).toContain(`:${PULL_ACTION.confirmReset}:`);
+    // the modal asks for the name, so a stray click cannot clear a counter.
+    expect(JSON.stringify(modals[0]?.components)).toContain(`"type":${ComponentTypes.TEXT_INPUT}`);
+  });
+
+  test("a typed name clears the counters and writes an audit row", async () => {
+    const harness = fakeHarness();
+    const deps = fakeDeps({}, harness);
+    const router = new Router({ authorize: async () => ({ kind: "allow" }) });
+    registerPullHandlers(router, deps);
+
+    const reset = pullCommands(deps).find((command) => command.subcommand === "reset");
+    const result = await reset?.run({
+      guildId: GUILD,
+      userId: OWNER,
+      options: { user: USER },
+    });
+    const resetId = idsOf(result?.page).find((id) => id.includes(`:${PULL_ACTION.reset}:`));
+
+    const opened = fakeSurface();
+    await router.route(resetId!, { userId: OWNER, guildId: GUILD, isOwner: true }, opened.surface);
+    const modalId = opened.modals[0]?.customID ?? "";
+
+    const submitted = fakeSurface({ values: { [modalId]: "someone" }, source: "modal" });
+    await router.route(
+      modalId,
+      { userId: OWNER, guildId: GUILD, isOwner: true },
+      submitted.surface,
+    );
+
+    expect(harness.audits).toContainEqual(
+      expect.objectContaining({ action: "pull.reset", target: USER }),
+    );
+    expect(harness.counters).toHaveLength(1);
+    expect(harness.counters[0]?.attempts).toBe(0);
+    expect(harness.counters[0]?.restricted).toBe(false);
+    expect(submitted.messages.join("")).toContain("are cleared");
+  });
+
+  test("a name that does not match clears nothing", async () => {
+    const harness = fakeHarness();
+    const deps = fakeDeps({}, harness);
+    const router = new Router({ authorize: async () => ({ kind: "allow" }) });
+    registerPullHandlers(router, deps);
+
+    const reset = pullCommands(deps).find((command) => command.subcommand === "reset");
+    const result = await reset?.run({
+      guildId: GUILD,
+      userId: OWNER,
+      options: { user: USER },
+    });
+    const resetId = idsOf(result?.page).find((id) => id.includes(`:${PULL_ACTION.reset}:`));
+
+    const opened = fakeSurface();
+    await router.route(resetId!, { userId: OWNER, guildId: GUILD, isOwner: true }, opened.surface);
+    const modalId = opened.modals[0]?.customID ?? "";
+
+    const submitted = fakeSurface({ values: { [modalId]: "someone else" }, source: "modal" });
+    await router.route(
+      modalId,
+      { userId: OWNER, guildId: GUILD, isOwner: true },
+      submitted.surface,
+    );
+
+    expect(harness.audits).toHaveLength(0);
+    expect(harness.counters).toHaveLength(0);
+    expect(submitted.messages.join("")).toContain("not the name");
+  });
+
+  test("the confirmation is one-time, and it belongs to the operator who asked", async () => {
+    const harness = fakeHarness();
+    const deps = fakeDeps({}, harness);
+    const router = new Router({ authorize: async () => ({ kind: "allow" }) });
+    registerPullHandlers(router, deps);
+
+    const reset = pullCommands(deps).find((command) => command.subcommand === "reset");
+    const result = await reset?.run({
+      guildId: GUILD,
+      userId: OWNER,
+      options: { user: USER },
+    });
+    const resetId = idsOf(result?.page).find((id) => id.includes(`:${PULL_ACTION.reset}:`));
+
+    const opened = fakeSurface();
+    await router.route(resetId!, { userId: OWNER, guildId: GUILD, isOwner: true }, opened.surface);
+    const modalId = opened.modals[0]?.customID ?? "";
+
+    const first = fakeSurface({ values: { [modalId]: "someone" }, source: "modal" });
+    await router.route(modalId, { userId: OWNER, guildId: GUILD, isOwner: true }, first.surface);
+    expect(harness.audits).toHaveLength(1);
+
+    const second = fakeSurface({ values: { [modalId]: "someone" }, source: "modal" });
+    await router.route(modalId, { userId: OWNER, guildId: GUILD, isOwner: true }, second.surface);
+    expect(harness.audits).toHaveLength(1);
+    expect(second.messages.join("")).toContain("expired");
   });
 });
 

@@ -4,11 +4,18 @@
 // it never retries a restricted account on its own, and it never waits with a
 // sleep: the shared limiter (src/discord/ratelimit.ts) does the waiting, by
 // reading discord's own headers.
+//
+// one retry exists. a join that answers 401 means the access token is stale,
+// not that the grant died, so the token is refreshed once and the join is
+// tried once more. a second 401, or a refresh that cannot hand back a token,
+// means the grant is dead: the account is unauthorized and the run moves on.
+// a transport failure is not a 401, so it is neither refreshed nor retried.
 
 import { getAccountCounter, upsertAccountCounter } from "../../db/queries/counters.ts";
 import { insertPullAttempt } from "../../db/queries/pull-attempts.ts";
-import type { Database } from "../../db/types.ts";
-import type { DiscordClient } from "../../discord/client.ts";
+import type { AccountCounterRow, Database } from "../../db/types.ts";
+import type { DiscordClient, RequestOptions } from "../../discord/client.ts";
+import { DiscordApiError } from "../../discord/errors.ts";
 import type { Logger } from "../../lib/log.ts";
 import {
   decideAttempt,
@@ -31,12 +38,18 @@ export interface PullEngineDeps {
   readonly db: Database;
   readonly log: Logger;
   readonly limits: PullLimits;
+  /**
+   * a fresh access token for a user, or null when there is none: the grant is
+   * dead, or the refresh could not reach discord. the engine calls it once,
+   * and only after a 401.
+   */
+  readonly refresh: (userId: string) => Promise<string | null>;
   readonly now?: () => Date;
 }
 
 export interface PullOutcomeReport {
   readonly userId: string;
-  readonly outcome: PullResult["outcome"] | "skipped";
+  readonly outcome: PullResult["outcome"] | "skipped" | "unauthorized";
   readonly errorCode: string | null;
   readonly errorBody: string | null;
   /** why it was skipped, when it was. */
@@ -77,20 +90,15 @@ export async function pullAccounts(
       continue;
     }
 
-    const result = await pullMember(deps, {
-      guildId: input.guildId,
-      userId: account.userId,
-      accessToken: account.accessToken,
-    });
-
-    const updated = await applyOutcome(deps, counter, now, input.guildId, account.userId, result);
+    const attempt = await attemptJoin(deps, input.guildId, account);
+    const updated = await applyOutcome(deps, counter, now, input.guildId, account.userId, attempt);
     await upsertAccountCounter(deps.db, updated);
 
     reports.push({
       userId: account.userId,
-      outcome: result.outcome,
-      errorCode: result.errorCode,
-      errorBody: result.errorBody,
+      outcome: attempt.unauthorized ? "unauthorized" : attempt.result.outcome,
+      errorCode: attempt.result.errorCode,
+      errorBody: attempt.result.errorBody,
       reason: null,
     });
   }
@@ -98,17 +106,92 @@ export async function pullAccounts(
   return reports;
 }
 
+/** the join, and the one retry a stale token earns. */
+async function attemptJoin(
+  deps: PullEngineDeps,
+  guildId: string,
+  account: PullAccount,
+): Promise<{ result: PullResult; unauthorized: boolean }> {
+  const watcher = watchStatus(deps.client);
+  const first = await pullMember(memberDeps(deps, watcher.client), {
+    guildId,
+    userId: account.userId,
+    accessToken: account.accessToken,
+  });
+  // a transport failure never reached discord, so it is not a 401: it is not a
+  // refresh trigger and it is not retried.
+  if (watcher.status() !== 401) return { result: first, unauthorized: false };
+
+  deps.log.info("pull join answered 401, the token is refreshed once", {
+    guildId,
+    userId: account.userId,
+  });
+
+  const fresh = await deps.refresh(account.userId);
+  if (fresh === null) {
+    // the grant is dead: the account is unauthorized and the run moves on.
+    return { result: first, unauthorized: true };
+  }
+
+  const second = await pullMember(memberDeps(deps, watcher.client), {
+    guildId,
+    userId: account.userId,
+    accessToken: fresh,
+  });
+  if (watcher.status() === 401) return { result: second, unauthorized: true };
+  return { result: second, unauthorized: false };
+}
+
+/** the deps pullMember needs. the engine's own deps carry more than that. */
+function memberDeps(
+  deps: PullEngineDeps,
+  client: DiscordClient,
+): { client: DiscordClient; db: Database; log: Logger; now?: () => Date } {
+  return { client, db: deps.db, log: deps.log, now: deps.now };
+}
+
+/**
+ * the status of the last refusal, so the engine can tell a 401 from a 403.
+ * the client is wrapped, not replaced: the limiter and the error parsing
+ * still apply, and only `request` is needed, so the wrapper carries that one
+ * method.
+ */
+function watchStatus(client: DiscordClient): {
+  client: DiscordClient;
+  status: () => number | null;
+} {
+  let last: number | null = null;
+  const wrapped = {
+    request: async <T>(options: RequestOptions): Promise<T> => {
+      last = null;
+      try {
+        return await client.request<T>(options);
+      } catch (error) {
+        if (error instanceof DiscordApiError) last = error.status;
+        throw error;
+      }
+    },
+  } as unknown as DiscordClient;
+  return { client: wrapped, status: () => last };
+}
+
 /** the counter row after the attempt. */
 async function applyOutcome(
   deps: PullEngineDeps,
-  counter: Awaited<ReturnType<typeof getAccountCounter>>,
+  counter: AccountCounterRow | null,
   now: Date,
   guildId: string,
   userId: string,
-  result: PullResult,
-): Promise<Awaited<ReturnType<typeof getAccountCounter>> & object> {
+  attempt: { result: PullResult; unauthorized: boolean },
+): Promise<AccountCounterRow> {
+  const result = attempt.result;
   if (result.outcome === "added" || result.outcome === "already_member") {
     return noteSuccess(counter, now, userId, guildId);
+  }
+  // a dead grant is a failure of the attempt, not a restriction: discord did
+  // not restrict the account, the token simply does not work any more.
+  if (attempt.unauthorized) {
+    return noteFailure(counter, now, deps.limits, userId, guildId, result.errorBody);
   }
   // a hard refusal from discord is a restriction, not a streak.
   if (isRestriction(result.errorCode)) {

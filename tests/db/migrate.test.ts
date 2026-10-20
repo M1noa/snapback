@@ -6,12 +6,15 @@ import { openDuckDB } from "../../src/db/duckdb.ts";
 import { migrate, SCHEMA_VERSION } from "../../src/db/migrate.ts";
 import type { Database, MetaRow } from "../../src/db/types.ts";
 
-// the 29 tables D4PLAN 5.1 defines. a table added to the schema and not to the
-// plan, or vice versa, is the drift this list exists to catch.
+// the tables the schema holds. D4PLAN 5.1 lists 29; guild_blacklist is the one
+// the blacklist research item added, and the plan needs a row for it. a table
+// added to the schema and not to the plan, or vice versa, is the drift this
+// list exists to catch.
 const EXPECTED_TABLES = [
   "meta",
   "guilds",
   "guild_admins",
+  "guild_blacklist",
   "jobs",
   "job_progress",
   "audit_log",

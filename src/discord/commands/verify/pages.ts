@@ -4,6 +4,7 @@
 // per scope, so a person reads what a scope costs before they tick it.
 
 import { ButtonStyles, type ContainerComponent } from "oceanic.js";
+import type { VerifyRecordRow } from "../../../db/types.ts";
 import { textDisplay } from "../../components/fields.ts";
 import { page } from "../../components/page.ts";
 import {
@@ -350,3 +351,99 @@ export function jobPage(input: {
 }
 
 export { VERIFY_ACTION, VERIFY_OBJECT, verifyCustomId };
+
+/** the token statuses a record can be in, in the order the page shows them. */
+const TOKEN_STATUSES = ["valid", "unauthorized", "revoked", "missing"] as const;
+
+export interface VerifyStats {
+  readonly records: number;
+  /** true when the list was cut short, so the count is a floor and not a total. */
+  readonly truncated: boolean;
+  readonly byTokenStatus: readonly { status: string; count: number }[];
+  readonly byCountry: readonly { country: string; count: number }[];
+  readonly firstAt: string | null;
+  readonly lastAt: string | null;
+}
+
+/**
+ * the counts for one server. numbers about what the server holds, and nothing
+ * about any one person: no name, no id, no address.
+ */
+export function verifyStats(rows: readonly VerifyRecordRow[], truncated = false): VerifyStats {
+  const statuses = new Map<string, number>();
+  const countries = new Map<string, number>();
+  let first: string | null = null;
+  let last: string | null = null;
+
+  for (const row of rows) {
+    statuses.set(row.token_status, (statuses.get(row.token_status) ?? 0) + 1);
+    const country = row.country_name ?? row.country_code;
+    if (country !== null && country !== "") {
+      countries.set(country, (countries.get(country) ?? 0) + 1);
+    }
+    const at = row.created_at;
+    if (at === "") continue;
+    if (first === null || at < first) first = at;
+    if (last === null || at > last) last = at;
+  }
+
+  const byCountry = [...countries.entries()]
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .slice(0, 5)
+    .map(([country, count]) => ({ country, count }));
+
+  return {
+    records: rows.length,
+    truncated,
+    byTokenStatus: TOKEN_STATUSES.map((status) => ({
+      status,
+      count: statuses.get(status) ?? 0,
+    })),
+    byCountry,
+    firstAt: first,
+    lastAt: last,
+  };
+}
+
+/** the numbers of this server. what an operator can act on. */
+export function statsPage(input: {
+  readonly guildId: string;
+  readonly stats: VerifyStats;
+  readonly backId: string;
+}): ContainerComponent {
+  const stats = input.stats;
+  const tokens = stats.byTokenStatus.map((row) => `${row.count} ${row.status}`).join(" · ");
+  const countries =
+    stats.byCountry.length === 0
+      ? "countries: none captured."
+      : `countries: ${stats.byCountry.map((row) => `${row.country} ${row.count}`).join(" · ")}`;
+
+  const sections = [
+    textDisplay(
+      `**${stats.records} record(s)** in this server${stats.truncated ? ", at least" : ""}.`,
+    ),
+    textDisplay(`tokens: ${tokens}`),
+    textDisplay(countries),
+    textDisplay(
+      stats.firstAt === null
+        ? "dates: no record yet."
+        : `first record ${relativeTimestamp(Date.parse(stats.firstAt))} · last ${
+            stats.lastAt === null ? "unknown" : relativeTimestamp(Date.parse(stats.lastAt))
+          }`,
+    ),
+    textDisplay(
+      "these are counts of what this server holds. they say nothing about any one person.",
+    ),
+  ];
+
+  return page({
+    state: "info",
+    title: "the numbers of this server",
+    sections,
+    controls: [
+      actionRow([
+        button({ id: input.backId, label: "back to the records", style: ButtonStyles.SECONDARY }),
+      ]),
+    ],
+  });
+}

@@ -14,7 +14,7 @@ import {
   USERS_SURFACE,
   type UsersDeps,
 } from "./deps.ts";
-import { exportPageFor, recordPageFor } from "./index.ts";
+import { blacklistPageFor, exportPageFor, recordPageFor } from "./index.ts";
 
 type Container = Parameters<HandlerContext["surface"]["reply"]>[0]["message"];
 
@@ -97,8 +97,22 @@ function refreshHandler(deps: UsersDeps): Handler {
   };
 }
 
+/** the blacklist list, asked for again. nothing here acts on an entry. */
+function blacklistHandler(deps: UsersDeps): Handler {
+  return async (ctx) => {
+    if (ctx.id.object !== USERS_OBJECT.blacklist) {
+      return await answer(
+        ctx,
+        failurePage("that control is not here", "this page has nothing to open."),
+      );
+    }
+    return await answer(ctx, await blacklistPageFor(deps, ctx.id.guild));
+  };
+}
+
 export function registerUsersHandlers(router: Router, deps: UsersDeps): void {
   router.register(USERS_SURFACE, USERS_ACTION.open, openHandler(deps));
   router.register(USERS_SURFACE, USERS_ACTION.export, exportHandler(deps));
   router.register(USERS_SURFACE, USERS_ACTION.refresh, refreshHandler(deps));
+  router.register(USERS_SURFACE, USERS_ACTION.blacklist, blacklistHandler(deps));
 }

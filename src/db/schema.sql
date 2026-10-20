@@ -40,6 +40,20 @@ CREATE TABLE IF NOT EXISTS guild_admins (
   PRIMARY KEY (guild_id, user_id)
 );
 
+-- per-guild blacklist entries. an entry is a signal shown to an operator, never
+-- an automatic ban: nothing is blocked on a match alone (D4PLAN 19.4).
+-- a table and not a blob in guilds.settings_json because the list grows, and
+-- the pull engine reads it on every join.
+CREATE TABLE IF NOT EXISTS guild_blacklist (
+  guild_id  VARCHAR,
+  kind      VARCHAR,
+  value     VARCHAR,
+  added_by  VARCHAR,
+  added_at  VARCHAR,
+  reason    TEXT,
+  PRIMARY KEY (guild_id, kind, value)
+);
+
 -- every long operation. resumable, one runner per kind, serialised per guild.
 CREATE TABLE IF NOT EXISTS jobs (
   id            VARCHAR PRIMARY KEY,
@@ -471,6 +485,9 @@ CREATE INDEX IF NOT EXISTS idx_guilds_removed_at
 
 CREATE INDEX IF NOT EXISTS idx_guild_admins_user
   ON guild_admins (user_id);
+
+CREATE INDEX IF NOT EXISTS idx_guild_blacklist_guild
+  ON guild_blacklist (guild_id, kind);
 
 CREATE INDEX IF NOT EXISTS idx_jobs_guild_status
   ON jobs (guild_id, status);

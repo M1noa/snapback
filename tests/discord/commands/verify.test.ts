@@ -116,12 +116,72 @@ function walk(node: unknown, visit: (n: { customID?: string }) => void): void {
   if (Array.isArray(record.components)) for (const child of record.components) walk(child, visit);
 }
 
+describe("the stats page", () => {
+  test("it shows the counts for this server", async () => {
+    const deps = fakeDeps({
+      records: async () => [
+        makeRecord({
+          user_id: "100000000000000001",
+          token_status: "valid",
+          country_code: "gb",
+          country_name: "United Kingdom",
+          created_at: "2024-01-01T00:00:00.000Z",
+        }),
+        makeRecord({
+          user_id: "100000000000000002",
+          token_status: "unauthorized",
+          country_code: "de",
+          country_name: "Germany",
+          created_at: "2024-03-01T00:00:00.000Z",
+        }),
+        makeRecord({
+          user_id: "100000000000000003",
+          token_status: "valid",
+          country_code: "gb",
+          country_name: "United Kingdom",
+          created_at: "2024-05-01T00:00:00.000Z",
+        }),
+      ],
+    });
+    const stats = verifyCommands(deps).find((command) => command.subcommand === "stats");
+    const result = await stats?.run({ guildId: GUILD, userId: OWNER, options: {} });
+    const text = JSON.stringify(result?.page);
+
+    expect(text).toContain("3 record(s)");
+    expect(text).toContain("2 valid");
+    expect(text).toContain("1 unauthorized");
+    expect(text).toContain("United Kingdom 2");
+    expect(text).toContain("Germany 1");
+  });
+
+  test("it says nothing about a person", async () => {
+    const deps = fakeDeps();
+    const stats = verifyCommands(deps).find((command) => command.subcommand === "stats");
+    const result = await stats?.run({ guildId: GUILD, userId: OWNER, options: {} });
+    const text = JSON.stringify(result?.page);
+
+    expect(text).not.toContain(USER);
+    expect(text).not.toContain("someone@example.com");
+    expect(text).not.toContain("someone");
+  });
+
+  test("an empty server says so", async () => {
+    const deps = fakeDeps({ records: async () => [] });
+    const stats = verifyCommands(deps).find((command) => command.subcommand === "stats");
+    const result = await stats?.run({ guildId: GUILD, userId: OWNER, options: {} });
+    const text = JSON.stringify(result?.page);
+
+    expect(text).toContain("0 record(s)");
+    expect(text).toContain("no record yet");
+  });
+});
+
 describe("the /verify command group", () => {
   test("every documented subcommand is registered, once", () => {
     const names = verifyCommands(fakeDeps())
       .map((command) => command.subcommand)
       .sort();
-    expect(names).toEqual(["delete", "panel", "record", "records", "refresh"]);
+    expect(names).toEqual(["delete", "panel", "record", "records", "refresh", "stats"]);
   });
 
   test("every page the group renders stays inside the component budget", async () => {

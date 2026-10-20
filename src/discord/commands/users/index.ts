@@ -13,7 +13,15 @@ import { getAccountCounter } from "../../../db/queries/counters.ts";
 import { listPendingExportsByGuild } from "../../../db/queries/exports.ts";
 import { listJobsByGuild } from "../../../db/queries/jobs.ts";
 import type { VerifyRecordRow } from "../../../db/types.ts";
+import { boundedText, oneOf } from "../../../lib/validate.ts";
 import { utcDay } from "../../../services/pull/counter.ts";
+import {
+  addEntry,
+  BLACKLIST_KINDS,
+  isValidEntryValue,
+  listEntries,
+  removeEntry,
+} from "../../../services/verify/blacklist.ts";
 import { failurePage } from "../../interactions/dispatch.ts";
 import { type CommandOption, OPTION_TYPE } from "../../registry.ts";
 import type { AutocompleteChoice, CommandContext, CommandResult, SlashCommand } from "../types.ts";
@@ -26,7 +34,7 @@ import {
   type UsersDeps,
   usersCustomId,
 } from "./deps.ts";
-import { exportPage, recordPage } from "./pages.ts";
+import { blacklistPage, exportPage, recordPage } from "./pages.ts";
 
 const GROUP = "users";
 
@@ -44,6 +52,37 @@ const SCOPE_OPTION: CommandOption = {
   type: OPTION_TYPE.string,
   required: false,
   choices: [{ name: "the records", value: "records" }],
+};
+
+const BLACKLIST_ACTION_OPTION: CommandOption = {
+  name: "action",
+  description: "what to do with the list",
+  type: OPTION_TYPE.string,
+  required: true,
+  choices: [
+    { name: "list the entries", value: "list" },
+    { name: "add an entry", value: "add" },
+    { name: "remove an entry", value: "remove" },
+  ],
+};
+
+const BLACKLIST_KIND_OPTION: CommandOption = {
+  name: "kind",
+  description: "what the value is",
+  type: OPTION_TYPE.string,
+  required: false,
+  choices: [
+    { name: "a user id", value: "user_id" },
+    { name: "an address hash", value: "ip_hash" },
+    { name: "an asn", value: "asn" },
+  ],
+};
+
+const BLACKLIST_VALUE_OPTION: CommandOption = {
+  name: "value",
+  description: "the value itself",
+  type: OPTION_TYPE.string,
+  required: false,
 };
 
 /** the choices for the "user" option: this guild's records, matched on the id
@@ -209,7 +248,117 @@ export function usersCommands(deps: UsersDeps): SlashCommand[] {
         };
       },
     },
+
+    {
+      group: GROUP,
+      subcommand: "blacklist",
+      description: "the entries you want to look at, for this server",
+      options: [BLACKLIST_ACTION_OPTION, BLACKLIST_KIND_OPTION, BLACKLIST_VALUE_OPTION],
+      async run(ctx: CommandContext): Promise<CommandResult> {
+        const denied = await refusal(deps, ctx);
+        if (denied !== null) return denied;
+
+        const action = String(ctx.options.action ?? "list");
+        if (action === "list") {
+          return { page: await blacklistPageFor(deps, ctx.guildId), ephemeral: true };
+        }
+
+        const kind = oneOf(ctx.options.kind, BLACKLIST_KINDS);
+        const value = boundedText(ctx.options.value, 256);
+        if (kind === null || value === null) {
+          return {
+            page: failurePage(
+              "an entry needs a kind and a value",
+              "the kind says what the value is: a user id, an address hash, or an asn.",
+              undefined,
+              "run `/users blacklist action:add kind:user_id value:123456789012345678`.",
+            ),
+            ephemeral: true,
+          };
+        }
+        if (!isValidEntryValue(kind, value)) {
+          return {
+            page: failurePage(
+              "that value does not fit the kind",
+              `a ${kind} entry does not hold that value.`,
+              undefined,
+              kind === "user_id"
+                ? "a user id is the digits of a discord id, with no @ and no name."
+                : "check the value against the kind and run it again.",
+            ),
+            ephemeral: true,
+          };
+        }
+
+        if (action === "add") {
+          const result = await addEntry(
+            { db: deps.db, now: deps.now },
+            {
+              guildId: ctx.guildId,
+              kind,
+              value,
+              addedBy: ctx.userId,
+              reason: null,
+            },
+          );
+          await deps.audit({
+            guildId: ctx.guildId,
+            actorUserId: ctx.userId,
+            action: "users.blacklist.added",
+            target: `${kind}:${value}`,
+            detail: { kind, value, added: result.added },
+          });
+          return {
+            page: await blacklistPageFor(
+              deps,
+              ctx.guildId,
+              result.added ? `added the ${kind} entry.` : `that ${kind} was already on the list.`,
+            ),
+            ephemeral: true,
+          };
+        }
+
+        const removed = await removeEntry(
+          { db: deps.db, now: deps.now },
+          { guildId: ctx.guildId, kind, value },
+        );
+        await deps.audit({
+          guildId: ctx.guildId,
+          actorUserId: ctx.userId,
+          action: "users.blacklist.removed",
+          target: `${kind}:${value}`,
+          detail: { kind, value, removed },
+        });
+        return {
+          page: await blacklistPageFor(
+            deps,
+            ctx.guildId,
+            removed ? `removed the ${kind} entry.` : `there was no ${kind} entry with that value.`,
+          ),
+          ephemeral: true,
+        };
+      },
+    },
   ];
+}
+
+/** the blacklist page for this server. the note says what just happened. */
+export async function blacklistPageFor(
+  deps: UsersDeps,
+  guildId: string,
+  note: string | null = null,
+): Promise<ReturnType<typeof blacklistPage>> {
+  const entries = await listEntries({ db: deps.db, now: deps.now }, guildId);
+  return blacklistPage({
+    guildId,
+    entries,
+    note,
+    refreshId: usersCustomId({
+      guildId,
+      object: USERS_OBJECT.blacklist,
+      action: USERS_ACTION.blacklist,
+    }),
+  });
 }
 
 /** the record page, for one record or for the list of them. the handlers and

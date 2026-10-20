@@ -26,6 +26,7 @@ export const RECORDS_LIMIT = 500;
 export const USERS_OBJECT = {
   record: "record",
   export: "export",
+  blacklist: "blacklist",
 } as const;
 
 /** the action slot, per object. a stray verb here is a boot failure, not a 404. */
@@ -36,6 +37,8 @@ export const USERS_ACTION = {
   export: "export",
   /** look at the export job again. */
   refresh: "refresh",
+  /** the blacklist list, on its own page. */
+  blacklist: "blacklist",
 } as const;
 
 export interface UsersCustomIdInput {
@@ -125,6 +128,7 @@ export const USERS_SPECS: readonly CustomIdSpec[] = [
   { surface: USERS_SURFACE, action: USERS_ACTION.open },
   { surface: USERS_SURFACE, action: USERS_ACTION.export },
   { surface: USERS_SURFACE, action: USERS_ACTION.refresh },
+  { surface: USERS_SURFACE, action: USERS_ACTION.blacklist },
 ];
 
 /** the address as the storage mode produced it. the hash mode keeps the hash,

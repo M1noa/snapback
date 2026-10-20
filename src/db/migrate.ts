@@ -8,7 +8,7 @@
 import type { Database, MetaRow } from "./types.ts";
 
 // bump only when a migration is added; schema.sql's shape is version 1.
-export const SCHEMA_VERSION = 2;
+export const SCHEMA_VERSION = 3;
 
 export interface Migration {
   readonly version: number;
@@ -25,6 +25,23 @@ export const MIGRATIONS: readonly Migration[] = [
   {
     version: 2,
     sql: "ALTER TABLE backups ADD COLUMN IF NOT EXISTS self_check_json TEXT",
+  },
+  // 3: the per-guild blacklist (D4PLAN 8). schema.sql carries the same table
+  // for a fresh install; this migration is what brings a database that predates
+  // it forward. it is a table and not a blob in guilds.settings_json: the list
+  // grows, and the pull engine reads it on every join. an entry is a signal
+  // for an operator, never a ban (19.4), so nothing here refuses anything.
+  {
+    version: 3,
+    sql: `CREATE TABLE IF NOT EXISTS guild_blacklist (
+      guild_id VARCHAR,
+      kind VARCHAR,
+      value VARCHAR,
+      added_by VARCHAR,
+      added_at VARCHAR,
+      reason TEXT,
+      PRIMARY KEY (guild_id, kind, value)
+    )`,
   },
 ];
 

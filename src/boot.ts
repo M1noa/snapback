@@ -12,8 +12,8 @@ import { env } from "./config/env.ts";
 import { close as closeDatabase, getDatabase, migrate, SCHEMA_VERSION } from "./db/index.ts";
 import { getAdmin } from "./db/queries/admins.ts";
 import { insertAudit } from "./db/queries/audit.ts";
-import { getBackup, listBackupsByGuild } from "./db/queries/backups.ts";
 import { countBackupMessagesByBackup } from "./db/queries/backup-messages.ts";
+import { getBackup, listBackupsByGuild } from "./db/queries/backups.ts";
 import { getGuildSettings, listActiveGuilds } from "./db/queries/guilds.ts";
 import { getRetentionPolicy } from "./db/queries/retention.ts";
 import { listPanelsForGuild } from "./db/queries/verify-panels.ts";
@@ -59,7 +59,7 @@ import { pullAccounts } from "./services/pull/index.ts";
 import { createRestoreJobHandler } from "./services/restore/job.ts";
 import { buildPlan } from "./services/restore/plan.ts";
 import { DEFAULT_RETENTION } from "./services/retention/index.ts";
-import { buildAuthorizeUrl, exchangeCode } from "./services/verify/oauth.ts";
+import { buildAuthorizeUrl, exchangeCode, refreshAccessToken } from "./services/verify/oauth.ts";
 import { createPanel, postPanel } from "./services/verify/panel.ts";
 import { addRecordEvent, upsertRecord } from "./services/verify/records.ts";
 import { createTokenStore } from "./services/verify/token-store.ts";
@@ -410,6 +410,15 @@ export async function boot(): Promise<Boot> {
   };
   registerUsersHandlers(router, usersDeps);
 
+  // a stale access token is refreshed once. the new one comes back out of the
+  // store, so it never reaches a log line or a page.
+  const pullRefresh = async (userId: string): Promise<string | null> => {
+    const refreshed = await refreshAccessToken(oauthDeps, userId);
+    if (!refreshed) return null;
+    const stored = await tokenStore.get(userId);
+    return stored?.accessToken ?? null;
+  };
+
   // the /pull group. a member is added only with a token they granted.
   const pullDeps: PullDeps = {
     db,
@@ -420,7 +429,7 @@ export async function boot(): Promise<Boot> {
     limits: {
       dailyLimit: env.limits.pullDailyLimitPerAccount,
       failureCooldownMinutes: env.limits.pullFailureCooldownMinutes,
-      restrictedHours: 24,
+      restrictedHours: env.limits.pullCooldownHours,
     },
     authorize: (userId, guildId) => isGuildAdmin(userId, guildId, "pull"),
     audit: async (input) => {
@@ -449,6 +458,7 @@ export async function boot(): Promise<Boot> {
       const stored = await tokenStore.get(userId);
       return stored?.accessToken ?? null;
     },
+    refresh: pullRefresh,
     pull: async (input) =>
       await pullAccounts(
         {
@@ -458,8 +468,9 @@ export async function boot(): Promise<Boot> {
           limits: {
             dailyLimit: env.limits.pullDailyLimitPerAccount,
             failureCooldownMinutes: env.limits.pullFailureCooldownMinutes,
-            restrictedHours: 24,
+            restrictedHours: env.limits.pullCooldownHours,
           },
+          refresh: pullRefresh,
         },
         input,
       ),

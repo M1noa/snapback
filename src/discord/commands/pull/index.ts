@@ -1,4 +1,4 @@
-// /pull (D4PLAN 8, 15): start and status.
+// /pull (D4PLAN 8, 15): start, status, counters, reset and config.
 //
 // the pull is a job: it makes one request per account, and that outlives an
 // interaction (AGENTS.md rule 7). the plan page says who will be tried and who
@@ -7,16 +7,18 @@
 // a member is added with a token they granted themselves. the bot never adds
 // anyone with its own token, and there is no join url anywhere here (D4PLAN 15.5).
 
-import { getAccountCounter } from "../../../db/queries/counters.ts";
+import { getAccountCounter, listAccountCounters } from "../../../db/queries/counters.ts";
 import { listJobsByGuild } from "../../../db/queries/jobs.ts";
 import { insertPullAttempt, listPullAttemptsByUser } from "../../../db/queries/pull-attempts.ts";
 import type { JobHandler } from "../../../services/jobs/runner.ts";
 import { decideAttempt, utcDay } from "../../../services/pull/counter.ts";
+import { failurePage } from "../../interactions/dispatch.ts";
 import { STATE_TTL_MS } from "../../interactions/state.ts";
 import { type CommandOption, OPTION_TYPE } from "../../registry.ts";
-import type { CommandContext, CommandResult, SlashCommand } from "../types.ts";
+import type { AutocompleteChoice, CommandContext, CommandResult, SlashCommand } from "../types.ts";
 import {
   PULL_ACTION,
+  PULL_LIMIT_SOURCES,
   PULL_OBJECT,
   PULL_SURFACE,
   type PullAccountView,
@@ -24,7 +26,16 @@ import {
   pullCustomId,
   refusal,
 } from "./deps.ts";
-import { type PullPlanLine, type PullReportLine, planPage, reportPage } from "./pages.ts";
+import {
+  configPage,
+  countersPage,
+  type PullCounterLine,
+  type PullPlanLine,
+  type PullReportLine,
+  planPage,
+  reportPage,
+  resetPage,
+} from "./pages.ts";
 
 const GROUP = "pull";
 
@@ -48,6 +59,14 @@ const START_OPTIONS: readonly CommandOption[] = [
     max_value: MAX_PER_RUN,
   },
 ];
+
+const USER_OPTION: CommandOption = {
+  name: "user",
+  description: "the account whose counters to clear",
+  type: OPTION_TYPE.string,
+  required: true,
+  autocomplete: true,
+};
 
 /** every /pull subcommand, one group. */
 export function pullCommands(deps: PullDeps): SlashCommand[] {
@@ -81,7 +100,92 @@ export function pullCommands(deps: PullDeps): SlashCommand[] {
         return { page: await reportPageFor(deps, ctx.guildId), ephemeral: true };
       },
     },
+
+    {
+      group: GROUP,
+      subcommand: "counters",
+      description: "today's attempts, successes and failures, per account",
+      async run(ctx: CommandContext): Promise<CommandResult> {
+        const denied = await refusal(deps, ctx);
+        if (denied !== null) return denied;
+        return { page: await countersPageFor(deps, ctx.guildId), ephemeral: true };
+      },
+    },
+
+    {
+      group: GROUP,
+      subcommand: "reset",
+      description: "clear one account's counters by hand",
+      options: [USER_OPTION],
+      async autocomplete(ctx) {
+        return await accountChoices(deps, ctx.guildId, ctx.value);
+      },
+      async run(ctx: CommandContext): Promise<CommandResult> {
+        const denied = await refusal(deps, ctx);
+        if (denied !== null) return denied;
+        const account = await findAccount(deps, ctx.guildId, String(ctx.options.user ?? ""));
+        if (account === null) {
+          return {
+            page: failurePage(
+              "no such account",
+              "nobody in this server matches that name, so there are no counters to clear.",
+              undefined,
+              "pick a name from the list, or run `/pull reset` again.",
+            ),
+            ephemeral: true,
+          };
+        }
+        return { page: await resetPageFor(deps, ctx.guildId, account), ephemeral: true };
+      },
+    },
+
+    {
+      group: GROUP,
+      subcommand: "config",
+      description: "the limits in force, and where they come from",
+      async run(ctx: CommandContext): Promise<CommandResult> {
+        const denied = await refusal(deps, ctx);
+        if (denied !== null) return denied;
+        return { page: configPageFor(deps, ctx.guildId), ephemeral: true };
+      },
+    },
   ];
+}
+
+/** the choices for the "user" option: this guild's accounts, matched on the id
+ *  and on the name. an id is never typed by hand (AGENTS.md quality of life). */
+async function accountChoices(
+  deps: PullDeps,
+  guildId: string,
+  value: string,
+): Promise<AutocompleteChoice[]> {
+  const accounts = await deps.accounts(guildId);
+  const needle = value.trim().toLowerCase();
+  return accounts
+    .filter((account) => {
+      if (needle === "") return true;
+      const name = (account.username ?? "").toLowerCase();
+      return account.userId.startsWith(needle) || name.includes(needle);
+    })
+    .slice(0, 25)
+    .map((account) => ({
+      name: `${account.username ?? "unknown"} ${account.userId}`.slice(0, 100),
+      value: account.userId,
+    }));
+}
+
+/** the account an operator named: by id when it is one, by name otherwise. */
+export async function findAccount(
+  deps: PullDeps,
+  guildId: string,
+  wanted: string,
+): Promise<PullAccountView | null> {
+  const needle = wanted.trim().toLowerCase();
+  if (needle === "") return null;
+  const accounts = await deps.accounts(guildId);
+  const byId = accounts.find((account) => account.userId === needle);
+  if (byId !== undefined) return byId;
+  return accounts.find((account) => (account.username ?? "").toLowerCase() === needle) ?? null;
 }
 
 /** the plan page. who will be tried, who will not, and why. the nonce is the
@@ -243,6 +347,116 @@ export async function reportPageFor(
           })
         : null,
     paused: latest?.status === "paused",
+  });
+}
+
+/** the counters. what each account may do today, and what is holding it. */
+export async function countersPageFor(
+  deps: PullDeps,
+  guildId: string,
+): Promise<ReturnType<typeof countersPage>> {
+  const now = new Date(deps.now());
+  const day = utcDay(now);
+  const accounts = await deps.accounts(guildId);
+
+  const lines: PullCounterLine[] = [];
+  let attempts = 0;
+  let successes = 0;
+  let failures = 0;
+  let restricted = 0;
+
+  for (const account of accounts) {
+    // one read for the account: today's row and the days before it.
+    const rows = await listAccountCounters(deps.db, account.userId, guildId);
+    const today = rows.find((row) => row.day === day) ?? null;
+
+    lines.push({
+      userId: account.userId,
+      username: account.username,
+      attempts: today?.attempts ?? 0,
+      successes: today?.successes ?? 0,
+      failures: today?.failures ?? 0,
+      restricted: today?.restricted ?? false,
+      restrictedReason: today?.restricted_reason ?? null,
+      cooldownUntil: today?.cooldown_until ?? null,
+      earlierDays: rows.filter((row) => row.day !== day).length,
+    });
+
+    attempts += today?.attempts ?? 0;
+    successes += today?.successes ?? 0;
+    failures += today?.failures ?? 0;
+    if (today?.restricted === true) restricted += 1;
+  }
+
+  return countersPage({
+    guildId,
+    lines,
+    totals: { attempts, successes, failures, restricted },
+    limits: deps.limits,
+    refreshId: pullCustomId({
+      guildId,
+      object: PULL_OBJECT.counters,
+      action: PULL_ACTION.refresh,
+    }),
+    configId: pullCustomId({
+      guildId,
+      object: PULL_OBJECT.counters,
+      action: PULL_ACTION.config,
+    }),
+    backId: pullCustomId({
+      guildId,
+      object: PULL_OBJECT.counters,
+      action: PULL_ACTION.back,
+    }),
+  });
+}
+
+/** the reset page. it says what goes, and it waits for the typed name. */
+export async function resetPageFor(
+  deps: PullDeps,
+  guildId: string,
+  account: PullAccountView,
+  done = false,
+): Promise<ReturnType<typeof resetPage>> {
+  const now = new Date(deps.now());
+  const counter = await getAccountCounter(deps.db, account.userId, guildId, utcDay(now));
+
+  return resetPage({
+    guildId,
+    userId: account.userId,
+    username: account.username,
+    attempts: counter?.attempts ?? 0,
+    successes: counter?.successes ?? 0,
+    failures: counter?.failures ?? 0,
+    restricted: counter?.restricted ?? false,
+    restrictedReason: counter?.restricted_reason ?? null,
+    cooldownUntil: counter?.cooldown_until ?? null,
+    confirmId: pullCustomId({
+      guildId,
+      object: PULL_OBJECT.reset,
+      action: PULL_ACTION.reset,
+      cursor: account.userId,
+    }),
+    backId: pullCustomId({
+      guildId,
+      object: PULL_OBJECT.reset,
+      action: PULL_ACTION.back,
+    }),
+    done,
+  });
+}
+
+/** the limits in force, and where they come from. */
+export function configPageFor(deps: PullDeps, guildId: string): ReturnType<typeof configPage> {
+  return configPage({
+    guildId,
+    limits: deps.limits,
+    sources: PULL_LIMIT_SOURCES,
+    backId: pullCustomId({
+      guildId,
+      object: PULL_OBJECT.config,
+      action: PULL_ACTION.back,
+    }),
   });
 }
 

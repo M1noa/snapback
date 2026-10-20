@@ -23,6 +23,12 @@ export const PULL_OBJECT = {
   plan: "plan",
   /** the page that says what happened. */
   report: "report",
+  /** the page that says what each account may do today. */
+  counters: "counters",
+  /** the page that clears one account's counters. */
+  reset: "reset",
+  /** the page that says which limits are in force. */
+  config: "config",
 } as const;
 
 /** the action slot, per object. a stray verb here is a boot failure, not a 404. */
@@ -39,6 +45,12 @@ export const PULL_ACTION = {
   refresh: "refresh",
   /** open the plan page. */
   plan: "plan",
+  /** the reset page's button: it asks for the typed confirmation. */
+  reset: "reset",
+  /** the typed confirmation's submit. it carries the one-time nonce. */
+  confirmReset: "confirm-reset",
+  /** open the page with the limits in force. */
+  config: "config",
 } as const;
 
 export interface PullCustomIdInput {
@@ -95,6 +107,13 @@ export interface PullDeps {
   readonly accounts: (guildId: string) => Promise<PullAccountView[]>;
   /** the token one person granted, or null. it never reaches a log line. */
   readonly token: (userId: string) => Promise<string | null>;
+  /**
+   * a fresh access token for a user, or null when the grant is dead. the
+   * engine calls it once, after a join answers 401. the wiring to
+   * refreshAccessToken and the token store lives here, so the token stays in
+   * one place (AGENTS.md rule 10).
+   */
+  readonly refresh: (userId: string) => Promise<string | null>;
   /** the engine: it asks the counters and pulls the accounts they allow. */
   readonly pull: (input: {
     guildId: string;
@@ -116,6 +135,46 @@ export async function refusal(deps: PullDeps, ctx: CommandContext): Promise<Comm
   };
 }
 
+/** where one limit comes from. the value is in PullLimits; this is the name,
+ *  the default and the range the environment parser enforces (D4PLAN 15.2). */
+export interface PullLimitSource {
+  readonly key: keyof PullLimits;
+  /** what the limit does, in the operator's words. */
+  readonly what: string;
+  readonly envVar: string;
+  readonly fallback: number;
+  readonly min: number;
+  readonly max: number;
+}
+
+/** the limits in force, and where they come from. */
+export const PULL_LIMIT_SOURCES: readonly PullLimitSource[] = [
+  {
+    key: "dailyLimit",
+    what: "attempts one account may make a day",
+    envVar: "PULL_DAILY_LIMIT_PER_ACCOUNT",
+    fallback: 100,
+    min: 100,
+    max: 500,
+  },
+  {
+    key: "failureCooldownMinutes",
+    what: "how long a burst of failures holds an account",
+    envVar: "PULL_FAILURE_COOLDOWN_MINUTES",
+    fallback: 60,
+    min: 1,
+    max: 1440,
+  },
+  {
+    key: "restrictedHours",
+    what: "how long a restricted account stays out",
+    envVar: "PULL_COOLDOWN_HOURS",
+    fallback: 24,
+    min: 1,
+    max: 720,
+  },
+];
+
 /** every (surface, action) pair this build produces from a pull control. */
 export const PULL_SPECS: readonly CustomIdSpec[] = [
   { surface: PULL_SURFACE, action: PULL_ACTION.confirm },
@@ -124,4 +183,7 @@ export const PULL_SPECS: readonly CustomIdSpec[] = [
   { surface: PULL_SURFACE, action: PULL_ACTION.pause },
   { surface: PULL_SURFACE, action: PULL_ACTION.refresh },
   { surface: PULL_SURFACE, action: PULL_ACTION.plan },
+  { surface: PULL_SURFACE, action: PULL_ACTION.reset },
+  { surface: PULL_SURFACE, action: PULL_ACTION.confirmReset },
+  { surface: PULL_SURFACE, action: PULL_ACTION.config },
 ];

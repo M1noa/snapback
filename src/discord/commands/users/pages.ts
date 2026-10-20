@@ -7,7 +7,7 @@
 
 import { ButtonStyles, type ContainerComponent } from "oceanic.js";
 import type { IpStorage } from "../../../config/parse-env.ts";
-import type { VerifyRecordRow } from "../../../db/types.ts";
+import type { GuildBlacklistRow, VerifyRecordRow } from "../../../db/types.ts";
 import { textDisplay } from "../../components/fields.ts";
 import { page } from "../../components/page.ts";
 import { actionRow, button, stringSelect } from "../../components/row.ts";
@@ -215,6 +215,62 @@ export function exportPage(input: ExportPageInput): ContainerComponent {
       actionRow([
         button({ id: input.backId, label: "back to the record", style: ButtonStyles.SECONDARY }),
       ]),
+    ],
+  });
+}
+
+/** how many entries the page shows before it says how many more there are. */
+export const BLACKLIST_LIST_SIZE = 25;
+
+export interface BlacklistPageInput {
+  readonly guildId: string;
+  readonly entries: readonly GuildBlacklistRow[];
+  /** what just happened, in the operator's words. */
+  readonly note: string | null;
+  readonly refreshId: string;
+}
+
+/**
+ * the blacklist of this server. the first line says what an entry is, because
+ * a page that only listed ids would read like a ban list (D4PLAN 19.4).
+ */
+export function blacklistPage(input: BlacklistPageInput): ContainerComponent {
+  const shown = input.entries.slice(0, BLACKLIST_LIST_SIZE);
+  const sections = [
+    textDisplay(
+      "**an entry is a signal for you, not a ban.** nothing is blocked on a match: no join is refused over a user id, an address hash or an asn. shared networks, student halls and mobile carriers all produce false matches, so the list is yours to read, not the bot's to act on.",
+    ),
+    ...(input.note === null ? [] : [textDisplay(input.note)]),
+    ...(input.entries.length === 0
+      ? [
+          textDisplay(
+            "the list is empty. add one with `/users blacklist action:add kind:user_id value:123456789012345678`.",
+          ),
+        ]
+      : shown.map((entry) =>
+          textDisplay(
+            `**${entry.kind}** \`${entry.value}\` · added ${relativeTimestamp(
+              Date.parse(entry.added_at),
+            )}${entry.added_by === null ? "" : ` by <@${entry.added_by}>`}${
+              entry.reason === null ? "" : ` · ${entry.reason}`
+            }`,
+          ),
+        )),
+  ];
+  if (input.entries.length > shown.length) {
+    sections.push(
+      textDisplay(
+        `-# and ${input.entries.length - shown.length} more that this page does not show.`,
+      ),
+    );
+  }
+
+  return page({
+    state: "info",
+    title: "the blacklist of this server",
+    sections,
+    controls: [
+      actionRow([button({ id: input.refreshId, label: "refresh", style: ButtonStyles.SECONDARY })]),
     ],
   });
 }

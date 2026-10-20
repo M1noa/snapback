@@ -584,7 +584,7 @@ describe("migration 2", () => {
     expect(columns.filter((name) => name === "self_check_json")).toHaveLength(1);
   });
 
-  test("a database created at version 1 migrates to 2 and keeps its rows", async () => {
+  test("a database created at version 1 migrates to the current version and keeps its rows", async () => {
     const v1Dir = mkdtempSync(join(tmpdir(), "snapback-mig2-"));
     const v1 = await openDuckDB(join(v1Dir, "v1.duckdb"));
     try {
@@ -612,7 +612,7 @@ describe("migration 2", () => {
         "SELECT value FROM meta WHERE key = 'schema_version'",
       );
       expect(Number(version[0]?.value)).toBe(SCHEMA_VERSION);
-      expect(SCHEMA_VERSION).toBe(2);
+      expect(SCHEMA_VERSION).toBe(3);
     } finally {
       await v1.close();
       rmSync(v1Dir, { recursive: true, force: true });

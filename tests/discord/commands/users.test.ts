@@ -87,19 +87,60 @@ interface FakeHarness {
   readonly enqueued: { kind: string; payload: unknown }[];
 }
 
+/**
+ * the rows a guild_blacklist query would return. the fake knows the three
+ * shapes the query module uses: the whole list of a guild, one entry, and a
+ * list of values to look for.
+ */
+function blacklistMatch(
+  sql: string,
+  params: unknown[] | undefined,
+  rows: readonly Record<string, unknown>[],
+): Record<string, unknown>[] {
+  const [guildId, kind, ...rest] = params ?? [];
+  const forGuild = rows.filter((row) => row.guild_id === guildId);
+  if (!sql.includes("kind = ?")) return forGuild;
+  const forKind = forGuild.filter((row) => row.kind === kind);
+  return sql.includes("value IN")
+    ? forKind.filter((row) => rest.includes(row.value))
+    : forKind.filter((row) => row.value === rest[0]);
+}
+
 function fakeDeps(
   overrides: Partial<UsersDeps> = {},
   harness: FakeHarness = { enqueued: [] },
 ): UsersDeps {
   const records = [makeRecord()];
   const jobRows: Record<string, unknown>[] = [];
+  const blacklistRows: Record<string, unknown>[] = [];
   return {
     db: {
-      query: async (sql: string) => {
+      query: async (sql: string, params?: unknown[]) => {
         if (sql.includes("FROM jobs")) return jobRows;
+        if (sql.includes("FROM guild_blacklist")) {
+          return blacklistMatch(sql, params, blacklistRows);
+        }
         return [];
       },
-      run: async () => {},
+      run: async (sql: string, params?: unknown[]) => {
+        if (sql.includes("INSERT INTO guild_blacklist")) {
+          blacklistRows.push({
+            guild_id: params?.[0],
+            kind: params?.[1],
+            value: params?.[2],
+            added_by: params?.[3],
+            added_at: params?.[4],
+            reason: params?.[5],
+          });
+        }
+        if (sql.includes("DELETE FROM guild_blacklist")) {
+          const index = blacklistRows.findIndex(
+            (row) =>
+              row.guild_id === params?.[0] && row.kind === params?.[1] && row.value === params?.[2],
+          );
+          if (index >= 0) blacklistRows.splice(index, 1);
+        }
+      },
     } as unknown as UsersDeps["db"],
     log: createLogger({ level: "error", dir: null }),
     jobs: {
@@ -149,7 +190,7 @@ describe("the /users command group", () => {
     const names = usersCommands(fakeDeps())
       .map((command) => command.subcommand)
       .sort();
-    expect(names).toEqual(["export", "lookup"]);
+    expect(names).toEqual(["blacklist", "export", "lookup"]);
   });
 
   test("every page the group renders stays inside the component budget", async () => {
@@ -290,6 +331,117 @@ describe("a record from another server", () => {
     expect(text).toContain("no such record");
     expect(text).not.toContain("elsewhere@example.com");
     expect(text).not.toContain("elsewhere");
+  });
+});
+
+describe("the blacklist", () => {
+  test("the page lists the entries", async () => {
+    const deps = fakeDeps();
+    const command = usersCommands(deps).find((item) => item.subcommand === "blacklist");
+
+    const added = await command?.run({
+      guildId: GUILD,
+      userId: OWNER,
+      options: { action: "add", kind: "user_id", value: USER },
+    });
+    expect(JSON.stringify(added?.page)).toContain("added the user_id entry");
+
+    const listed = await command?.run({
+      guildId: GUILD,
+      userId: OWNER,
+      options: { action: "list" },
+    });
+    const text = JSON.stringify(listed?.page);
+    expect(text).toContain(USER);
+    expect(text).toContain("not a ban");
+  });
+
+  test("adding one needs the kind and the value", async () => {
+    const deps = fakeDeps();
+    const command = usersCommands(deps).find((item) => item.subcommand === "blacklist");
+
+    const withoutKind = await command?.run({
+      guildId: GUILD,
+      userId: OWNER,
+      options: { action: "add", value: USER },
+    });
+    expect(JSON.stringify(withoutKind?.page)).toContain("an entry needs a kind and a value");
+
+    const withoutValue = await command?.run({
+      guildId: GUILD,
+      userId: OWNER,
+      options: { action: "add", kind: "user_id" },
+    });
+    expect(JSON.stringify(withoutValue?.page)).toContain("an entry needs a kind and a value");
+  });
+
+  test("an entry is removed", async () => {
+    const deps = fakeDeps();
+    const command = usersCommands(deps).find((item) => item.subcommand === "blacklist");
+    await command?.run({
+      guildId: GUILD,
+      userId: OWNER,
+      options: { action: "add", kind: "ip_hash", value: "sha256-of-an-address" },
+    });
+
+    const removed = await command?.run({
+      guildId: GUILD,
+      userId: OWNER,
+      options: { action: "remove", kind: "ip_hash", value: "sha256-of-an-address" },
+    });
+    expect(JSON.stringify(removed?.page)).toContain("removed the ip_hash entry");
+
+    const listed = await command?.run({
+      guildId: GUILD,
+      userId: OWNER,
+      options: { action: "list" },
+    });
+    expect(JSON.stringify(listed?.page)).not.toContain("sha256-of-an-address");
+  });
+
+  test("the page says that nothing is blocked on a match", async () => {
+    const deps = fakeDeps();
+    const command = usersCommands(deps).find((item) => item.subcommand === "blacklist");
+    const listed = await command?.run({
+      guildId: GUILD,
+      userId: OWNER,
+      options: { action: "list" },
+    });
+    expect(JSON.stringify(listed?.page)).toContain("nothing is blocked on a match");
+  });
+
+  test("the page's button is handled", async () => {
+    const deps = fakeDeps();
+    const router = new Router({ authorize: async () => ({ kind: "allow" }) });
+    registerUsersHandlers(router, deps);
+    const command = usersCommands(deps).find((item) => item.subcommand === "blacklist");
+    const listed = await command?.run({
+      guildId: GUILD,
+      userId: OWNER,
+      options: { action: "list" },
+    });
+    const ids: string[] = [];
+    walk(listed?.page, (node) => {
+      if (typeof node.customID === "string") ids.push(node.customID);
+    });
+    const refresh = ids.find((id) => id.includes(`:${USERS_OBJECT.blacklist}:`));
+    expect(refresh).toBeDefined();
+
+    const messages: string[] = [];
+    const outcome = await router.route(
+      refresh!,
+      { userId: OWNER, guildId: GUILD, isOwner: true },
+      {
+        reply: async (request) => {
+          messages.push(JSON.stringify(request.message));
+        },
+        openModal: async () => {},
+        values: {},
+        source: "component",
+      },
+    );
+    expect(outcome.kind).toBe("handled");
+    expect(messages.join("")).toContain("the blacklist of this server");
   });
 });
 
