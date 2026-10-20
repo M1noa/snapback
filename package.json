@@ -17,7 +17,8 @@
     "typecheck": "tsc --noEmit",
     "lint": "biome check .",
     "lint:fix": "biome check --write .",
-    "check": "bun run typecheck && bun run lint && bun test"
+    "check": "bun run typecheck && bun run lint && bun run test",
+    "preview": "bun run scripts/preview/server.ts"
   },
   "dependencies": {
     "@duckdb/node-api": "^1.5.6-r.1",
