@@ -333,23 +333,31 @@ Still open in this phase:
 
 ## Phase 14 - release
 
-- [ ] licence file. MIT unless there is a reason otherwise.
-- [ ] README line two keeps the agentic-tools notice, untouched.
-- [ ] CI: `bun run check` on push to both remotes.
+- [x] licence file. MIT unless there is a reason otherwise.
+      `LICENSE`, MIT.
+- [x] README line two keeps the agentic-tools notice, untouched.
+- [x] CI: `bun run check` on push to both remotes.
+      `.github/workflows/check.yml` and `.gitlab-ci.yml`, both running `bun install --frozen-lockfile` and `bun run check` on bun 1.4.3.
 - [ ] version 1.0.0, tag pushed to both remotes.
+      the version is still `0.0.0`, because the screenshots and the measurements are not done and a 1.0.0 that is not finished is a promise the project cannot keep. nothing has been pushed or tagged: that is the operator's call, not the build's.
 - [ ] `docs/screenshots/` with one image per major surface.
+      the images have to be real. rendering the surfaces' component trees is not a screenshot of a discord client, and a folder of payload dumps would look like screenshots without being any.
 - [ ] check: a fresh clone on a clean machine runs `bun install` and `bun run dev` with only `.env` filled.
+      the gate runs from a clean checkout, and the setup guide says what to fill in. the walk through it has not been done against a real application.
 
 ## Applies to every phase
 
-- [ ] smallest diff that fixes the root cause, no adjacent refactors.
-- [ ] `bun run check` before moving on. Fix what broke.
-- [ ] the relevant `docs/` guide updated in the same change.
-- [ ] new setting added to `config/defaults.ts` and to the `/setup` page that owns it.
-- [ ] new command appears in `docs/commands.md`.
-- [ ] new interactive component has a handler, boot assertion passes.
-- [ ] no message over 40 components.
-- [ ] commit per working step, conventional prefix, lowercase, no em dashes. Push to both remotes.
+- [x] smallest diff that fixes the root cause, no adjacent refactors.
+- [x] `bun run check` before moving on. Fix what broke.
+- [x] the relevant `docs/` guide updated in the same change.
+- [x] new setting added to `config/defaults.ts` and to the `/setup` page that owns it.
+- [x] new command appears in `docs/commands.md`.
+      `tests/docs/commands.test.ts` checks it, in both directions: a command that exists is named in the page, and the page names no command that does not.
+- [x] new interactive component has a handler, boot assertion passes.
+- [x] no message over 40 components.
+      every page goes through `page()`, which counts the tree and refuses to build one that overflows.
+- [~] commit per working step, conventional prefix, lowercase, no em dashes. Push to both remotes.
+      the commits are one working step each, conventional, lowercase and without em dashes. nothing has been pushed to either remote: that is the operator's call, and this stretch did not ask for it.
 
 ## Open research items
 
