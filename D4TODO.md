@@ -270,8 +270,8 @@ Still open in this phase:
       `src/services/pull/member.ts`. the call is the one the plan names, with the member's own token in the body, and the roles are never touched: the bot adds the member, it does not decide what they may do.
 - [x] parse the json body always. Map on `(status, code)`, never guess.
       a `DiscordApiError` carries discord's own code and message, and the attempt row keeps both.
-- [~] refresh once on 401, retry the join once, then mark stale and continue.
-      a 401 is not handled yet. the token store knows how to refresh, and the engine does not call it before a join, so an expired token fails the join instead of being refreshed first.
+- [x] refresh once on 401, retry the join once, then mark stale and continue.
+      the engine refreshes the token once and retries the join once. a transport failure is neither a 401 nor a refresh trigger, so a blip does not burn a refresh.
 - [x] `services/pull/counter.ts`: daily per-account counter from `account_counters`, `cooldown_until` on hitting the limit, skip before attempting while cooling down.
 - [x] consecutive failure burst trips `PULL_FAILURE_COOLDOWN_MINUTES` even under the daily cap.
       three failures in a row put the account on a cooldown, whatever the daily cap says.
@@ -282,8 +282,8 @@ Still open in this phase:
 - [~] `/pull start` dry run lists who would be added and writes nothing.
       the pull group is being written; the engine is there, and the dry run is the one piece the command has to add.
 - [x] `pull_attempts` row per attempt; `account_counters` row per account per day.
-- [~] `/pull counters` page per account, `/pull reset` with confirm and audit, `/pull config`, `/pull status`.
-      the pull group covers `start` and `status`. the counters page, the reset and the config are not written.
+- [x] `/pull counters` page per account, `/pull reset` with confirm and audit, `/pull config`, `/pull status`.
+      the reset is a destructive action: its own page, a typed confirmation, a one-time nonce and an audit row.
 - [~] check: mixed valid and revoked set produces exact counts, a 429 is honoured from the mock, the account at the limit is skipped without an attempt.
       the counters and the one join call are tested (`tests/services/pull/`). a mixed set, a 429 and the skip-without-an-attempt are not.
 
@@ -291,12 +291,12 @@ Still open in this phase:
 
 - [x] `services/scheduler/index.ts`, tick every 15 s, due work read from the db not from memory timers. `AUTOMATION_ENABLED=false` disables it entirely.
       `src/services/scheduler/index.ts`. the tick reads what is due from the rows, so a restart does not lose a schedule, and the tick never overlaps itself.
-- [~] auto backup per guild interval, auto restore on join, token refresh sweep, counter reset at 00:05 UTC, interaction-state TTL sweep, orphan webhook sweep, export expiry sweep.
-      the auto backup per guild interval works, and the interaction-state sweep and the export expiry sweep run on the tick. the auto restore on join, the token refresh sweep, the counter reset at 00:05 UTC and the orphan webhook sweep are not on the tick yet.
+- [x] auto backup per guild interval, auto restore on join, token refresh sweep, counter reset at 00:05 UTC, interaction-state TTL sweep, orphan webhook sweep, export expiry sweep.
+      every one of them runs on the tick, and each reports what it did through the tick's result. the orphan webhook sweep leaves a webhook alone while a running job is using it.
 - [x] retention from `retention_policies`: `keep_days`, `keep_count`, `keep_kind`. Never deletes the newest backup, never one referenced by a running job, pre-restore first.
       `src/services/retention/index.ts`. the plan is separate from the deletion, so the dry run writes nothing, and the plan says why each backup is on the list.
-- [~] export: backup json, records json, records csv, full dump. Tokens excluded by construction in the serialiser.
-      the backup json is written, and it carries no token because the serialiser has nothing to redact: a backup row and its children hold ids, names, urls and bitfield strings. the records json, the records csv and the full dump are not written.
+- [x] export: backup json, records json, records csv, full dump. Tokens excluded by construction in the serialiser.
+      all four are written. none of them carries a token, and the records file names the ip storage mode so a reader can tell a hash from an address.
 - [x] exported files land in `data/exports/` with `expires_at` (24h default) and are swept.
       the export job writes the row with its expiry, and the tick sweeps the expired files and their rows.
 - [~] check: an auto backup fires on schedule, pruning never leaves zero backups, an export contains no token under any option combination.
