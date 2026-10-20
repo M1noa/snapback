@@ -1,6 +1,11 @@
 // the browser fingerprint the web page posts (D4PLAN 14.2). one json blob, one
 // column, so a new field is a new key and not a migration.
 //
+// the fixed list is documented in D4PLAN 14.2 and on the /legal page: nothing
+// outside it is asked for, and no canvas, webgl or font probe exists in this
+// build (the plan bans them, and a count of media devices is the honest limit
+// of what a page may look at without permission).
+//
 // the payload is whatever the browser sent, so nothing in it is trusted. every
 // field is checked for its own type, a field of the wrong type is dropped
 // rather than coerced, and a string is length-capped before it is stored.
@@ -9,33 +14,77 @@
 export interface Fingerprint {
   readonly ua: string | null;
   readonly lang: string | null;
+  readonly languages: string | null;
+  readonly platform: string | null;
   readonly tz: string | null;
+  readonly tzOffset: number | null;
   readonly screen: string | null;
+  readonly avail: string | null;
   readonly colorDepth: number | null;
   readonly viewport: string | null;
+  readonly dpr: number | null;
   readonly touch: boolean | null;
-  readonly platform: string | null;
+  readonly maxTouchPoints: number | null;
+  readonly hwConcurrency: number | null;
+  readonly deviceMemory: number | null;
   readonly cookies: boolean | null;
   readonly doNotTrack: string | null;
-  readonly canvas: string | null;
-  readonly webgl: string | null;
-  readonly audio: string | null;
-  readonly fonts: number | null;
-  readonly battery: boolean | null;
+  readonly reducedMotion: boolean | null;
+  readonly colorScheme: "dark" | "light" | null;
+  readonly connection: string | null;
+  readonly referrer: string | null;
+  readonly audioDevices: number | null;
+  readonly capturedAt: number | null;
 }
 
 /** the cap on a stored string. a user agent is the longest value here and it
  *  fits well inside it. */
 const MAX_STRING = 256;
 
+/** the fixed list in plain words, in the order the interface reads. the /legal
+ *  page shows exactly this, so the page, the plan and the code cannot drift. */
+export const FINGERPRINT_FIELD_LABELS = [
+  "user agent",
+  "platform",
+  "screen size",
+  "available screen size",
+  "viewport size",
+  "colour depth",
+  "device pixel ratio",
+  "language",
+  "languages",
+  "time zone",
+  "time zone offset",
+  "device memory",
+  "thread count",
+  "touch",
+  "touch points",
+  "cookies allowed",
+  "do-not-track state",
+  "reduced-motion preference",
+  "colour scheme",
+  "connection type",
+  "media device count",
+  "referring page",
+  "time it was read",
+] as const;
+
 /** the cap on a value in the summary. the summary is a line on a page, not a
  *  copy of the payload. */
 const MAX_BRIEF = 32;
 
-/** the bounds of the two numeric fields. a colour depth outside 1..64 and a
- *  font count outside 0..1000 are not measurements. */
-const COLOR_DEPTH_RANGE = { min: 1, max: 64 } as const;
-const FONTS_RANGE = { min: 0, max: 1000 } as const;
+/** the bounds of the numeric fields. a colour depth outside 1..64, a touch
+ *  count beyond a screen's fingers, a clock behind the year 1970 or past the
+ *  year 2096, a pixel ratio under half, and a device count beyond a hundred
+ *  are not measurements. */
+const RANGES = {
+  colorDepth: { min: 1, max: 64 },
+  tzOffset: { min: -900, max: 900 },
+  maxTouchPoints: { min: 0, max: 20 },
+  hwConcurrency: { min: 1, max: 128 },
+  audioDevices: { min: 0, max: 100 },
+  capturedAt: { min: 0, max: 4e12 },
+} as const;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -81,9 +130,34 @@ function readNumber(
   return value;
 }
 
+/** the two float fields. dpr and device memory are both positive reals, and
+ *  both carry a documented ceiling, so the bounds keep a fake value out. */
+function readFloat(
+  payload: Record<string, unknown>,
+  key: string,
+  range: { readonly min: number; readonly max: number },
+): number | null {
+  const value = payload[key];
+  if (typeof value !== "number" || !Number.isFinite(value)) return null;
+  if (value <= range.min || value > range.max) return null;
+  return value;
+}
+
 function readBoolean(payload: Record<string, unknown>, key: string): boolean | null {
   const value = payload[key];
   return typeof value === "boolean" ? value : null;
+}
+
+/** a field whose value must be one of a few words. anything else is dropped. */
+function readOneOf<V extends string>(
+  payload: Record<string, unknown>,
+  key: string,
+  allowed: readonly V[],
+): V | null {
+  const value = payload[key];
+  return typeof value === "string" && (allowed as readonly string[]).includes(value)
+    ? (value as V)
+    : null;
 }
 
 /** the payload read into the fields the record keeps. anything else is
@@ -93,19 +167,27 @@ export function readFingerprint(payload: unknown): Fingerprint {
   return {
     ua: readString(object, "ua"),
     lang: readString(object, "lang"),
-    tz: readString(object, "tz"),
-    screen: readString(object, "screen"),
-    colorDepth: readNumber(object, "colorDepth", COLOR_DEPTH_RANGE),
-    viewport: readString(object, "viewport"),
-    touch: readBoolean(object, "touch"),
+    languages: readString(object, "languages"),
     platform: readString(object, "platform"),
+    tz: readString(object, "tz"),
+    tzOffset: readNumber(object, "tzOffset", RANGES.tzOffset),
+    screen: readString(object, "screen"),
+    avail: readString(object, "avail"),
+    colorDepth: readNumber(object, "colorDepth", RANGES.colorDepth),
+    viewport: readString(object, "viewport"),
+    dpr: readFloat(object, "dpr", { min: 0.001, max: 32 }),
+    touch: readBoolean(object, "touch"),
+    maxTouchPoints: readNumber(object, "maxTouchPoints", RANGES.maxTouchPoints),
+    hwConcurrency: readNumber(object, "hwConcurrency", RANGES.hwConcurrency),
+    deviceMemory: readFloat(object, "deviceMemory", { min: 0.001, max: 8 }),
     cookies: readBoolean(object, "cookies"),
     doNotTrack: readString(object, "doNotTrack"),
-    canvas: readString(object, "canvas"),
-    webgl: readString(object, "webgl"),
-    audio: readString(object, "audio"),
-    fonts: readNumber(object, "fonts", FONTS_RANGE),
-    battery: readBoolean(object, "battery"),
+    reducedMotion: readBoolean(object, "reducedMotion"),
+    colorScheme: readOneOf(object, "colorScheme", ["dark", "light"]),
+    connection: readString(object, "connection"),
+    referrer: readString(object, "referrer"),
+    audioDevices: readNumber(object, "audioDevices", RANGES.audioDevices),
+    capturedAt: readNumber(object, "capturedAt", RANGES.capturedAt),
   };
 }
 
@@ -134,7 +216,11 @@ export function fingerprintSummary(fingerprint: Fingerprint): string {
   if (tz !== null) parts.push(tz);
   if (fingerprint.touch !== null) parts.push(fingerprint.touch ? "touch" : "no touch");
   if (fingerprint.colorDepth !== null) parts.push(`${fingerprint.colorDepth}-bit colour`);
-  if (fingerprint.fonts !== null) parts.push(`${fingerprint.fonts} fonts`);
+  if (fingerprint.hwConcurrency !== null) parts.push(`${fingerprint.hwConcurrency} cores`);
+  if (fingerprint.deviceMemory !== null) parts.push(`${fingerprint.deviceMemory} gb`);
+  if (fingerprint.maxTouchPoints !== null) parts.push(`${fingerprint.maxTouchPoints} fingers`);
+  if (fingerprint.dpr !== null) parts.push(`${fingerprint.dpr}x`);
+  if (fingerprint.colorScheme !== null) parts.push(fingerprint.colorScheme);
   if (parts.length === 0) return "no fingerprint captured";
   return parts.join(" · ");
 }

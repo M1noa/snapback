@@ -12,3 +12,4 @@ data/
 *.duckdb.wal
 *.mmdb
 *.log
+.hallmark/

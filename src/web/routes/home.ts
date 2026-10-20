@@ -4,10 +4,12 @@
 //
 // the fingerprint is collected by the same page and kept in a cookie, so the
 // callback can read it without a second endpoint. the script touches nothing but
-// the browser's own properties, and it makes no request to anyone.
+// the browser's own properties, and it makes no request to anyone. a page with
+// no server attached runs no script at all: nothing is collected for nobody.
 
 import { getGuild } from "../../db/queries/guilds.ts";
 import type { Database } from "../../db/types.ts";
+import { fingerprintScript } from "../capture/fingerprint-script.ts";
 import type { RequestContext, WebResponse } from "../router.ts";
 import { homePage } from "../views/pages.ts";
 
@@ -19,29 +21,6 @@ export interface HomeDeps {
   readonly disclosureUrl: string;
   readonly revokeUrl: string;
 }
-
-// the fingerprint the browser sends. it is read out of a cookie on the callback,
-// and it is a set of the browser's own properties: no request leaves the page.
-const FINGERPRINT_SCRIPT = `<script>
-(function () {
-  try {
-    var payload = {
-      ua: navigator.userAgent,
-      lang: navigator.language,
-      tz: Intl.DateTimeFormat().resolvedOptions().timeZone,
-      screen: screen.width + "x" + screen.height,
-      colorDepth: screen.colorDepth,
-      viewport: innerWidth + "x" + innerHeight,
-      touch: "ontouchstart" in window,
-      platform: navigator.platform,
-      cookies: navigator.cookieEnabled,
-      doNotTrack: navigator.doNotTrack,
-      fonts: 0
-    };
-    document.cookie = "x-track=" + encodeURIComponent(JSON.stringify(payload)) + "; path=/; max-age=900; SameSite=Lax";
-  } catch (e) { /* a browser that says no gets no fingerprint. */ }
-})();
-</script>`;
 
 export function homeRoute(deps: HomeDeps) {
   return async (ctx: RequestContext): Promise<WebResponse> => {
@@ -72,6 +51,10 @@ export function homeRoute(deps: HomeDeps) {
         ? null
         : `${ctx.path}?guild=${encodeURIComponent(guildId)}&start=1`;
 
+    // the script runs only when a server is attached: a page collecting
+    // nothing collects nothing for nobody.
+    const script = verifyUrl === null ? "" : fingerprintScript();
+
     return {
       status: 200,
       headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" },
@@ -82,7 +65,7 @@ export function homeRoute(deps: HomeDeps) {
         verifyUrl,
         disclosureUrl: deps.disclosureUrl,
         revokeUrl: deps.revokeUrl,
-      }).replace("</body>", `${FINGERPRINT_SCRIPT}</body>`),
+      }).replace("</body>", `${script}</body>`),
     };
   };
 }

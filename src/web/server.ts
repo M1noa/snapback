@@ -5,8 +5,10 @@
 
 import type { Database } from "../db/types.ts";
 import type { Logger } from "../lib/log.ts";
+import { WEB_CSP } from "./capture/fingerprint-script.ts";
 import type { IpCaptureOptions } from "./capture/ip.ts";
 import { createRouter, type RequestContext, type Route, type WebResponse } from "./router.ts";
+import { page } from "./views/pages.ts";
 
 export interface ServerDeps {
   readonly db: Database;
@@ -24,6 +26,18 @@ export interface ServerDeps {
   readonly port: number;
   readonly hostname?: string;
 }
+
+/** the headers every response carries. the csp allows exactly one inline
+ *  script (ours, allowed by hash), inline css, and discord's icon cdn. a route
+ *  that sets a header replaces the default line for line, and no route does. */
+const BASE_HEADERS: Readonly<Record<string, string>> = {
+  "content-security-policy": WEB_CSP,
+  "referrer-policy": "no-referrer",
+  "x-content-type-options": "nosniff",
+  "x-frame-options": "DENY",
+  "cross-origin-opener-policy": "same-origin",
+  "permissions-policy": "camera=(), microphone=(), geolocation=(), interest-cohort=()",
+};
 
 export interface WebServer {
   readonly port: number;
@@ -68,11 +82,17 @@ export function createServer(deps: ServerDeps): WebServer {
         response = {
           status: 500,
           headers: { "content-type": "text/html; charset=utf-8" },
-          body: "<!doctype html><html><body><h1>something went wrong</h1></body></html>",
+          body: page({
+            title: "something went wrong",
+            body: `<p class="eyebrow">error</p><h1>something went wrong</h1><p class="lede">try again in a moment. if it keeps happening, tell the person who sent you here.</p>`,
+          }),
         };
       }
 
-      return new Response(response.body, { status: response.status, headers: response.headers });
+      return new Response(response.body, {
+        status: response.status,
+        headers: { ...BASE_HEADERS, ...response.headers },
+      });
     },
   });
 

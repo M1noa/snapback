@@ -3,6 +3,8 @@
 // everything that is not one of them is a 404 with a plain page. there is no
 // directory listing, and no error page that leaks a path.
 
+import { page } from "./views/pages.ts";
+
 export interface RequestContext {
   readonly method: string;
   readonly path: string;
@@ -28,15 +30,16 @@ export interface RouterOptions {
   readonly legal: Route;
 }
 
-const NOT_FOUND = `<!doctype html>
-<html lang="en"><head><meta charset="utf-8"><title>not found</title></head>
-<body><h1>not found</h1><p>that page does not exist.</p></body></html>`;
-
+/** the 404 body. the same shell every page uses, and no path in it: a 404 that
+ *  echoes the path is its own bug. */
 export function notFound(): WebResponse {
   return {
     status: 404,
     headers: { "content-type": "text/html; charset=utf-8" },
-    body: NOT_FOUND,
+    body: page({
+      title: "not found",
+      body: `<p class="eyebrow">not found</p><h1>not found</h1><p class="lede">that page does not exist. the verification link a server generates is the one to use.</p>`,
+    }),
   };
 }
 

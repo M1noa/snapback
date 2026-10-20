@@ -17,11 +17,19 @@ describe("readFingerprint", () => {
       platform: "MacIntel",
       cookies: true,
       doNotTrack: "1",
-      canvas: "9f2c",
-      webgl: "1a3b",
-      audio: "77c0",
-      fonts: 12,
-      battery: true,
+      languages: "en-GB,en-US",
+      tzOffset: 0,
+      avail: "1920x1036",
+      dpr: 2,
+      maxTouchPoints: 0,
+      hwConcurrency: 8,
+      deviceMemory: 8,
+      reducedMotion: false,
+      colorScheme: "dark",
+      connection: "4g",
+      referrer: "",
+      audioDevices: 2,
+      capturedAt: 1750000000000,
     });
     expect(fingerprint.ua).toBe("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)");
     expect(fingerprint.lang).toBe("en-GB");
@@ -33,35 +41,47 @@ describe("readFingerprint", () => {
     expect(fingerprint.platform).toBe("MacIntel");
     expect(fingerprint.cookies).toBe(true);
     expect(fingerprint.doNotTrack).toBe("1");
-    expect(fingerprint.canvas).toBe("9f2c");
-    expect(fingerprint.webgl).toBe("1a3b");
-    expect(fingerprint.audio).toBe("77c0");
-    expect(fingerprint.fonts).toBe(12);
-    expect(fingerprint.battery).toBe(true);
+    expect(fingerprint.languages).toBe("en-GB,en-US");
+    expect(fingerprint.tzOffset).toBe(0);
+    expect(fingerprint.avail).toBe("1920x1036");
+    expect(fingerprint.dpr).toBe(2);
+    expect(fingerprint.hwConcurrency).toBe(8);
+    expect(fingerprint.deviceMemory).toBe(8);
+    expect(fingerprint.colorScheme).toBe("dark");
+    expect(fingerprint.connection).toBe("4g");
+    expect(fingerprint.audioDevices).toBe(2);
+    expect(fingerprint.capturedAt).toBe(1750000000000);
   });
 
   test("drops a field of the wrong type instead of coercing it", () => {
     const fingerprint = readFingerprint({
       ua: 12345,
       colorDepth: "24",
-      fonts: "12",
+      tzOffset: "zero",
       touch: "yes",
       cookies: 1,
-      battery: "true",
+      colorScheme: "midnight",
+      dpr: "2",
+      deviceMemory: "8",
     });
     expect(fingerprint.ua).toBeNull();
     expect(fingerprint.colorDepth).toBeNull();
-    expect(fingerprint.fonts).toBeNull();
     expect(fingerprint.touch).toBeNull();
     expect(fingerprint.cookies).toBeNull();
-    expect(fingerprint.battery).toBeNull();
+    expect(fingerprint.colorScheme).toBeNull();
+    expect(fingerprint.dpr).toBeNull();
+    expect(fingerprint.deviceMemory).toBeNull();
   });
 
   test("drops a number that is not a measurement", () => {
     expect(readFingerprint({ colorDepth: 0 }).colorDepth).toBeNull();
     expect(readFingerprint({ colorDepth: 999 }).colorDepth).toBeNull();
-    expect(readFingerprint({ fonts: -1 }).fonts).toBeNull();
-    expect(readFingerprint({ fonts: 24.5 }).fonts).toBeNull();
+    expect(readFingerprint({ hwConcurrency: 0 }).hwConcurrency).toBeNull();
+    expect(readFingerprint({ hwConcurrency: 24.5 }).hwConcurrency).toBeNull();
+    expect(readFingerprint({ deviceMemory: 16 }).deviceMemory).toBeNull();
+    expect(readFingerprint({ dpr: 0 }).dpr).toBeNull();
+    expect(readFingerprint({ audioDevices: 999 }).audioDevices).toBeNull();
+    expect(readFingerprint({ capturedAt: -5 }).capturedAt).toBeNull();
   });
 
   test("caps a long string", () => {
@@ -81,7 +101,6 @@ describe("readFingerprint", () => {
     const fingerprint = readFingerprint({});
     expect(fingerprint.ua).toBeNull();
     expect(fingerprint.touch).toBeNull();
-    expect(fingerprint.fonts).toBeNull();
   });
 
   test("reads a payload that is not an object as all null", () => {
@@ -99,10 +118,10 @@ describe("readFingerprint", () => {
   });
 
   test("reads a base64 json payload", () => {
-    const encoded = Buffer.from(JSON.stringify({ ua: "a", fonts: 3 }), "utf8").toString("base64");
+    const encoded = Buffer.from(JSON.stringify({ ua: "a", dpr: 1.5 }), "utf8").toString("base64");
     const fingerprint = readFingerprint(encoded);
     expect(fingerprint.ua).toBe("a");
-    expect(fingerprint.fonts).toBe(3);
+    expect(fingerprint.dpr).toBe(1.5);
   });
 });
 

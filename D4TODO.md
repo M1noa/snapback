@@ -222,7 +222,7 @@ Still open in this phase:
 - [x] IP capture (`web/capture/ip.ts`): `CF-Connecting-IP` in cloudflare mode, else right-to-left walk of `X-Forwarded-For` with `TRUSTED_PROXY_DEPTH`, else socket. Validate every candidate, never store a bare string.
       every candidate is checked with `net.isIP` before it is believed, and the stored form is the hash or the ciphertext unless the operator asked for the plain address.
 - [x] fingerprint (`web/capture/fingerprint.ts`): attributes collected client side and posted with the nonce, stored on the pending row and merged on callback.
-      the landing page's script collects the browser's own properties into a short-lived cookie and the callback reads it back. a field with the wrong type is dropped, not coerced.
+      the landing page's script collects the browser's own properties into a short-lived cookie and the callback reads it back. the field list is the fixed one in `D4PLAN.md` 14.2 (no canvas, no WebGL, no font probe), the parser drops a field with the wrong type or a number outside its range, and `/legal` renders the same list the code reads, so the three cannot drift. a landing page with no server attached runs no script.
 - [x] tokens encrypted before insert, never returned to a command.
       `src/services/verify/token-store.ts`. a store with no key refuses to hold a token, with one fixed `SB_` code.
 - [x] panel builder per `D4PLAN.md` 10.3: channel select, modal for title and description, colour, thumbnail, button label and style, scope checkboxes with consequence lines, `?guild=` link button.

@@ -8,6 +8,7 @@ import type { Database } from "../../db/types.ts";
 import { DiscordApiError, formatDiscordError } from "../../discord/errors.ts";
 import type { Logger } from "../../lib/log.ts";
 import { readFingerprint } from "../capture/fingerprint.ts";
+import { COOKIE_NAME } from "../capture/fingerprint-script.ts";
 import { type CapturedIp, captureIp, type IpCaptureOptions } from "../capture/ip.ts";
 import type { RequestContext, WebResponse } from "../router.ts";
 import { resultPage } from "../views/pages.ts";
@@ -125,7 +126,7 @@ function fingerprintFrom(cookie: string | null): unknown {
   if (cookie === null) return null;
   for (const part of cookie.split(";")) {
     const [name, ...rest] = part.trim().split("=");
-    if (name !== "x-track") continue;
+    if (name !== COOKIE_NAME) continue;
     try {
       return JSON.parse(decodeURIComponent(rest.join("=")));
     } catch {

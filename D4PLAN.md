@@ -1004,6 +1004,8 @@ Five routes, one process, no framework.
 
 Everything else 404s with a plain page. No directory listing, no error page that leaks a path.
 
+Every response, including the 404 and the 500, carries the same security headers: a content security policy that allows exactly one inline script (the landing page's, allowed by a hash of it), inline CSS, and guild icons from `cdn.discordapp.com`; `X-Frame-Options: DENY` with `frame-ancestors 'none'`; `Referrer-Policy: no-referrer`; `X-Content-Type-Options: nosniff`; `COOP: same-origin`; and a `Permissions-Policy` that denies camera, microphone, geolocation, and FLoC. HSTS is left to the proxy that terminates TLS (`docs/privacy.md` says why). The landing page with no `?guild=` runs no inline script at all.
+
 ### 13.2 The panel
 
 The bot posts the panel into the chosen channel from `10.3`. Default when the owner picks "link button": a Link-style button whose URL is `{PUBLIC_BASE_URL}/?guild={guild_id}`. A Link button needs no interaction handler, works for users who have never interacted with the bot, and survives a bot restart. The alternative (an interactive button that replies with an ephemeral OAuth URL) is offered because it lets the bot pre-check whether the user already has a record, and it is the better experience for the "you are already verified, want to re-verify" case. Both are supported; the panel stores which.
@@ -1105,19 +1107,25 @@ The reference `[r]` posts a base64 JSON `x-track` header with `os`, `browser`, `
 | `system_locale` | `navigator.language` | |
 | `timezone` | `Intl.DateTimeFormat().resolvedOptions().timeZone` | |
 | `timezone_offset_min` | `new Date().getTimezoneOffset()` | |
-| `screen` | `screen.width/height/availWidth/availHeight` | |
+| `screen` | `screen.width/height/availWidth/availHeight` | stored as `screen` and `avail` |
 | `device_pixel_ratio` | `devicePixelRatio` | |
-| `device_aspect_ratio` | derived | |
+| `device_aspect_ratio` | derived | the ratio is recoverable from screen and ratio, so it is not a separate column |
 | `color_depth` | `screen.colorDepth` | |
+| `viewport` | `.innerWidth/innerHeight` at open | |
 | `hardware_concurrency` | `navigator.hardwareConcurrency` | |
 | `device_memory_gb` | `navigator.deviceMemory` | Chromium only, often absent |
-| `max_touch_points` | `navigator.maxTouchPoints` | mobile vs desktop signal |
+| `max_touch_points` | `navigator.maxTouchPoints` | mobile vs desktop signal, plus the boolean the summary uses |
 | `platform` | `navigator.platform` | |
+| `cookie_state` | `navigator.cookieEnabled` | |
+| `do_not_track` | `navigator.doNotTrack` | |
+| `reduced_motion` | `matchMedia('prefers-reduced-motion: reduce')` | |
+| `colour_scheme` | `matchMedia('prefers-color-scheme: dark')` | |
+| `connection_type` | `navigator.connection.effectiveType` | Chromium only |
 | `audio_devices` | `enumerateDevices()` filtered to `audioinput`/`audiooutput`, **counts and labels only where the browser already permits it** | without permission the labels are empty strings and the count is still meaningful |
 | `referrer`, `referring_domain` | `document.referrer` | |
 | `captured_at` | client clock | stored alongside the server clock so a skew is visible |
 
-Nothing here is a canvas, WebGL, or font probe. Those are what a fingerprinting library does, they are the part that makes a collection legally and ethically indefensible, and they add nothing the bot needs. `[+]` the user asked for "fingerprinting items"; this is the defensible subset and the doc says why the rest is excluded.
+Nothing here is a canvas, WebGL, or font probe. Those are what a fingerprinting library does, they are the part that makes a collection legally and ethically indefensible, and they add nothing the bot needs. `[+]` the user asked for "fingerprinting items"; this is the defensible subset and the doc says why the rest is excluded. The list is fixed: a new field means an edit to this table, to the parser's typed reader, and to the `/legal` page, or it does not exist (`src/web/capture/fingerprint.ts`).
 
 The payload travels as a base64 JSON header on the `/callback` request, so it is captured even if the page's JS fails before an XHR would have fired. The callback also accepts it as a query parameter for the no-JS path, with a length cap.
 

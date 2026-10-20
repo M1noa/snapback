@@ -25,13 +25,19 @@ The bot's own settings, the panel, and the record are separate things. `guilds.s
 
 ## The browser's own properties
 
-The landing page runs one inline script. It reads the browser's own properties, writes them into a cookie, and makes no request to anyone. The callback reads the cookie back.
+The landing page runs one inline script. It reads the browser's own properties, writes them into a cookie, and makes no request to anyone. The callback reads the cookie back. A page with no server attached runs no script at all.
 
-Those properties are: the user agent, the language, the timezone, the screen size, the colour depth, the viewport size, whether the device reports touch, the platform, whether cookies are enabled, the do-not-track header, and a font count that the page sends as zero. Nothing else. There is no canvas probe, no WebGL probe, and no request to a third party.
+The fields are the fixed list in `D4PLAN.md` 14.2: the user agent, the platform, the screen size and how much of it the browser can use, the viewport size, the colour depth and the device pixel ratio, the language and the languages, the timezone and its offset, the device memory, the thread count, the touch state and the touch points, whether cookies and do-not-track are on, the reduced-motion preference, the colour scheme, the connection type, the number of media devices the browser already permits the page to count, the page that sent you here, and the moment it was read. The full list, in the same words, is on `/legal`.
 
-Only a fixed list of fields is stored. A field of the wrong type is dropped, and a string is length-capped before it is stored.
+There is no canvas probe, no WebGL probe, and no font probe. The plan bans all three: they are what a fingerprinting library does, they are the part that makes a collection indefensible, and they add nothing the bot needs.
+
+Only a fixed list of fields is stored. A field of the wrong type is dropped rather than coerced, a string is length-capped, and a number outside its documented range is dropped.
 
 The fingerprint goes into the verification's entry on the record's timeline rather than into a column of its own. The `referrer` and `user_agent` columns on the record are never filled.
+
+## The site's own defences
+
+Every page the server answers, including the 404 and the 500, carries the same security headers (`src/web/server.ts`): a content security policy that allows exactly one inline script (the landing page's, allowed by a hash of it in `src/web/capture/fingerprint-script.ts`), inline CSS, and guild icons from `cdn.discordapp.com`; `X-Frame-Options: DENY` with `frame-ancestors 'none'` so no other site can frame a verification page; `Referrer-Policy: no-referrer`; `X-Content-Type-Options: nosniff`; `COOP: same-origin`; and a `Permissions-Policy` that denies camera, microphone, geolocation, and FLoC outright. `Strict-Transport-Security` is deliberately absent: the server may sit behind plain HTTP while an operator sets TLS up, and a cached HSTS header on such a deployment is unrecoverable from the client side. Set it at the proxy that terminates TLS.
 
 ## The address you connected from
 

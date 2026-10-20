@@ -63,7 +63,7 @@ describe("the pages", () => {
       revokeUrl: "/revoke",
     });
     expect(html).toContain("the guild");
-    expect(html).toContain("Verify");
+    expect(html).toContain("verify with discord");
     expect(html).toContain("/legal");
   });
 
@@ -76,7 +76,7 @@ describe("the pages", () => {
       disclosureUrl: "/legal",
       revokeUrl: "/revoke",
     });
-    expect(html).toContain("not linked to a server");
+    expect(html).toContain("this link has no server");
   });
 
   test("a value in a page is escaped", () => {
@@ -112,8 +112,14 @@ describe("the pages", () => {
   });
 
   test("the disclosure page renders the text the operator wrote", () => {
-    const html = legalPage({ disclosure: "we store the address you came from." });
+    const html = legalPage({
+      disclosure: "we store the address you came from.",
+      disclosureUrl: "/legal",
+      revokeUrl: "/revoke",
+      fingerprintFields: ["user agent", "device memory"],
+    });
     expect(html).toContain("we store the address you came from.");
+    expect(html).toContain("device memory");
   });
 
   test("escape covers the five characters that matter", () => {

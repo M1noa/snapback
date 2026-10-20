@@ -13,6 +13,7 @@ One row per adversary in `D4PLAN.md` 19.1, with where the mitigation lives. A ro
 | A leaked log channel | read emails and addresses | the logger redacts before anything is written, and the capture never puts an address in a log field | `src/lib/log.ts`, `src/lib/redact.ts`; `tests/lib/` |
 | The operator's own database backup | read tokens | the key is outside the database, so restoring the database alone does not expose a token | `src/services/verify/token-store.ts` (the key comes from `env.privacy.encryptionKey`) |
 | Someone who guesses the export path | download exports | the web layer serves five routes and none of them is an export; the files are read from disk by the operator | `src/web/router.ts`; `src/services/export/job.ts` |
+| A site that frames the verification page | harvest a person's clicks (`clickjacking`) | every response carries `X-Frame-Options: DENY` with `frame-ancestors 'none'`, plus a content security policy that allows exactly one inline script by hash and no forms, so a foreign page cannot frame the flow or run code in it | `src/web/server.ts` (`BASE_HEADERS`), `src/web/capture/fingerprint-script.ts` (`WEB_CSP`); `tests/web/server.test.ts` ("every response carries the security headers") |
 
 ## What the pass found
 

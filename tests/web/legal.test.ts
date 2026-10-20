@@ -30,15 +30,21 @@ describe("the legal route", () => {
     const response = await legalRoute(deps)(ctx("guild=123"));
     expect(response.status).toBe(200);
     expect(response.body).toContain("identify, email, guilds.join");
-    // and says what else is recorded, and that nothing happens before consent.
+    // and says what else is recorded, and says what the browser reading really is.
     expect(response.body).toContain("address your browser connects from");
-    expect(response.body).toContain("Nothing is captured before you approve");
+    expect(response.body).toContain("no canvas, WebGL, or font probe");
+    expect(response.body).toContain("before you press anything");
+    expect(response.body).toContain("consent screen says yes");
+    // the fixed field list is on the page (D4PLAN 14.2): no claim less than the build collects.
+    expect(response.body).toContain("device memory");
+    expect(response.body).toContain("time zone");
   });
 
   test("with no panel the page does not claim a scope list", async () => {
     const response = await legalRoute(deps)(ctx("guild=999"));
     expect(response.body).not.toContain("identify, email");
-    expect(response.body).toContain("Nothing is captured before you approve");
+    expect(response.body).toContain("before you press anything");
+    expect(response.body).toContain("consent screen says yes");
   });
 
   test("with no guild the page still answers, and still says what is recorded", async () => {
