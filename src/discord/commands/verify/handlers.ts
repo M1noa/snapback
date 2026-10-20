@@ -14,7 +14,7 @@ import {
   type VerifyDeps,
   verifyCustomId,
 } from "./deps.ts";
-import { deletePage, jobPage, panelPage } from "./pages.ts";
+import { deletePage, jobPage, panelPage, startPage } from "./pages.ts";
 import { recordPageFor, recordsPageFor } from "./support.ts";
 
 type Container = Parameters<HandlerContext["surface"]["reply"]>[0]["message"];
@@ -23,6 +23,10 @@ async function answer(ctx: HandlerContext, message: Container): Promise<HandlerR
   await ctx.surface.reply({ message, ephemeral: true, update: true });
   return { kind: "reply" };
 }
+
+/** the object slots the surface owns. anything else in the object slot is a
+ *  panel id, because a panel's button carries its own id. */
+const KNOWN_OBJECTS: ReadonlySet<string> = new Set(Object.values(VERIFY_OBJECT));
 
 /** the value a select submitted, or null. */
 function selected(ctx: HandlerContext, id: string): string | null {
@@ -46,6 +50,23 @@ function checked(ctx: HandlerContext, id: string): string[] {
  */
 function openHandler(deps: VerifyDeps): Handler {
   return async (ctx) => {
+    // the panel's own button carries the panel id in the object slot, so an
+    // object that is none of ours is a panel: pressing it starts the flow.
+    if (!KNOWN_OBJECTS.has(ctx.id.object)) {
+      const url = await deps.authorizeUrl(ctx.id.guild, ctx.id.object);
+      if (url === null) {
+        return await answer(
+          ctx,
+          failurePage(
+            "the verification flow is off",
+            "the bot has no oauth client secret, so it cannot start the flow.",
+            undefined,
+            "set OAUTH_CLIENT_SECRET in .env and restart.",
+          ),
+        );
+      }
+      return await answer(ctx, startPage({ guildId: ctx.id.guild, url }));
+    }
     if (ctx.id.object === VERIFY_OBJECT.panel) {
       const existing = await deps.panel(ctx.id.guild);
       const channelId = selected(ctx, ctx.id.raw) ?? existing?.channel_id ?? null;

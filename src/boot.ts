@@ -355,6 +355,18 @@ export async function boot(): Promise<Boot> {
       await deleteRecord(db, input.guildId, input.userId);
       return { deleted: true, what: input.scope === "all" ? "everything" : "the record" };
     },
+    authorizeUrl: async (guildId, panelId) => {
+      if (env.oauth.clientSecret === "") return null;
+      const panels = await listPanelsForGuild(db, guildId);
+      const panel = panels.find((row) => row.panel_id === panelId);
+      if (panel === undefined) return null;
+      const built = await buildAuthorizeUrl(oauthDeps, {
+        guildId,
+        userId: "panel",
+        scopes: panel.scopes_json,
+      });
+      return built.url;
+    },
     refresh: async () => ({ checked: 0, refreshed: 0, failed: 0 }),
     ownerId: env.discord.ownerId,
     authorize: (userId, guildId) => isGuildAdmin(userId, guildId, "verify"),

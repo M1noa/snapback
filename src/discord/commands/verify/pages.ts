@@ -332,6 +332,32 @@ export function deletePage(input: {
   });
 }
 
+/**
+ * the page the panel's button answers with: a link to discord's consent screen.
+ * the state was minted when the url was built, so the consent screen comes back
+ * to the callback with a state that is still valid.
+ */
+export function startPage(input: { guildId: string; url: string }): ContainerComponent {
+  return page({
+    state: "info",
+    title: "verify yourself",
+    sections: [
+      textDisplay(
+        "this server uses snapback to verify you. discord will ask what it may share, and nothing is captured before you approve it.",
+      ),
+    ],
+    controls: [
+      actionRow([
+        button({
+          url: input.url,
+          label: "continue to discord",
+          style: ButtonStyles.LINK,
+        }),
+      ]),
+    ],
+  });
+}
+
 /** the job's page. a refresh runs as a job, because a sweep outlives an
  *  interaction. */
 export function jobPage(input: {

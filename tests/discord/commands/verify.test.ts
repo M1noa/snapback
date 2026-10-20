@@ -101,6 +101,7 @@ function fakeDeps(overrides: Partial<VerifyDeps> = {}): VerifyDeps {
       deleted.push({ userId: input.userId, scope: input.scope });
       return { deleted: true, what: input.scope };
     },
+    authorizeUrl: async () => "https://discord.com/oauth2/authorize?state=x",
     refresh: async () => ({ checked: 0, refreshed: 0, failed: 0 }),
     ownerId: OWNER,
     authorize: async () => true,
@@ -279,5 +280,42 @@ describe("the custom id builder", () => {
     });
     expect(id.split(":")).toHaveLength(6);
     expect(parseCustomId(id)?.cursor).toBe("");
+  });
+});
+
+describe("the panel's own button", () => {
+  test("pressing it answers with a link to the consent screen", async () => {
+    const router = new Router({ authorize: async () => ({ kind: "allow" }) });
+    const deps = fakeDeps();
+    registerVerifyHandlers(router, deps);
+
+    // the button's custom id carries the panel id in the object slot, so an
+    // object that is none of the surface's own is a panel.
+    const id = verifyCustomId({
+      guildId: GUILD,
+      object: "a-panel-id",
+      action: "open",
+    });
+    const replies: string[] = [];
+    await router.route(
+      id,
+      {
+        userId: USER,
+        guildId: GUILD,
+        isOwner: false,
+      },
+      {
+        values: {},
+        source: "component",
+        async reply(request) {
+          replies.push(JSON.stringify(request.message));
+        },
+        async openModal() {},
+      },
+    );
+
+    expect(replies).toHaveLength(1);
+    // the link to discord's consent screen, and the state that came with it.
+    expect(replies[0]).toContain("https://discord.com/oauth2/authorize");
   });
 });

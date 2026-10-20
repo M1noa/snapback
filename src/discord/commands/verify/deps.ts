@@ -74,6 +74,12 @@ export interface VerifyDeps {
     userId: string;
     scope: "record" | "ip" | "token" | "all";
   }) => Promise<{ deleted: boolean; what: string }>;
+  /**
+   * the url that starts the flow for a panel, or null when the oauth is off.
+   * the panel's own button carries the panel id, so the handler can find the
+   * panel and ask for its url.
+   */
+  readonly authorizeUrl: (guildId: string, panelId: string) => Promise<string | null>;
   /** the refresh sweep, over the records that are due. */
   readonly refresh: (
     guildId: string,
