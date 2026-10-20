@@ -65,6 +65,10 @@ export interface PanelInput {
   readonly scopes: readonly string[];
   readonly redirectUri: string;
   readonly enabled: boolean;
+  /** the accent, as a number. absent means the guild's own colour. */
+  readonly color?: number;
+  /** a thumbnail for the panel. absent means none. */
+  readonly thumbnailUrl?: string | null;
 }
 
 export interface PanelDeps {
@@ -181,8 +185,8 @@ export async function createPanel(deps: PanelDeps, input: PanelInput): Promise<V
     message_id: null,
     title,
     description: boundedText(input.description, 2000),
-    color: await panelColour(deps.db, guildId),
-    thumbnail_url: null,
+    color: input.color ?? (await panelColour(deps.db, guildId)),
+    thumbnail_url: input.thumbnailUrl ?? null,
     button_label: buttonLabel,
     button_style: input.buttonStyle,
     scopes_json: [...input.scopes],

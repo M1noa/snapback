@@ -157,6 +157,14 @@ async function waitForReady(gateway: Gateway, log: Logger): Promise<boolean> {
   });
 }
 
+/** the accent the operator typed, as the number the row holds. a colour that is
+ *  not a hex number is left out, and the guild's own colour stands. */
+function hexToNumber(hex: string): number | undefined {
+  const trimmed = hex.trim().replace(/^#/, "");
+  if (!/^[0-9a-f]{6}$/i.test(trimmed)) return undefined;
+  return Number.parseInt(trimmed, 16);
+}
+
 export async function boot(): Promise<Boot> {
   const startedAt = Date.now();
   const log = createLogger({ level: env.app.logLevel });
@@ -334,6 +342,8 @@ export async function boot(): Promise<Boot> {
           scopes: input.scopes,
           redirectUri: `${env.web.publicBaseUrl}/callback`,
           enabled: true,
+          color: hexToNumber(input.color),
+          thumbnailUrl: input.thumbnailUrl,
         },
       );
       await postPanel({ client, db, log }, panel);

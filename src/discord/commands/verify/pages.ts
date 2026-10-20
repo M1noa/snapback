@@ -59,6 +59,7 @@ export interface PanelPageInput {
   readonly channelSelectId: string;
   readonly submitId: string;
   readonly scopeGroupId: string;
+  readonly detailsId: string;
   readonly backId: string;
 }
 
@@ -106,6 +107,11 @@ export function panelPage(input: PanelPageInput): ContainerComponent {
         }),
       ]),
       actionRow([
+        button({
+          id: input.detailsId,
+          label: "the copy and the look",
+          style: ButtonStyles.SECONDARY,
+        }),
         button({ id: input.submitId, label: "post the panel", style: ButtonStyles.PRIMARY }),
         button({ id: input.backId, label: "cancel", style: ButtonStyles.SECONDARY }),
       ]),

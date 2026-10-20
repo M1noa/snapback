@@ -4,6 +4,7 @@
 // it, the page says how much of the record goes, and the operator types the
 // person's name before it happens.
 
+import type { VerifyPanelRow } from "../../../db/types.ts";
 import { label, textInput } from "../../components/row.ts";
 import { failurePage } from "../../interactions/dispatch.ts";
 import type { Handler, HandlerContext, HandlerResult, Router } from "../../interactions/router.ts";
@@ -155,13 +156,16 @@ function panelSubmitHandler(deps: VerifyDeps): Handler {
     }
 
     const existing = await deps.panel(ctx.id.guild);
+    const details = readDetails(ctx, existing);
     const panel = await deps.savePanel({
       guildId: ctx.id.guild,
       channelId,
-      title: existing?.title ?? "server verification",
-      description: existing?.description ?? "",
+      title: details.title,
+      description: details.description,
       scopes,
-      buttonLabel: existing?.button_label ?? "Verify",
+      buttonLabel: details.buttonLabel,
+      color: details.color,
+      thumbnailUrl: details.thumbnailUrl,
     });
     await deps.audit({
       guildId: ctx.id.guild,
@@ -188,6 +192,173 @@ function panelSubmitHandler(deps: VerifyDeps): Handler {
       }),
     );
   };
+}
+
+/**
+ * the panel's copy and its look. the button opens a modal with the fields, and
+ * the modal's submit saves them, so the panel can say what it is for in the
+ * operator's own words (D4PLAN 10.3).
+ */
+function detailsHandler(deps: VerifyDeps): Handler {
+  return async (ctx) => {
+    const existing = await deps.panel(ctx.id.guild);
+    const id = verifyCustomId({
+      guildId: ctx.id.guild,
+      object: VERIFY_OBJECT.panel,
+      action: VERIFY_ACTION.details,
+    });
+
+    if (ctx.surface.source !== "modal") {
+      await ctx.surface.openModal({
+        customID: id,
+        title: "the panel's copy",
+        components: [
+          label({
+            label: "the title",
+            description: "the line at the top of the panel.",
+            component: textInput({
+              id: `${id}:title`,
+              style: 1,
+              required: true,
+              maxLength: 80,
+              value: existing?.title ?? "server verification",
+            }),
+          }),
+          label({
+            label: "what it is for",
+            description:
+              "the copy under the title. say what the server wants the verification for.",
+            component: textInput({
+              id: `${id}:description`,
+              style: 2,
+              required: false,
+              maxLength: 1000,
+              value: existing?.description ?? "",
+            }),
+          }),
+          label({
+            label: "the button's label",
+            description: "what the button says. keep it to the point.",
+            component: textInput({
+              id: `${id}:label`,
+              style: 1,
+              required: true,
+              maxLength: 80,
+              value: existing?.button_label ?? "Verify",
+            }),
+          }),
+          label({
+            label: "the accent",
+            description: "a hex colour, like 5865f2. the panel is this colour.",
+            component: textInput({
+              id: `${id}:color`,
+              style: 1,
+              required: false,
+              maxLength: 6,
+              value: hexOf(existing?.color ?? null),
+            }),
+          }),
+          label({
+            label: "a thumbnail",
+            description: "the url of an image, or leave it empty.",
+            component: textInput({
+              id: `${id}:thumbnail`,
+              style: 1,
+              required: false,
+              maxLength: 300,
+              value: existing?.thumbnail_url ?? "",
+            }),
+          }),
+        ],
+      });
+      return { kind: "reply" };
+    }
+
+    const details = readDetails(ctx, existing);
+    const channelId =
+      selected(
+        ctx,
+        verifyCustomId({
+          guildId: ctx.id.guild,
+          object: VERIFY_OBJECT.panel,
+          action: VERIFY_ACTION.open,
+        }),
+      ) ?? existing?.channel_id;
+    if (channelId === null || channelId === undefined) {
+      return await answer(
+        ctx,
+        failurePage(
+          "no channel was picked",
+          "the panel goes in a channel, and the list did not send one.",
+          undefined,
+          "pick a channel and press the button again.",
+        ),
+      );
+    }
+    const panel = await deps.savePanel({
+      guildId: ctx.id.guild,
+      channelId,
+      title: details.title,
+      description: details.description,
+      scopes: existing?.scopes_json ?? [],
+      buttonLabel: details.buttonLabel,
+      color: details.color,
+      thumbnailUrl: details.thumbnailUrl,
+    });
+    await deps.audit({
+      guildId: ctx.id.guild,
+      actorUserId: ctx.identity.userId,
+      action: "verify.panel.saved",
+      target: panel.panel_id,
+      detail: { scopes: existing?.scopes_json ?? [] },
+    });
+    return await answer(
+      ctx,
+      jobPage({
+        guildId: ctx.id.guild,
+        lines: [`the panel's copy is saved. it is in <#${channelId}>.`],
+        state: "success",
+        refreshId: verifyCustomId({
+          guildId: ctx.id.guild,
+          object: VERIFY_OBJECT.job,
+          action: VERIFY_ACTION.refresh,
+        }),
+      }),
+    );
+  };
+}
+
+/** the values the modal carried, with the stored ones where a field is empty. */
+function readDetails(
+  ctx: HandlerContext,
+  existing: VerifyPanelRow | null,
+): {
+  title: string;
+  description: string;
+  buttonLabel: string;
+  color: string;
+  thumbnailUrl: string | null;
+} {
+  const id = ctx.id.raw;
+  const field = (name: string): string | null => {
+    const value = ctx.surface.values[`${id}:${name}`];
+    if (typeof value === "string" && value !== "") return value;
+    if (Array.isArray(value) && typeof value[0] === "string" && value[0] !== "") return value[0];
+    return null;
+  };
+  return {
+    title: field("title") ?? existing?.title ?? "server verification",
+    description: field("description") ?? existing?.description ?? "",
+    buttonLabel: field("label") ?? existing?.button_label ?? "Verify",
+    color: field("color") ?? hexOf(existing?.color ?? null),
+    thumbnailUrl: field("thumbnail") ?? existing?.thumbnail_url ?? null,
+  };
+}
+
+/** the accent as the hex the operator types. */
+function hexOf(color: number | null): string {
+  if (color === null) return "5865f2";
+  return color.toString(16).padStart(6, "0");
 }
 
 /**
@@ -417,6 +588,11 @@ function panelPageFor(
       object: VERIFY_OBJECT.panel,
       action: VERIFY_ACTION.submit,
     }),
+    detailsId: verifyCustomId({
+      guildId,
+      object: VERIFY_OBJECT.panel,
+      action: VERIFY_ACTION.details,
+    }),
     backId: verifyCustomId({
       guildId,
       object: VERIFY_OBJECT.records,
@@ -429,6 +605,7 @@ export function registerVerifyHandlers(router: Router, deps: VerifyDeps): void {
   router.register(VERIFY_SURFACE, VERIFY_ACTION.open, openHandler(deps));
   router.register(VERIFY_SURFACE, VERIFY_ACTION.select, selectHandler(deps));
   router.register(VERIFY_SURFACE, VERIFY_ACTION.submit, panelSubmitHandler(deps));
+  router.register(VERIFY_SURFACE, VERIFY_ACTION.details, detailsHandler(deps));
   router.register(VERIFY_SURFACE, VERIFY_ACTION.delete, deleteHandler(deps));
   router.register(VERIFY_SURFACE, VERIFY_ACTION.confirm, confirmHandler(deps));
   router.register(VERIFY_SURFACE, VERIFY_ACTION.refresh, refreshHandler(deps));

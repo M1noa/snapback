@@ -23,6 +23,7 @@ export const VERIFY_ACTION = {
   open: "open",
   select: "select",
   submit: "submit",
+  details: "details",
   delete: "delete",
   confirm: "confirm",
   refresh: "refresh",
@@ -67,6 +68,9 @@ export interface VerifyDeps {
     description: string;
     scopes: readonly string[];
     buttonLabel: string;
+    /** the accent, as a hex number. */
+    color: string;
+    thumbnailUrl: string | null;
   }) => Promise<VerifyPanelRow>;
   /** delete one record, and how much of it. */
   readonly deleteRecord: (input: {
@@ -101,6 +105,7 @@ export const VERIFY_SPECS: readonly CustomIdSpec[] = [
   { surface: VERIFY_SURFACE, action: VERIFY_ACTION.open },
   { surface: VERIFY_SURFACE, action: VERIFY_ACTION.select },
   { surface: VERIFY_SURFACE, action: VERIFY_ACTION.submit },
+  { surface: VERIFY_SURFACE, action: VERIFY_ACTION.details },
   { surface: VERIFY_SURFACE, action: VERIFY_ACTION.delete },
   { surface: VERIFY_SURFACE, action: VERIFY_ACTION.confirm },
   { surface: VERIFY_SURFACE, action: VERIFY_ACTION.refresh },

@@ -92,7 +92,24 @@ function fakeDeps(overrides: Partial<VerifyDeps> = {}): VerifyDeps {
     records: async (guildId) => records.filter((row) => row.guild_id === guildId),
     record: async (guildId, userId) =>
       records.find((row) => row.guild_id === guildId && row.user_id === userId) ?? null,
-    panel: async (): Promise<VerifyPanelRow | null> => null,
+    panel: async (): Promise<VerifyPanelRow | null> =>
+      ({
+        panel_id: "p1",
+        guild_id: GUILD,
+        channel_id: "555",
+        message_id: null,
+        title: "server verification",
+        description: null,
+        color: 5793266,
+        thumbnail_url: null,
+        button_label: "Verify",
+        button_style: 1,
+        scopes_json: ["identify", "email"],
+        redirect_uri: "https://verify.example/callback",
+        created_at: "2024-06-01T00:00:00.000Z",
+        updated_at: "2024-06-01T00:00:00.000Z",
+        enabled: true,
+      }) as VerifyPanelRow,
     savePanel: async (input) => {
       saved.push(input);
       return { panel_id: "p1" } as VerifyPanelRow;
@@ -320,5 +337,70 @@ describe("the panel's own button", () => {
     expect(replies).toHaveLength(1);
     // the link to discord's consent screen, and the state that came with it.
     expect(replies[0]).toContain("https://discord.com/oauth2/authorize");
+  });
+});
+
+describe("the panel builder", () => {
+  test("the copy and the look are edited in a modal, and the modal's submit saves them", async () => {
+    const router = new Router({ authorize: async () => ({ kind: "allow" }) });
+    const saved: { title: string; description: string; color: string }[] = [];
+    const deps = fakeDeps({
+      savePanel: async (input) => {
+        saved.push({
+          title: input.title,
+          description: input.description,
+          color: input.color,
+        });
+        return { panel_id: "p1" } as VerifyPanelRow;
+      },
+    });
+    registerVerifyHandlers(router, deps);
+
+    const id = verifyCustomId({
+      guildId: GUILD,
+      object: VERIFY_OBJECT.panel,
+      action: VERIFY_ACTION.details,
+    });
+
+    // the button opens the modal.
+    const modals: { title: string; components: unknown[] }[] = [];
+    await router.route(
+      id,
+      { userId: USER, guildId: GUILD, isOwner: false },
+      {
+        values: {},
+        source: "component",
+        async reply() {},
+        async openModal(modal) {
+          modals.push(modal);
+        },
+      },
+    );
+    expect(modals).toHaveLength(1);
+    expect(modals[0]?.title).toBe("the panel's copy");
+    // a field for each of the title, the copy, the label, the accent and the
+    // thumbnail.
+    expect(JSON.stringify(modals[0]?.components)).toContain(":title");
+    expect(JSON.stringify(modals[0]?.components)).toContain(":color");
+
+    // the modal's submit saves what it carried.
+    await router.route(
+      id,
+      { userId: USER, guildId: GUILD, isOwner: false },
+      {
+        values: {
+          [`${id}:title`]: "a better title",
+          [`${id}:description`]: "what it is for",
+          [`${id}:label`]: "Check in",
+          [`${id}:color`]: "ff8800",
+        },
+        source: "modal",
+        async reply() {},
+        async openModal() {},
+      },
+    );
+    expect(saved[0]?.title).toBe("a better title");
+    expect(saved[0]?.description).toBe("what it is for");
+    expect(saved[0]?.color).toBe("ff8800");
   });
 });

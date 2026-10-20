@@ -75,6 +75,11 @@ export function verifyCommands(deps: VerifyDeps): SlashCommand[] {
               object: VERIFY_OBJECT.panel,
               action: VERIFY_ACTION.submit,
             }),
+            detailsId: verifyCustomId({
+              guildId: ctx.guildId,
+              object: VERIFY_OBJECT.panel,
+              action: VERIFY_ACTION.details,
+            }),
             submitId: verifyCustomId({
               guildId: ctx.guildId,
               object: VERIFY_OBJECT.panel,
