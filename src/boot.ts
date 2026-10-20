@@ -697,8 +697,17 @@ export async function boot(): Promise<Boot> {
         queueDepth: () => 0,
       }),
       legal: legalRoute({
-        disclosure: () =>
-          "verification is optional. what is captured is the account id, the username, the email address if you allowed it, the servers you are in if you allowed it, and the address you connected from. it is used to keep a server's member list honest. you can revoke it at any time.",
+        db,
+        log,
+        // the scopes come from the panel itself, so the page cannot claim less
+        // than the panel asks for (D4PLAN 19.3).
+        panel: async (guildId) => {
+          const panels = await listPanelsForGuild(db, guildId);
+          const panel = panels[0];
+          return panel === undefined ? null : { scopes: panel.scopes_json };
+        },
+        operatorText:
+          "verification is optional, and it is this server's way of keeping a member list honest.",
       }),
     },
     port: env.web.port,
