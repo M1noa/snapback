@@ -291,9 +291,12 @@ describe("the panel's own button", () => {
 
     // the button's custom id carries the panel id in the object slot, so an
     // object that is none of the surface's own is a panel.
+    // the panel id is not one of the surface's own objects, so the builder's
+    // type does not allow it: the panel's button is built by the panel service,
+    // which puts the panel id there.
     const id = verifyCustomId({
       guildId: GUILD,
-      object: "a-panel-id",
+      object: "a-panel-id" as (typeof VERIFY_OBJECT)[keyof typeof VERIFY_OBJECT],
       action: "open",
     });
     const replies: string[] = [];
