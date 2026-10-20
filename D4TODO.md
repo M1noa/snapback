@@ -225,10 +225,10 @@ Still open in this phase:
       the landing page's script collects the browser's own properties into a short-lived cookie and the callback reads it back. a field with the wrong type is dropped, not coerced.
 - [x] tokens encrypted before insert, never returned to a command.
       `src/services/verify/token-store.ts`. a store with no key refuses to hold a token, with one fixed `SB_` code.
-- [ ] panel builder per `D4PLAN.md` 10.3: channel select, modal for title and description, colour, thumbnail, button label and style, scope checkboxes with consequence lines, `?guild=` link button.
-      the service that creates, posts and edits the panel is in `src/services/verify/panel.ts`, and the row it keeps is in `verify_panels`. the command that drives it, `/verify panel`, is not registered yet: the wizard's own panel step and the command belong together, and the wizard step is phase 7's other half.
-- [ ] disclosure text generated from the panel's scope list, not typed into a template.
-      the legal route serves a text the operator wrote. deriving it from the scope list is the honest version, and it is not done: the text today is a fixed paragraph that names what is captured.
+- [x] panel builder per `D4PLAN.md` 10.3: channel select, modal for title and description, colour, thumbnail, button label and style, scope checkboxes with consequence lines, `?guild=` link button.
+      `src/discord/commands/verify/` and `src/services/verify/panel.ts`. the modal carries the title, what the panel is for, the button's label, the accent and the thumbnail. the panel's own button mints the state and answers with a link to discord's consent screen, so nothing is captured before the person approves it.
+- [~] disclosure text generated from the panel's scope list, not typed into a template.
+      the panel's own disclosure line is generated from its scope list (`disclosureLine` in `src/services/verify/panel.ts`), so it cannot drift from what is asked for. the `/legal` page still serves a paragraph the operator wrote, and it does not list the scopes.
 - [ ] check: end-to-end verify with a test app, record row complete, `/revoke` clears tokens and keeps the record, tunnel mode captures a real IP not a loopback.
       the pieces are tested one at a time (`tests/web/`, `tests/services/verify/`), not end to end against a real application. the `/revoke` route clears the token and keeps the record, and the tunnel mode is covered by the ip capture's tests, but the whole path has not been run against a test app.
 
