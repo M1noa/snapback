@@ -14,7 +14,8 @@ export interface PageInput {
   readonly body: string;
 }
 
-const MARK_SVG = `<svg width="16" height="16" viewBox="0 0 18 18" aria-hidden="true"><rect width="18" height="18" rx="5" fill="var(--accent)"/><path d="M5 9.4 7.9 12.3 13 7.1" fill="none" stroke="var(--on-accent)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+/** the gitlab mark, inlined so nothing is fetched at page load. */
+const GITLAB_SVG = `<svg viewBox="0 0 24 24" aria-hidden="true" fill="currentColor"><path d="m23.6004 9.5927-.0337-.0862L20.3.9814a.851.851 0 0 0-.3362-.405.8748.8748 0 0 0-.9997.0539.8748.8748 0 0 0-.29.4399l-2.2055 6.748H7.5375l-2.2057-6.748a.8573.8573 0 0 0-.29-.4412.8748.8748 0 0 0-.9997-.0537.8585.8585 0 0 0-.3362.4049L.4332 9.5015l-.0325.0862a6.0657 6.0657 0 0 0 2.0119 7.0105l.0113.0087.03.0213 4.976 3.7264 2.462 1.8633 1.4995 1.1321a1.0085 1.0085 0 0 0 1.2197 0l1.4995-1.1321 2.4619-1.8633 5.006-3.7489.0125-.01a6.0682 6.0682 0 0 0 2.0094-7.003z"/></svg>`;
 
 const ARROW_SVG = `<svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h13"/><path d="m12.5 5.5 6.5 6.5-6.5 6.5"/></svg>`;
 
@@ -43,10 +44,12 @@ export function page(input: PageInput): string {
 <body>
 <div class="grain" aria-hidden="true"></div>
 <div class="shell">
-<header class="bar"><span class="mark">${MARK_SVG}<span class="word">snapback</span></span></header>
 <main>
 ${input.body}
 </main>
+<footer class="foot">
+<a class="gitlab" href="https://gitlab.com/M1noa/Snapback" rel="noreferrer">${GITLAB_SVG}<span>M1noa/Snapback</span></a>
+</footer>
 </div>
 </body>
 </html>`;
@@ -111,7 +114,7 @@ export interface HomePageInput {
 export function homePage(input: HomePageInput): string {
   if (input.guildId === null || input.guildId === "") {
     return page({
-      title: "snapback verification",
+      title: "verification",
       body: `${seal({ name: null, iconUrl: null, state: "empty" })}
 <p class="eyebrow rise" style="--i:1">verification</p>
 <h1 class="rise" style="--i:2">This link has no server</h1>
@@ -127,7 +130,7 @@ export function homePage(input: HomePageInput): string {
 <p class="fine">Opens discord.com. Close the tab when it is finished.</p>`;
 
   return page({
-    title: `verify for ${name} · snapback`,
+    title: `verify for ${name}`,
     body: `${seal({ name: input.guildName, iconUrl: input.guildIconUrl, state: "pending" })}
 <p class="eyebrow rise" style="--i:1">verify for</p>
 <h1 class="rise" style="--i:2">${escapeHtml(name)}</h1>

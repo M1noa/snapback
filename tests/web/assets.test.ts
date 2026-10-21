@@ -20,11 +20,7 @@ function ctx(path: string): RequestContext {
 describe("the font assets", () => {
   test("each allowed font is served as woff2 and cached hard", async () => {
     const serve = assetRoute();
-    for (const path of [
-      "/assets/fonts/sora-latin.woff2",
-      "/assets/fonts/geist-mono-latin.woff2",
-      "/assets/fonts/rubik-80s-fade-latin.woff2",
-    ]) {
+    for (const path of ["/assets/fonts/sora-latin.woff2", "/assets/fonts/geist-mono-latin.woff2"]) {
       const response = await serve(ctx(path));
       expect(response.status).toBe(200);
       expect(response.headers["content-type"]).toBe("font/woff2");

@@ -6,8 +6,8 @@
 // at stepped alphas. one hue per page load, chosen on the server, so there is
 // no script and nothing to hash into the csp.
 //
-// three faces: rubik 80s fade for the display line, geist for text, geist mono
-// for the wordmark and status words. all self-hosted from /assets/fonts.
+// two faces: sora for text, geist mono for the tracked labels and status
+// words. all self-hosted from /assets/fonts.
 
 /** hue used when nothing overrides it. a blue-violet, calm, not discord's. */
 export const DEFAULT_HUE = 286;
@@ -29,9 +29,8 @@ export function themeColor(hue: number): string {
   return `hsl(${Math.round(Math.abs(hue)) % 360} 46% 82%)`;
 }
 
-/** the three faces. sora sets everything that is read, rubik 80s fade is the
- *  wordmark and nothing else (its glyphs lose their edges below about 20px),
- *  geist mono carries the small tracked labels. */
+/** the two faces. sora sets everything that is read; geist mono carries the
+ *  small tracked labels. */
 const FONT_FACES = `
 @font-face {
   font-family: "Sora";
@@ -44,13 +43,6 @@ const FONT_FACES = `
   font-family: "Geist Mono";
   src: url(/assets/fonts/geist-mono-latin.woff2) format("woff2");
   font-weight: 400 600;
-  font-style: normal;
-  font-display: swap;
-}
-@font-face {
-  font-family: "Rubik 80s Fade";
-  src: url(/assets/fonts/rubik-80s-fade-latin.woff2) format("woff2");
-  font-weight: 400;
   font-style: normal;
   font-display: swap;
 }
@@ -83,7 +75,6 @@ const TOKENS = `
   --ok: oklch(0.840 0.150 158);
   --err: oklch(0.760 0.160 22);
 
-  --font-display: "Rubik 80s Fade", var(--font-sans);
   --font-sans: "Sora", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
   --font-mono: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
 
@@ -189,24 +180,43 @@ const SHELL = `
   width: 100%;
   padding-inline: var(--sp-6);
 }
-.bar {
+.foot {
   width: 100%;
   max-width: 34rem;
   display: flex;
   justify-content: center;
-  padding-block: var(--sp-8) var(--sp-4);
+  padding-block: 0 var(--sp-6);
 }
-.mark {
+.gitlab {
   display: inline-flex;
   align-items: center;
-  gap: var(--sp-3);
-  color: var(--ink);
+  gap: var(--sp-2);
+  padding: 0.55rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: var(--r-pill);
+  background-color: oklch(0.86 0.105 var(--h) / 0.06);
+  color: var(--ink-3);
+  font: 500 var(--text-xs)/1 var(--font-mono);
+  letter-spacing: 0.08em;
+  text-decoration: none;
+  transition:
+    color var(--dur-2) var(--ease-snappy),
+    border-color var(--dur-2) var(--ease-snappy),
+    background-color var(--dur-2) var(--ease-snappy);
 }
-.mark .word {
-  font: 400 1.45rem/1 var(--font-display);
-  letter-spacing: 0.01em;
+.gitlab:hover {
+  color: var(--ink-2);
+  border-color: var(--border-hi);
+  background-color: oklch(0.86 0.105 var(--h) / 0.12);
 }
-.mark svg { display: block; flex: none; }
+.gitlab svg {
+  display: block;
+  flex: none;
+  width: 1rem;
+  height: 1rem;
+  fill: currentColor;
+  opacity: 0.9;
+}
 
 main {
   flex: 1;
@@ -421,7 +431,6 @@ const MOTION = `
 const RESPONSIVE = `
 @media (max-width: 30rem) {
   .shell { padding-inline: var(--sp-5); }
-  .bar { padding-block: var(--sp-6) var(--sp-3); }
   .lede { font-size: var(--text-base); }
   .button { width: 100%; justify-content: center; }
 }

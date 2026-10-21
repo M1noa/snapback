@@ -1,4 +1,6 @@
-// the only static files the site serves: three font files and the grain tile.
+// the only static files the site serves: two font files and the grain tile.
+// rubik 80s fade stays in assets/fonts for the brand renders; the site no
+// longer serves it.
 //
 // the paths are an allowlist, not a join: a request can name one of these and
 // nothing else, so there is no traversal to get wrong. a file is read once, on
@@ -16,10 +18,6 @@ const FILES: Readonly<Record<string, Asset>> = {
   "/assets/fonts/sora-latin.woff2": { file: "assets/fonts/sora-latin.woff2", type: "font/woff2" },
   "/assets/fonts/geist-mono-latin.woff2": {
     file: "assets/fonts/geist-mono-latin.woff2",
-    type: "font/woff2",
-  },
-  "/assets/fonts/rubik-80s-fade-latin.woff2": {
-    file: "assets/fonts/rubik-80s-fade-latin.woff2",
     type: "font/woff2",
   },
   "/assets/noise.png": { file: "assets/noise.png", type: "image/png" },
