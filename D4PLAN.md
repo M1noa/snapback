@@ -525,7 +525,7 @@ The wizard. Stateful, resumable, subcommands to jump straight to a step.
 | `/setup` | opens the wizard at the first incomplete step |
 | `/setup status` | one page: every subsystem with a green/amber/red dot, and for amber/red a button that jumps to the fix |
 | `/setup app` | Developer Panel checklist (`7.3`) and `/setup app test` self-test (`7.6`) |
-| `/setup web` | `PUBLIC_BASE_URL`, port, tunnel checkbox, live IP probe (`7.4`), and a modal to set the name the pages show (`web_display_name`, blank = the server's own name) |
+| `/setup web` | `PUBLIC_BASE_URL`, port, tunnel checkbox, live IP probe (`7.4`), how a captured IP is stored (`IP_STORAGE`, read-only, `warning` when `plaintext`), and a modal to set the name the pages show (`web_display_name`, blank = the server's own name) |
 | `/setup admins` | add/remove/list admins, per-flag toggles |
 | `/setup backup` | default include set, message counts, auto-backup schedule |
 | `/setup restore` | restore defaults: clear-before, timestamp suffix, default selections |
@@ -535,7 +535,7 @@ The wizard. Stateful, resumable, subcommands to jump straight to a step.
 | `/setup data` | DB status and size, back up the DB, export everything to JSON |
 | `/setup guide` | renders `docs/setup.md` in paginated Components V2 pages |
 
-The `privacy` step and the `/setup privacy` subcommand are removed by operator decision: the site no longer carries a disclosure page. The wizard's steps renumber from 0-11 to 0-10 (`10.1`). IP storage mode and retention are still settings; where they surface once the step is gone is `[?]`.
+The `privacy` step and the `/setup privacy` subcommand are removed by operator decision: the site no longer carries a disclosure page. The wizard's steps renumber from 0-11 to 0-10 (`10.1`). Both surviving privacy settings found a surface. `IP_STORAGE` stays an instance-wide env read once at boot (`14.5`), because two storage modes in one database would leave rows nobody can read consistently; `/setup web` reports the mode in words, prints the `IP_STORAGE=` line in its `.env` block, and turns the page `warning` when the mode is `plaintext`. Retention is edited from `/backup prune`: its page carries a **set the policy** button that opens a modal with the day limit and the count limit, and the submit re-renders the plan against the numbers it just stored. A kind filter is still missing from that modal because a checkbox group cannot live in a modal (`17.2`); `keep_kind_json: null` means every kind, which is what the modal writes.
 
 ### `/backup`
 
@@ -1313,7 +1313,7 @@ Pruning is deterministic and explainable:
 4. `keep_days` removes anything older; `keep_count` removes anything past the newest N. Both apply; the union of what survives is the result.
 5. Delete rows and asset files together. Asset files with no row are swept as orphans.
 
-`/backup prune` runs it with `dry_run: true` by default and reports a table of what would go with reasons.
+`/backup prune` runs it with `dry_run: true` by default and reports a table of what would go with reasons. The numbers come from that page: **set the policy** opens a modal with the day limit and the count limit, both optional, and `/backup prune` re-renders the plan against whatever was stored. Blank means no rule, not zero, and clearing both disables pruning entirely. The eligible-`kind` column has no control yet, since a checkbox group cannot live in a modal; `null` means every kind.
 
 ### 17.3 Export
 

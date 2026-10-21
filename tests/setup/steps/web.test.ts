@@ -254,4 +254,27 @@ describe("webStep", () => {
     expect(tree.accentColor).toBe(STATUS.warning.accent);
     expect(text(tree).toLowerCase()).toContain("nothing is accepting");
   });
+
+  test("says how a captured ip is stored, and the env line that decides it", async () => {
+    const tree = (await webStep.render(stepCtx(fakeDeps()))) as ContainerComponent;
+    const body = text(tree);
+    expect(body).toContain("IP_STORAGE=hash");
+    expect(body).toContain("salted hash");
+    expect(body.toLowerCase()).toContain("encrypted at rest");
+  });
+
+  test("plaintext storage turns the page warning and says whose problem it is", async () => {
+    const deps = fakeDeps({ privacy: { ipStorage: "plaintext", tokenStorage: true } });
+    const tree = (await webStep.render(stepCtx(deps))) as ContainerComponent;
+    expect(tree.accentColor).toBe(STATUS.warning.accent);
+    expect(text(tree)).toContain("IP_STORAGE=plaintext");
+    expect(text(tree).toLowerCase()).toContain("personal data");
+  });
+
+  test("no encryption key is said in full, because pull is off without one", async () => {
+    const deps = fakeDeps({ privacy: { ipStorage: "hash", tokenStorage: false } });
+    const tree = (await webStep.render(stepCtx(deps))) as ContainerComponent;
+    expect(text(tree)).toContain("ENCRYPTION_KEY");
+    expect(text(tree)).toContain("/pull");
+  });
 });

@@ -50,8 +50,17 @@ export const webStep: StepModule = {
 
   async render(ctx: StepContext): Promise<ContainerComponent> {
     const { publicBaseUrl, port, behindCloudflareTunnel, trustedProxyDepth } = ctx.deps.web;
+    const { ipStorage, tokenStorage } = ctx.deps.privacy;
     // the one live fact: is the local socket accepting right now.
     const reachable = await ctx.deps.web.listening();
+    // plaintext is legal and bad: the page says so instead of staying green
+    // (D4PLAN 14.5).
+    const storage =
+      ipStorage === "hash"
+        ? 'a salted hash. it answers "same person again" and never shows an address.'
+        : ipStorage === "encrypted"
+          ? "encrypted with `ENCRYPTION_KEY`, readable by this bot only."
+          : "**plaintext**. anyone who opens the database reads every address, and that is personal data you are responsible for.";
     const probe = setupCustomId({
       guildId: ctx.guildId,
       object: SETUP_OBJECT.nav,
@@ -60,7 +69,7 @@ export const webStep: StepModule = {
     const stored = ctx.settings.web_display_name;
 
     return page({
-      state: reachable ? "success" : "warning",
+      state: reachable && ipStorage !== "plaintext" ? "success" : "warning",
       title: "web and tunnel",
       sections: [
         textDisplay(
@@ -87,7 +96,17 @@ export const webStep: StepModule = {
             `PORT=${port}`,
             `BEHIND_CLOUDFLARE_TUNNEL=${behindCloudflareTunnel}`,
             `TRUSTED_PROXY_DEPTH=${trustedProxyDepth}`,
+            `IP_STORAGE=${ipStorage}`,
             "```",
+          ].join("\n"),
+        ),
+        textDisplay(
+          [
+            "**how a captured ip is stored** `IP_STORAGE` is read once at boot and is the same for every server on this instance, so a change applies to new records only. old rows keep the form they were written in.",
+            `- captured ip: ${storage}`,
+            tokenStorage
+              ? "- tokens: encrypted at rest with `ENCRYPTION_KEY`."
+              : "- **no `ENCRYPTION_KEY`** so nothing can be encrypted: `/pull` and token refresh are off.",
           ].join("\n"),
         ),
         textDisplay(["**match your deployment** (D4PLAN 7.5)", ...DEPLOYMENTS].join("\n")),
