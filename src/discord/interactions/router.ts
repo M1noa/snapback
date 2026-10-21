@@ -84,6 +84,9 @@ export interface InteractionIdentity {
   readonly userId: string;
   readonly guildId: string;
   readonly isOwner: boolean;
+  /** the member's computed guild perms as discord sent them, for the trusted
+   *  lane of the auth check. undefined is a dm or a payload without them. */
+  readonly memberPermissions?: string;
 }
 
 export interface AuthInput {

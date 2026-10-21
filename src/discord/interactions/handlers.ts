@@ -20,6 +20,7 @@ import type { Logger } from "../../lib/log.ts";
 import { findCommand } from "../commands/index.ts";
 import type { CommandOptionValue, SlashCommand } from "../commands/types.ts";
 import { checkAccess } from "../registry.ts";
+import type { RespondableInteraction } from "./dispatch.ts";
 import {
   commandResultPayload,
   deniedPage,
@@ -39,6 +40,8 @@ export interface InteractionDeps {
   readonly commands: readonly SlashCommand[];
   readonly router: Router;
   readonly ownerId: string;
+  /** the same row the authorizer's owner lane reads; see AccessDeps. */
+  readonly guildOwnerId: (guildId: string) => Promise<string | null>;
   readonly log: Logger;
   /** db-backed: is this user a snapback admin for the guild (guild_admins)? */
   readonly isGuildAdmin: (userId: string, guildId: string) => Promise<boolean> | boolean;
@@ -48,6 +51,9 @@ export interface InteractionDeps {
 /** what every access decision needs. the two paths share one predicate. */
 export interface AccessDeps {
   readonly ownerId: string;
+  /** the guild owner, read from the synced guilds row. null when the guild has
+   *  no row, which vouches for nobody. */
+  readonly guildOwnerId: (guildId: string) => Promise<string | null>;
   /**
    * is this person allowed to drive this surface? the surface is the id's, so
    * the check can be per capability: reading records is not the same grant as
@@ -182,7 +188,13 @@ export function createAuthorizer(deps: AccessDeps): AuthHook {
     if (id.guild !== identity.guildId) {
       return deny(GUILD_MISMATCH, "this control was made for a different server.");
     }
-    return await accessDecision(deps, identity.userId, identity.guildId, id.surface);
+    return await accessDecision(
+      deps,
+      identity.userId,
+      identity.guildId,
+      id.surface,
+      identity.memberPermissions,
+    );
   };
 }
 
@@ -242,7 +254,13 @@ async function runAutocomplete(
 
   // access is re-checked here too: a person who lost admin rights between the
   // command being registered and the typing must not see the records (rule 8).
-  const access = await accessDecision(deps, interaction.user.id, guildId, "users");
+  const access = await accessDecision(
+    deps,
+    interaction.user.id,
+    guildId,
+    "users",
+    memberPermsOf(interaction),
+  );
   if (access.kind !== "allow") {
     await interaction.result([]);
     return;
@@ -258,16 +276,36 @@ async function runAutocomplete(
   await interaction.result(choices.slice(0, 25));
 }
 
+// the member's computed guild perms ride in on the interaction itself, so the
+// check costs no extra REST call and never touches a cache that could lag.
+function memberPermsOf(
+  interaction: RespondableInteraction | AutocompleteInteraction,
+): string | undefined {
+  const perms = interaction.memberPermissions;
+  return perms === null ? undefined : String(perms);
+}
+
+// the owner id, read from the synced guilds row: the same source the landing
+// page shows it from. syncIdentity runs on guildCreate and guildUpdate, so a
+// transfer lands by the next interaction, and an unknown guild reads as null
+// without throwing.
+async function guildOwnerId(deps: AccessDeps, guildId: string): Promise<string | undefined> {
+  return (await deps.guildOwnerId(guildId)) ?? undefined;
+}
+
 async function accessDecision(
   deps: AccessDeps,
   userId: string,
   guildId: string,
   surface: string,
+  memberPermissions?: string,
 ): Promise<AuthDecision> {
   const access = await checkAccess({
     userId,
     guildId,
     ownerId: deps.ownerId,
+    guildOwnerId: await guildOwnerId(deps, guildId),
+    memberPermissions,
     isGuildAdmin: async (user: string, guild: string) =>
       await deps.isGuildAdmin(user, guild, surface),
   });
@@ -316,7 +354,13 @@ async function runCommand(
     return;
   }
 
-  const decision = await accessDecision(deps, interaction.user.id, guildId, interaction.data.name);
+  const decision = await accessDecision(
+    deps,
+    interaction.user.id,
+    guildId,
+    interaction.data.name,
+    memberPermsOf(interaction),
+  );
   if (decision.kind === "deny") {
     await responder.reply(interaction, v2Payload(deniedPage(decision.reason), true));
     return;
@@ -351,6 +395,7 @@ async function runComponent(
       userId: interaction.user.id,
       guildId,
       isOwner: interaction.user.id === deps.ownerId,
+      memberPermissions: memberPermsOf(interaction),
     },
     surfaceFor(interaction, responder),
   );

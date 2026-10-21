@@ -219,8 +219,36 @@ export interface AccessInput {
   readonly userId: string;
   readonly guildId: string;
   readonly ownerId: string;
+  /** the guild's owner, as the interaction carries it. undefined reads as
+   *  unknown, and unknown never allows. */
+  readonly guildOwnerId?: string;
+  /** the member's computed guild permissions, discord's bigint-in-string (the
+   *  owner reads as every bit). every guild interaction carries it; undefined
+   *  means it was not on the payload, and never allows. */
+  readonly memberPermissions?: string;
   /** db-backed: is this user a Snapback admin for the guild (guild_admins)? */
   readonly isGuildAdmin: (userId: string, guildId: string) => Promise<boolean> | boolean;
+}
+
+// the two discord perms that vouch for a person, as raw bigint values (the
+// bit values oceanic's Permissions enum carries). this file does not import
+// the library, so the literal stays here with the route that justifies it.
+const ADMINISTRATOR = 8n;
+const MANAGE_GUILD = 32n;
+
+/** a member discord itself marks trusted passes the gate even with no db grant:
+ *  the server owner hands out these perms, so the db row is not the only trust
+ *  lane. the db row stays independent, for grants below this bar. */
+export const GUILD_TRUSTED_PERMISSIONS = ADMINISTRATOR | MANAGE_GUILD;
+
+/** parse the member permissions off an interaction; anything unknown is none. */
+export function hasTrustedPermissions(memberPermissions: string | undefined): boolean {
+  if (memberPermissions === undefined) return false;
+  try {
+    return (BigInt(memberPermissions) & GUILD_TRUSTED_PERMISSIONS) !== 0n;
+  } catch {
+    return false;
+  }
 }
 
 // plain data. the caller renders it as an ephemeral container; this file builds
@@ -237,9 +265,15 @@ export type AccessResult =
   | { readonly kind: "allow" }
   | { readonly kind: "deny"; readonly denial: DenialData };
 
-/** owner-or-guild-admin, re-checked on every interaction (non-negotiable 8). */
+/** the gate, re-checked on every interaction (non-negotiable 8). the lanes, in
+ *  order: the instance owner, the server's own owner, a member discord marks
+ *  trusted, the per-flag db grant. nothing at this layer is cached, so a
+ *  demotion in any lane lands on the next interaction. the two discord lanes go
+ *  quiet only when their data did not arrive on the payload. */
 export async function checkAccess(input: AccessInput): Promise<AccessResult> {
   if (input.userId === input.ownerId) return { kind: "allow" };
+  if (input.guildOwnerId === input.userId) return { kind: "allow" };
+  if (hasTrustedPermissions(input.memberPermissions)) return { kind: "allow" };
   if (await input.isGuildAdmin(input.userId, input.guildId)) return { kind: "allow" };
   return { kind: "deny", denial: denialFor(input.userId) };
 }
@@ -248,7 +282,8 @@ function denialFor(userId: string): DenialData {
   return {
     title: "not permitted",
     body: `you (<@${userId}>) are not a Snapback admin for this server.`,
-    needs: "ask the server owner or a current Snapback admin to add you with /setup admins.",
+    needs:
+      "the server owner and anyone it trusts with manage-server can always use it; ask them to add you with /setup admins.",
     ephemeral: true,
     status: "danger",
   };

@@ -65,6 +65,9 @@ function fakeInteraction(
     commandName?: string;
     raw?: unknown[];
     customId?: string;
+    /** the member's computed perms, as oceanic exposes them on every guild
+     *  interaction. null is the dm shape and reads as unknown. */
+    memberPermissions?: bigint | null;
   } = {},
 ): { interaction: AnyInteractionGateway; replies: Reply[] } {
   const replies: Reply[] = [];
@@ -75,6 +78,7 @@ function fakeInteraction(
   const interaction = {
     acknowledged: false,
     user: { id: userId },
+    memberPermissions: overrides.memberPermissions ?? null,
     guildID: guildId,
     isCommandInteraction: () => customId === undefined,
     isComponentInteraction: () => customId !== undefined,
@@ -103,11 +107,18 @@ function fakeInteraction(
   return { interaction: interaction as unknown as AnyInteractionGateway, replies };
 }
 
-function handler(options: { isGuildAdmin?: (u: string, g: string) => boolean; log?: Logger } = {}) {
+function handler(
+  options: {
+    isGuildAdmin?: (u: string, g: string) => boolean;
+    guildOwner?: string | null;
+    log?: Logger;
+  } = {},
+) {
   const log = options.log ?? quietLogger();
   const router = new Router({
     authorize: createAuthorizer({
       ownerId: OWNER,
+      guildOwnerId: async () => options.guildOwner ?? null,
       isGuildAdmin: options.isGuildAdmin ?? (() => false),
     }),
   });
@@ -116,6 +127,7 @@ function handler(options: { isGuildAdmin?: (u: string, g: string) => boolean; lo
       commands: [echoCommand()],
       router,
       ownerId: OWNER,
+      guildOwnerId: async () => options.guildOwner ?? null,
       log,
       isGuildAdmin: options.isGuildAdmin ?? (() => false),
     }),
@@ -181,6 +193,36 @@ describe("slash commands", () => {
     expect(textOf(replies[0]!.payload)).toContain("commands work in a server");
   });
 
+  test("a discord administrator passes the gate without a db grant", async () => {
+    const { onInteraction } = handler();
+    const { interaction, replies } = fakeInteraction({
+      userId: "900000000000000009",
+      memberPermissions: 8n,
+    });
+    await onInteraction(interaction);
+
+    expect(textOf(replies[0]!.payload)).toContain("fine");
+  });
+
+  test("the server's owner passes the gate without a db grant", async () => {
+    const { onInteraction } = handler({ guildOwner: "900000000000000009" });
+    const { interaction, replies } = fakeInteraction({ userId: "900000000000000009" });
+    await onInteraction(interaction);
+
+    expect(textOf(replies[0]!.payload)).toContain("fine");
+  });
+
+  test("a member with no trusted bit and no db grant is refused", async () => {
+    const { onInteraction } = handler();
+    const { interaction, replies } = fakeInteraction({
+      userId: "900000000000000009",
+      memberPermissions: 2048n,
+    });
+    await onInteraction(interaction);
+
+    expect(textOf(replies[0]!.payload)).toContain("not permitted");
+  });
+
   test("a command that throws is logged and not rethrown", async () => {
     const log = quietLogger();
     const router = new Router({ authorize: () => ({ kind: "allow" }) });
@@ -197,6 +239,7 @@ describe("slash commands", () => {
       ],
       router,
       ownerId: OWNER,
+      guildOwnerId: async () => null,
       log,
       isGuildAdmin: () => false,
     });
@@ -224,6 +267,7 @@ describe("slash commands", () => {
       ],
       router,
       ownerId: OWNER,
+      guildOwnerId: async () => null,
       log: quietLogger(),
       isGuildAdmin: () => false,
     });
@@ -244,6 +288,43 @@ describe("slash commands", () => {
 });
 
 describe("component interactions", () => {
+  test("a discord admin presses a control without a db grant", async () => {
+    let ran = false;
+    const { onInteraction, router } = handler();
+    router.register("setup", "save", () => {
+      ran = true;
+      return { kind: "noop" };
+    });
+
+    const { interaction } = fakeInteraction({
+      userId: "900000000000000009",
+      customId: `sb:setup:${GUILD}:x:save:`,
+      memberPermissions: 32n,
+    });
+    await onInteraction(interaction);
+
+    expect(ran).toBe(true);
+  });
+
+  test("a member with no trusted lane stays out of the controls", async () => {
+    let ran = false;
+    const { onInteraction, router } = handler();
+    router.register("setup", "save", () => {
+      ran = true;
+      return { kind: "noop" };
+    });
+
+    const { interaction, replies } = fakeInteraction({
+      userId: "900000000000000009",
+      customId: `sb:setup:${GUILD}:x:save:`,
+      memberPermissions: 2048n,
+    });
+    await onInteraction(interaction);
+
+    expect(ran).toBe(false);
+    expect(textOf(replies[0]!.payload)).toContain("not permitted");
+  });
+
   test("an id minted for another guild is refused before the handler runs", async () => {
     let ran = false;
     const { onInteraction, router } = handler();

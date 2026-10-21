@@ -52,6 +52,7 @@ import { registerVerifyHandlers } from "./discord/commands/verify/handlers.ts";
 import { verifyCommands } from "./discord/commands/verify/index.ts";
 import { DiscordApiError, formatDiscordError } from "./discord/errors.ts";
 import { Gateway, installProcessErrorHandlers } from "./discord/gateway.ts";
+import { inviteLink } from "./discord/invite.ts";
 import { createAuthorizer, createInteractionHandler } from "./discord/interactions/handlers.ts";
 import { type CustomIdSpec, Router } from "./discord/interactions/router.ts";
 import { MemoryStateStore } from "./discord/interactions/state.ts";
@@ -208,6 +209,14 @@ export async function boot(): Promise<Boot> {
     return canSurface(row, surface);
   };
 
+  // the owner lane: read from the synced guilds row, the same source the
+  // landing page shows the owner from. syncIdentity fires on guildCreate and
+  // guildUpdate, so a transfer lands by the next interaction.
+  const guildOwnerId = async (guildId: string): Promise<string | null> => {
+    const row = await getGuild(db, guildId);
+    return row?.owner_user_id ?? null;
+  };
+
   // 3. gateway. oceanic owns the connection (D4PLAN 2, 4).
   const gateway = new Gateway({ token: env.discord.token, log });
 
@@ -239,7 +248,11 @@ export async function boot(): Promise<Boot> {
   // 4. interactions. the enqueue is deliberately left unwired: the default throws,
   // which surfaces as a failed interaction rather than a silently dropped job.
   const router = new Router({
-    authorize: createAuthorizer({ ownerId: env.discord.ownerId, isGuildAdmin }),
+    authorize: createAuthorizer({
+      ownerId: env.discord.ownerId,
+      guildOwnerId,
+      isGuildAdmin,
+    }),
   });
 
   // the /setup surface. built once here and used twice below: to register the
@@ -578,6 +591,7 @@ export async function boot(): Promise<Boot> {
     commands,
     router,
     ownerId: env.discord.ownerId,
+    guildOwnerId,
     log,
     isGuildAdmin: (userId, guildId) => isGuildAdmin(userId, guildId, "command"),
   });
@@ -597,6 +611,23 @@ export async function boot(): Promise<Boot> {
       resolveScope(env.discord.devGuildId),
       log,
     );
+  }
+
+  // the invite: while the bot sits in no server at all, the only way to use it
+  // is to invite it, so the boot log carries the link. the guild list comes
+  // from REST rather than the gateway cache, which is still filling at ready
+  // and would read empty for a bot that does have servers.
+  try {
+    const guilds = await client.request<string[]>({ method: "GET", route: "/users/@me/guilds" });
+    if (guilds.length === 0) {
+      log.warn("snapback is not in any server yet", { invite: inviteLink(env.discord.clientId) });
+    }
+  } catch (error) {
+    // a dead invite check must not take the boot down: the link is a kindness,
+    // the process without it is still a working bot.
+    log.error("could not read the guild list for the invite check", {
+      message: error instanceof Error ? error.message : String(error),
+    });
   }
 
   // the web layer. four routes, one process. the oauth secret is required at
