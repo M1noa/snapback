@@ -18,7 +18,7 @@ import type { Database } from "../../../src/db/types.ts";
 import { DiscordApiError } from "../../../src/discord/errors.ts";
 import { createLogger } from "../../../src/lib/log.ts";
 import { runBackup } from "../../../src/services/backup/index.ts";
-import { BACKUP_SCHEMA_VERSION, type BackupLimits } from "../../../src/services/backup/types.ts";
+import { BACKUP_SCHEMA_VERSION } from "../../../src/services/backup/types.ts";
 import { closeFixtureDb, openFixtureDb } from "../../fixtures/db.ts";
 import {
   CHANNEL_GENERAL,
@@ -35,8 +35,6 @@ const CREATED_BY = "987654321098765432";
 const NOW = "2024-06-01T00:00:00.000Z";
 const NO_ASSETS = "/tmp/snapback-pipeline-assets";
 
-const LIMITS: BackupLimits = { maxMessagesPerChannel: 1000, maxMessagesTotal: 10_000 };
-
 let db: Database;
 
 beforeAll(async () => {
@@ -50,7 +48,6 @@ afterAll(async () => {
 function run(options: {
   guild?: ReturnType<typeof makeGuild>;
   settings?: Parameters<typeof runBackup>[1]["settings"];
-  limits?: BackupLimits;
   label?: string | null;
 }) {
   const guild = options.guild ?? makeGuild();
@@ -70,7 +67,6 @@ function run(options: {
       createdBy: CREATED_BY,
       label: options.label ?? "pipeline",
       settings: options.settings ?? makeSettings(),
-      limits: options.limits ?? LIMITS,
       backupDir: NO_ASSETS,
       maxAssetBytes: 8 * 1024 * 1024,
     },
@@ -141,7 +137,6 @@ describe("runBackup", () => {
         createdBy: CREATED_BY,
         label: "clamped",
         settings,
-        limits: LIMITS,
         backupDir: NO_ASSETS,
         maxAssetBytes: 0,
       },
@@ -189,7 +184,6 @@ describe("runBackup", () => {
         createdBy: CREATED_BY,
         label: "no bans",
         settings: makeSettings(),
-        limits: LIMITS,
         backupDir: NO_ASSETS,
         maxAssetBytes: 0,
       },
@@ -225,7 +219,6 @@ describe("runBackup", () => {
         createdBy: CREATED_BY,
         label: "broken step",
         settings: makeSettings(),
-        limits: LIMITS,
         backupDir: NO_ASSETS,
         maxAssetBytes: 0,
       },

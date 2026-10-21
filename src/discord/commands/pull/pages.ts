@@ -352,6 +352,8 @@ export interface ConfigPageInput {
   readonly guildId: string;
   readonly limits: PullLimits;
   readonly sources: readonly PullLimitSource[];
+  /** the edit button: opens the modal that writes the three values. */
+  readonly editId: string;
   readonly backId: string;
 }
 
@@ -359,7 +361,7 @@ export interface ConfigPageInput {
 export function configPage(input: ConfigPageInput): ContainerComponent {
   const sections = input.sources.map((source) =>
     textDisplay(
-      `**${input.limits[source.key]}** · ${source.what} · set by \`${source.envVar}\` (default ${source.fallback}, allowed ${source.min}-${source.max})`,
+      `**${input.limits[source.key]}** · ${source.what} · stored as \`${source.setting}\` (default ${source.fallback}, allowed ${source.min}-${source.max})`,
     ),
   );
   sections.push(
@@ -372,7 +374,10 @@ export function configPage(input: ConfigPageInput): ContainerComponent {
     title: "the pull limits",
     sections,
     controls: [
-      actionRow([button({ id: input.backId, label: "back", style: ButtonStyles.SECONDARY })]),
+      actionRow([
+        button({ id: input.editId, label: "edit", style: ButtonStyles.PRIMARY }),
+        button({ id: input.backId, label: "back", style: ButtonStyles.SECONDARY }),
+      ]),
     ],
   });
 }

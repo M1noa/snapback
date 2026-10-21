@@ -91,7 +91,6 @@ function contextWithStub(options: {
       backupId: FIXTURE_BACKUP_ID,
       guildId: String(options.guild.guild.id),
       settings: options.settings ?? makeSettings(),
-      limits: { maxMessagesPerChannel: 1000, maxMessagesTotal: 10_000 },
       assets: stubAssets(),
       skips: createSkipList(),
       checkpoint: async () => {},

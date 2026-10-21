@@ -111,8 +111,11 @@ describe("the capture, at ten thousand messages", () => {
       log: { level: "error", debug() {}, info() {}, warn() {}, error() {}, async flush() {} },
       backupId: "load-test",
       guildId: GUILD,
-      settings: makeSettings({ auto_backup_message_count: 10_000 }),
-      limits: { maxMessagesPerChannel: 10_000, maxMessagesTotal: 10_000 },
+      settings: makeSettings({
+        auto_backup_message_count: 10_000,
+        backup_max_messages_per_channel: 10_000,
+        backup_max_messages_total: 10_000,
+      }),
       maps: { roles: new Map(), channels: new Map(), members: new Map(), emojis: new Map() },
       sourceGuildId: GUILD,
       backupDir: "/tmp/snapback-load-test",

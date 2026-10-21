@@ -4,6 +4,7 @@
 // is no other path: no join url, no bot token, no proxy (D4PLAN 15.5). the
 // counters decide who may be tried, and the engine skips the rest.
 
+import type { GuildSettings } from "../../../config/defaults.ts";
 import type { Database } from "../../../db/types.ts";
 import type { CustomIdSpec } from "../../../discord/interactions/router.ts";
 import type { StateStore } from "../../../discord/interactions/state.ts";
@@ -51,6 +52,10 @@ export const PULL_ACTION = {
   confirmReset: "confirm-reset",
   /** open the page with the limits in force. */
   config: "config",
+  /** the config page's button: it opens the edit modal. */
+  edit: "edit",
+  /** the modal's submit: the values it carries get clamped. */
+  saveLimits: "save-limits",
 } as const;
 
 export interface PullCustomIdInput {
@@ -90,8 +95,11 @@ export interface PullDeps {
   readonly now: () => number;
   /** the confirm nonce and the options it carries. */
   readonly state: StateStore;
-  /** the counters' rules (D4PLAN 15.2). */
-  readonly limits: PullLimits;
+  /**
+   * the counters' rules (D4PLAN 15.2), read per guild at each use: a limit is a
+   * guild setting edited from /pull config, not an operator-wide constant.
+   */
+  readonly limits: (guildId: string) => Promise<PullLimits>;
   /** re-checked on every interaction: a control rendered for an admin last week
    *  must fail closed today (AGENTS.md rule 8). */
   readonly authorize: (userId: string, guildId: string) => Promise<boolean>;
@@ -136,12 +144,13 @@ export async function refusal(deps: PullDeps, ctx: CommandContext): Promise<Comm
 }
 
 /** where one limit comes from. the value is in PullLimits; this is the name,
- *  the default and the range the environment parser enforces (D4PLAN 15.2). */
+ *  the default and the range /pull config clamps to (D4PLAN 15.2). */
 export interface PullLimitSource {
   readonly key: keyof PullLimits;
   /** what the limit does, in the operator's words. */
   readonly what: string;
-  readonly envVar: string;
+  /** the guild setting the limit is stored under (config/defaults.ts). */
+  readonly setting: Extract<keyof GuildSettings, string>;
   readonly fallback: number;
   readonly min: number;
   readonly max: number;
@@ -152,7 +161,7 @@ export const PULL_LIMIT_SOURCES: readonly PullLimitSource[] = [
   {
     key: "dailyLimit",
     what: "attempts one account may make a day",
-    envVar: "PULL_DAILY_LIMIT_PER_ACCOUNT",
+    setting: "pull_daily_limit",
     fallback: 100,
     min: 100,
     max: 500,
@@ -160,7 +169,7 @@ export const PULL_LIMIT_SOURCES: readonly PullLimitSource[] = [
   {
     key: "failureCooldownMinutes",
     what: "how long a burst of failures holds an account",
-    envVar: "PULL_FAILURE_COOLDOWN_MINUTES",
+    setting: "pull_failure_cooldown_minutes",
     fallback: 60,
     min: 1,
     max: 1440,
@@ -168,7 +177,7 @@ export const PULL_LIMIT_SOURCES: readonly PullLimitSource[] = [
   {
     key: "restrictedHours",
     what: "how long a restricted account stays out",
-    envVar: "PULL_COOLDOWN_HOURS",
+    setting: "pull_restricted_hours",
     fallback: 24,
     min: 1,
     max: 720,
@@ -186,4 +195,6 @@ export const PULL_SPECS: readonly CustomIdSpec[] = [
   { surface: PULL_SURFACE, action: PULL_ACTION.reset },
   { surface: PULL_SURFACE, action: PULL_ACTION.confirmReset },
   { surface: PULL_SURFACE, action: PULL_ACTION.config },
+  { surface: PULL_SURFACE, action: PULL_ACTION.edit },
+  { surface: PULL_SURFACE, action: PULL_ACTION.saveLimits },
 ];

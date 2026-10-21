@@ -69,6 +69,17 @@ function idInterval(guildId: string): string {
 function idCount(guildId: string): string {
   return setupCustomId({ guildId, object: SETUP_OBJECT.step, action: STEP, cursor: "count" });
 }
+function idMaxChannel(guildId: string): string {
+  return setupCustomId({
+    guildId,
+    object: SETUP_OBJECT.step,
+    action: STEP,
+    cursor: "max-channel",
+  });
+}
+function idMaxTotal(guildId: string): string {
+  return setupCustomId({ guildId, object: SETUP_OBJECT.step, action: STEP, cursor: "max-total" });
+}
 function idAuto(guildId: string): string {
   return setupCustomId({ guildId, object: SETUP_OBJECT.step, action: STEP, cursor: "auto" });
 }
@@ -114,6 +125,8 @@ export const backupStep: StepModule = {
     const s = ctx.settings;
     const interval = LIMITS.auto_backup_interval_hours;
     const count = LIMITS.auto_backup_message_count;
+    const perChannel = LIMITS.backup_max_messages_per_channel;
+    const total = LIMITS.backup_max_messages_total;
 
     // checkboxes are modal controls on discord's side; the cast keeps them as
     // page controls and apply() reads the same ids.
@@ -121,7 +134,7 @@ export const backupStep: StepModule = {
       textDisplay(
         [
           "**these are per-guild.** every server the bot is in keeps its own schedule, kept in `settings_json`.",
-          `**interval** is in hours (${interval.min}-${interval.max}). **message count** is a per-backup ceiling (${count.min}-${count.max}); the \`.env\` hard limits (\`MAX_MESSAGES_PER_CHANNEL\`, \`MAX_MESSAGES_TOTAL\`) still cap it.`,
+          `**interval** is in hours (${interval.min}-${interval.max}). **message count** is a per-backup ceiling (${count.min}-${count.max}). the **absolute capture ceilings** (${perChannel.min}-${perChannel.max} per channel, ${total.min}-${total.max} in total) cap every capture this guild runs; nothing may exceed them.`,
         ].join("\n"),
       ),
       textDisplay(
@@ -129,6 +142,8 @@ export const backupStep: StepModule = {
           `auto backup: ${s.auto_backup_enabled ? "on" : "off"}`,
           `interval: ${s.auto_backup_interval_hours} h`,
           `messages per backup: ${s.auto_backup_message_count}`,
+          `ceiling per channel: ${s.backup_max_messages_per_channel}`,
+          `ceiling per capture: ${s.backup_max_messages_total}`,
           `notify on join: ${s.notify_on_join ? "on" : "off"}`,
         ].join("\n"),
       ),
@@ -185,6 +200,8 @@ export const backupStep: StepModule = {
   modal(ctx: StepContext): { title: string; components: ModalComponent[] } {
     const interval = LIMITS.auto_backup_interval_hours;
     const count = LIMITS.auto_backup_message_count;
+    const perChannel = LIMITS.backup_max_messages_per_channel;
+    const total = LIMITS.backup_max_messages_total;
     const built = modal({
       id: idOpen(ctx.guildId),
       title: "backup limits",
@@ -209,6 +226,26 @@ export const backupStep: StepModule = {
             value: String(ctx.settings.auto_backup_message_count),
           }),
         }),
+        label({
+          label: "absolute ceiling per channel",
+          description: `nothing may exceed, ${perChannel.min}-${perChannel.max}`,
+          component: textInput({
+            id: idMaxChannel(ctx.guildId),
+            style: TextInputStyles.SHORT,
+            required: false,
+            value: String(ctx.settings.backup_max_messages_per_channel),
+          }),
+        }),
+        label({
+          label: "absolute ceiling per capture",
+          description: `nothing may exceed, ${total.min}-${total.max}`,
+          component: textInput({
+            id: idMaxTotal(ctx.guildId),
+            style: TextInputStyles.SHORT,
+            required: false,
+            value: String(ctx.settings.backup_max_messages_total),
+          }),
+        }),
       ],
     });
     return { title: built.title, components: built.components };
@@ -229,6 +266,18 @@ export const backupStep: StepModule = {
         "auto_backup_message_count",
         LIMITS.auto_backup_message_count,
         ctx.settings.auto_backup_message_count,
+      ),
+      backup_max_messages_per_channel: readNumber(
+        values[idMaxChannel(ctx.guildId)],
+        "backup_max_messages_per_channel",
+        LIMITS.backup_max_messages_per_channel,
+        ctx.settings.backup_max_messages_per_channel,
+      ),
+      backup_max_messages_total: readNumber(
+        values[idMaxTotal(ctx.guildId)],
+        "backup_max_messages_total",
+        LIMITS.backup_max_messages_total,
+        ctx.settings.backup_max_messages_total,
       ),
       backup_include: readInclude(values[idInclude(ctx.guildId)], ctx.settings.backup_include),
       backup_message_types: readTypes(

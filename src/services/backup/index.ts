@@ -36,7 +36,6 @@ import {
   type AssetStore,
   BACKUP_SCHEMA_VERSION,
   type BackupContext,
-  type BackupLimits,
   type Capture,
   type CaptureCounts,
   type CountedCategory,
@@ -49,7 +48,6 @@ export interface BackupRunOptions {
   readonly createdBy: string;
   readonly label: string | null;
   readonly settings: GuildSettings;
-  readonly limits: BackupLimits;
   /** where backups/<id>/assets/ lives. */
   readonly backupDir: string;
   readonly maxAssetBytes: number;
@@ -150,7 +148,6 @@ export async function runBackup(
     backupId,
     guildId: options.guildId,
     settings: options.settings,
-    limits: options.limits,
     assets:
       deps.assets?.(backupId) ??
       createAssetStore({ dir, maxBytes: options.maxAssetBytes, log: deps.log }),

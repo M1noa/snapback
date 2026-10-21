@@ -76,7 +76,6 @@ function fakeDeps(overrides: Partial<BackupDeps> = {}): BackupDeps {
     retention: async () => ({ ...DEFAULT_RETENTION, guild_id: GUILD }),
     settings: async () => DEFAULT_GUILD_SETTINGS,
     state: new MemoryStateStore(),
-    limits: { maxMessagesPerChannel: 1000, maxMessagesTotal: 10_000 },
     backupDir: "/tmp/snapback-backup-test",
     exportDir: "/tmp/snapback-export-test",
     authorize: async () => true,

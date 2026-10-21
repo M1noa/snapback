@@ -8,7 +8,6 @@ import type { DiscordClient } from "../../discord/client.ts";
 import type { Logger } from "../../lib/log.ts";
 import type { JobHandler } from "../jobs/runner.ts";
 import { runBackup } from "./index.ts";
-import type { BackupLimits } from "./types.ts";
 
 export interface BackupJobDeps {
   readonly db: Database;
@@ -16,7 +15,6 @@ export interface BackupJobDeps {
   readonly log: Logger;
   /** the guild's settings, read fresh: a capture must not use a stale include set. */
   readonly settings: (guildId: string) => Promise<GuildSettings>;
-  readonly limits: BackupLimits;
   readonly backupDir: string;
   readonly maxAssetBytes: number;
 }
@@ -54,7 +52,6 @@ export function createBackupJobHandler(deps: BackupJobDeps): JobHandler {
         createdBy: ctx.job.requested_by,
         label: payload.label ?? null,
         settings,
-        limits: deps.limits,
         backupDir: deps.backupDir,
         maxAssetBytes: deps.maxAssetBytes,
       },

@@ -167,9 +167,9 @@ export const captureMessages: Capture = async (ctx) => {
 
   const perChannel = Math.min(
     ctx.settings.auto_backup_message_count,
-    ctx.limits.maxMessagesPerChannel,
+    ctx.settings.backup_max_messages_per_channel,
   );
-  const total = ctx.limits.maxMessagesTotal;
+  const total = ctx.settings.backup_max_messages_total;
 
   const types = new Set(ctx.settings.backup_message_types);
   const nicks = await nicknames(ctx);

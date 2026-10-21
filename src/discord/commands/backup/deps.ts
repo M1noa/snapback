@@ -6,11 +6,11 @@
 
 import type { GuildSettings } from "../../../config/defaults.ts";
 import type { BackupRow, Database, RetentionRow } from "../../../db/types.ts";
+
 import type { DiscordClient } from "../../../discord/client.ts";
 import type { CustomIdSpec } from "../../../discord/interactions/router.ts";
 import type { StateStore } from "../../../discord/interactions/state.ts";
 import type { Logger } from "../../../lib/log.ts";
-import type { BackupLimits } from "../../../services/backup/types.ts";
 import type { JobRunner } from "../../../services/jobs/runner.ts";
 import { customID } from "../../components/row.ts";
 
@@ -69,7 +69,6 @@ export interface BackupDeps {
   readonly settings: (guildId: string) => Promise<GuildSettings>;
   /** the confirm nonce and the selection payload live here, never in a customID. */
   readonly state: StateStore;
-  readonly limits: BackupLimits;
   readonly backupDir: string;
   readonly exportDir: string;
   /** re-checked on every interaction: a control rendered for an admin last week

@@ -13,7 +13,6 @@ import { createLogger } from "../../src/lib/log.ts";
 import {
   type AssetStore,
   type BackupContext,
-  type BackupLimits,
   type CaptureCounts,
   createSkipList,
 } from "../../src/services/backup/types.ts";
@@ -608,7 +607,6 @@ export function makeContext(options: {
   assets?: AssetStore;
   backupId?: string;
   now?: () => string;
-  limits?: BackupLimits;
 }): BackupContext {
   const stub = restStub(options.guild);
   const skips = createSkipList();
@@ -619,7 +617,6 @@ export function makeContext(options: {
     backupId: options.backupId ?? FIXTURE_BACKUP_ID,
     guildId: String(options.guild.guild.id),
     settings: options.settings ?? makeSettings(),
-    limits: options.limits ?? { maxMessagesPerChannel: 1000, maxMessagesTotal: 10_000 },
     assets: options.assets ?? stubAssets(),
     skips,
     checkpoint: async (_step: string, _counts: CaptureCounts) => {},

@@ -121,6 +121,15 @@ export interface GuildSettings {
   auto_backup_enabled: boolean;
   auto_backup_interval_hours: number;
   auto_backup_message_count: number;
+  /** the absolute capture ceilings (were .env MAX_MESSAGES_*). a per-run
+   *  message_limit option tightens these but never raises them. */
+  backup_max_messages_per_channel: number;
+  /** 10000 is the promise made to discord, so the range ends there. */
+  backup_max_messages_total: number;
+  /** the pull counters (were .env PULL_*), per guild (D4PLAN 15.2). */
+  pull_daily_limit: number;
+  pull_failure_cooldown_minutes: number;
+  pull_restricted_hours: number;
   /** the default include set /backup create prechecks (D4PLAN 11.1). */
   backup_include: BackupInclude;
   /** which message types a capture keeps (D4PLAN 11.5). */
@@ -143,6 +152,12 @@ export interface GuildSettings {
 export const LIMITS = Object.freeze({
   auto_backup_interval_hours: { min: 1, max: 168 } as Range,
   auto_backup_message_count: { min: 0, max: 10_000 } as Range,
+  backup_max_messages_per_channel: { min: 1, max: 10_000 } as Range,
+  // 10000 is the promise made to discord and to anyone deploying this.
+  backup_max_messages_total: { min: 1, max: 10_000 } as Range,
+  pull_daily_limit: { min: 100, max: 500 } as Range,
+  pull_failure_cooldown_minutes: { min: 1, max: 1440 } as Range,
+  pull_restricted_hours: { min: 1, max: 720 } as Range,
 });
 
 export const DEFAULT_WIZARD: Readonly<WizardState> = Object.freeze({
@@ -356,6 +371,11 @@ export const FIELDS: {
   auto_backup_enabled: bool(false),
   auto_backup_interval_hours: int(24, LIMITS.auto_backup_interval_hours),
   auto_backup_message_count: int(1000, LIMITS.auto_backup_message_count),
+  backup_max_messages_per_channel: int(1000, LIMITS.backup_max_messages_per_channel),
+  backup_max_messages_total: int(10_000, LIMITS.backup_max_messages_total),
+  pull_daily_limit: int(100, LIMITS.pull_daily_limit),
+  pull_failure_cooldown_minutes: int(60, LIMITS.pull_failure_cooldown_minutes),
+  pull_restricted_hours: int(24, LIMITS.pull_restricted_hours),
   backup_include: { default: DEFAULT_BACKUP_INCLUDE, read: readBackupInclude },
   backup_message_types: messageTypeList(DEFAULT_BACKUP_MESSAGE_TYPES),
   auto_restore_enabled: bool(false),

@@ -159,7 +159,8 @@ describe("backupStep", () => {
     expect(body).toContain("per-guild");
     expect(body).toContain("hours");
     expect(body).toContain("ceiling");
-    expect(body).toContain("max_messages_total");
+    expect(body).toContain("ceiling per channel");
+    expect(body).toContain("ceiling per capture");
   });
 
   test("the two toggles exist and every produced id parses as setup", () => {
@@ -176,16 +177,21 @@ describe("backupStep", () => {
     }
   });
 
-  test("the modal holds the two numeric fields, prefilled from settings", () => {
+  test("the modal holds the four numeric fields, prefilled from settings", () => {
     const s = { ...DEFAULT_GUILD_SETTINGS, auto_backup_interval_hours: 6 } as GuildSettings;
     const built = backupStep.modal!(stepCtx(fakeDeps(), s));
     expect(built).not.toBeNull();
-    expect(built!.components).toHaveLength(2);
+    expect(built!.components).toHaveLength(4);
     const inputs: TextInput[] = [];
     walk(built, (n) => {
       if (n.type === ComponentTypes.TEXT_INPUT) inputs.push(n as unknown as TextInput);
     });
-    expect(inputs.map((i) => i.customID)).toEqual([id("interval"), id("count")]);
+    expect(inputs.map((i) => i.customID)).toEqual([
+      id("interval"),
+      id("count"),
+      id("max-channel"),
+      id("max-total"),
+    ]);
     expect(inputs[0]!.value).toBe("6");
   });
 
@@ -223,6 +229,8 @@ describe("backupStep", () => {
       notify_on_join: true,
       auto_backup_interval_hours: 6,
       auto_backup_message_count: 500,
+      backup_max_messages_per_channel: DEFAULT_GUILD_SETTINGS.backup_max_messages_per_channel,
+      backup_max_messages_total: DEFAULT_GUILD_SETTINGS.backup_max_messages_total,
       backup_include: DEFAULT_GUILD_SETTINGS.backup_include,
       backup_message_types: DEFAULT_GUILD_SETTINGS.backup_message_types,
     });

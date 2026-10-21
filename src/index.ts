@@ -24,7 +24,7 @@ const banner = [
   `  ip        ${env.privacy.ipStorage}`,
   `  tokens    ${env.privacy.tokenStorage ? "encrypted at rest" : "storage unavailable"}`,
   `  intel     ${env.intel.enabled ? "on" : "off"}`,
-  `  pull      ${env.limits.pullDailyLimitPerAccount}/account/day`,
+  `  pull      limits per guild, /pull config`,
   `  owner     ${env.discord.ownerId}`,
   `  client    ${env.discord.clientId}`,
 ].join("\n");

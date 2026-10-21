@@ -245,7 +245,7 @@ describe("captureMessages", () => {
       db,
       guild,
       backupId: id,
-      limits: { maxMessagesPerChannel: 1000, maxMessagesTotal: 3 },
+      settings: makeSettings({ backup_max_messages_total: 3 }),
     });
 
     const result = await captureMessages(ctx);

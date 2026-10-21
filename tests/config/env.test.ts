@@ -36,7 +36,7 @@ describe("parseEnv", () => {
     expect(env.db.file).toBe("./data/snapback.duckdb");
     expect(env.web.port).toBe(8080);
     expect(env.privacy.ipStorage).toBe("plaintext");
-    expect(env.limits.maxMessagesTotal).toBe(10_000);
+    expect(env.limits.maxConcurrentJobs).toBe(2);
     expect(env.app.automationEnabled).toBe(true);
   });
 
@@ -112,22 +112,11 @@ describe("parseEnv", () => {
   });
 
   describe("limits", () => {
-    test("clamps the total ceiling down and says so", () => {
-      const { env, warnings } = ok({ ...MINIMAL, MAX_MESSAGES_TOTAL: "999999" });
-      expect(env.limits.maxMessagesTotal).toBe(10_000);
-      expect(warnings.find((w) => w.key === "MAX_MESSAGES_TOTAL")?.text).toContain(
-        "clamped to 10000",
-      );
-    });
-
-    test("clamps the per channel ceiling to 10000", () => {
-      const { env } = ok({ ...MINIMAL, MAX_MESSAGES_PER_CHANNEL: "50000" });
-      expect(env.limits.maxMessagesPerChannel).toBe(10_000);
-    });
-
-    test("floors the pull limit at 100", () => {
-      const { env } = ok({ ...MINIMAL, PULL_DAILY_LIMIT_PER_ACCOUNT: "5" });
-      expect(env.limits.pullDailyLimitPerAccount).toBe(100);
+    // the message caps and the pull counters are guild settings, not env; the
+    // only env limit left is the one property of the machine, not the guild.
+    test("the only env limit is the runner's", () => {
+      const { env } = ok(MINIMAL);
+      expect(Object.keys(env.limits).sort()).toEqual(["maxConcurrentJobs"]);
     });
 
     test("keeps the fallback for a value that is not a number", () => {

@@ -44,12 +44,9 @@ export interface Env {
     readonly asCsv: string;
   };
   readonly limits: {
-    readonly maxMessagesPerChannel: number;
-    readonly maxMessagesTotal: number;
+    // the only limit that is a property of the machine, not of the guild.
+    // everything else lives in the guild's settings_json (config/defaults.ts).
     readonly maxConcurrentJobs: number;
-    readonly pullDailyLimitPerAccount: number;
-    readonly pullCooldownHours: number;
-    readonly pullFailureCooldownMinutes: number;
   };
   readonly oauth: {
     /** the client secret from the developer portal. required: the verify
@@ -227,13 +224,10 @@ export function parseEnv(read: EnvSource): EnvResult {
       }),
 
       limits: Object.freeze({
-        maxMessagesPerChannel: int("MAX_MESSAGES_PER_CHANNEL", 1000, 1, 10_000),
-        // 10000 is the promise made to Discord and to anyone deploying this.
-        maxMessagesTotal: int("MAX_MESSAGES_TOTAL", 10_000, 1, 10_000),
+        // the only limit that is a property of the machine, not of the guild.
+        // everything else lives in the guild's settings_json and is edited by
+        // /setup (config/defaults.ts).
         maxConcurrentJobs: int("MAX_CONCURRENT_JOBS", 2, 1, 16),
-        pullDailyLimitPerAccount: int("PULL_DAILY_LIMIT_PER_ACCOUNT", 100, 100, 500),
-        pullCooldownHours: int("PULL_COOLDOWN_HOURS", 24, 1, 720),
-        pullFailureCooldownMinutes: int("PULL_FAILURE_COOLDOWN_MINUTES", 60, 1, 1440),
       }),
 
       oauth: Object.freeze({

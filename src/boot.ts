@@ -60,6 +60,7 @@ import { createLogger, type Logger } from "./lib/log.ts";
 import { createBackupJobHandler } from "./services/backup/job.ts";
 import { createExportJobHandler } from "./services/export/job.ts";
 import { JobRunner } from "./services/jobs/runner.ts";
+import type { PullLimits } from "./services/pull/counter.ts";
 import { pullAccounts } from "./services/pull/index.ts";
 import { createRestoreJobHandler } from "./services/restore/job.ts";
 import { buildPlan } from "./services/restore/plan.ts";
@@ -269,10 +270,6 @@ export async function boot(): Promise<Boot> {
       client,
       log,
       settings: async (guildId) => (await getGuildSettings(db, guildId)) ?? DEFAULT_GUILD_SETTINGS,
-      limits: {
-        maxMessagesPerChannel: env.limits.maxMessagesPerChannel,
-        maxMessagesTotal: env.limits.maxMessagesTotal,
-      },
       backupDir: env.storage.backupDir,
       maxAssetBytes: env.storage.maxAssetBytes,
     }),
@@ -295,10 +292,6 @@ export async function boot(): Promise<Boot> {
     retention: async (guildId) => (await getRetentionPolicy(db, guildId)) ?? DEFAULT_RETENTION,
     settings: async (guildId) => (await getGuildSettings(db, guildId)) ?? DEFAULT_GUILD_SETTINGS,
     state: new MemoryStateStore(),
-    limits: {
-      maxMessagesPerChannel: env.limits.maxMessagesPerChannel,
-      maxMessagesTotal: env.limits.maxMessagesTotal,
-    },
     backupDir: env.storage.backupDir,
     exportDir: env.storage.exportDir,
     authorize: (userId, guildId) => isGuildAdmin(userId, guildId, "backup"),
@@ -478,6 +471,17 @@ export async function boot(): Promise<Boot> {
     return stored?.accessToken ?? null;
   };
 
+  // the pull limits are a guild setting (config/defaults.ts), so the resolver
+  // reads the stored row and falls back to the defaults for a guild never seen.
+  const pullLimits = async (guildId: string): Promise<PullLimits> => {
+    const settings = (await getGuildSettings(db, guildId)) ?? DEFAULT_GUILD_SETTINGS;
+    return {
+      dailyLimit: settings.pull_daily_limit,
+      failureCooldownMinutes: settings.pull_failure_cooldown_minutes,
+      restrictedHours: settings.pull_restricted_hours,
+    };
+  };
+
   // the /pull group. a member is added only with a token they granted.
   const pullDeps: PullDeps = {
     db,
@@ -485,11 +489,7 @@ export async function boot(): Promise<Boot> {
     jobs,
     now: () => Date.now(),
     state: new MemoryStateStore(),
-    limits: {
-      dailyLimit: env.limits.pullDailyLimitPerAccount,
-      failureCooldownMinutes: env.limits.pullFailureCooldownMinutes,
-      restrictedHours: env.limits.pullCooldownHours,
-    },
+    limits: pullLimits,
     authorize: (userId, guildId) => isGuildAdmin(userId, guildId, "pull"),
     audit: async (input) => {
       await insertAudit(db, {
@@ -524,11 +524,7 @@ export async function boot(): Promise<Boot> {
           client,
           db,
           log,
-          limits: {
-            dailyLimit: env.limits.pullDailyLimitPerAccount,
-            failureCooldownMinutes: env.limits.pullFailureCooldownMinutes,
-            restrictedHours: env.limits.pullCooldownHours,
-          },
+          limits: await pullLimits(input.guildId),
           refresh: pullRefresh,
         },
         input,

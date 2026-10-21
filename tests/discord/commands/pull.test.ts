@@ -156,7 +156,7 @@ function fakeDeps(
     } as unknown as PullDeps["jobs"],
     now: () => Date.parse(AT),
     state: new MemoryStateStore(),
-    limits: { dailyLimit: 100, failureCooldownMinutes: 60, restrictedHours: 24 },
+    limits: async () => ({ dailyLimit: 100, failureCooldownMinutes: 60, restrictedHours: 24 }),
     authorize: async () => true,
     audit: async (input) => {
       harness.audits.push({ action: input.action, target: input.target, detail: input.detail });
@@ -466,9 +466,9 @@ describe("the config page", () => {
     const result = await config?.run({ guildId: GUILD, userId: OWNER, options: {} });
 
     const text = JSON.stringify(result?.page);
-    expect(text).toContain("PULL_DAILY_LIMIT_PER_ACCOUNT");
-    expect(text).toContain("PULL_FAILURE_COOLDOWN_MINUTES");
-    expect(text).toContain("PULL_COOLDOWN_HOURS");
+    expect(text).toContain("pull_daily_limit");
+    expect(text).toContain("pull_failure_cooldown_minutes");
+    expect(text).toContain("pull_restricted_hours");
     expect(text).toContain("100");
   });
 });

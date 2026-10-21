@@ -93,12 +93,6 @@ export interface CaptureCounts {
   readonly total: number | null;
 }
 
-/** the .env ceilings a capture must not exceed. clamped in config/parse-env.ts. */
-export interface BackupLimits {
-  readonly maxMessagesPerChannel: number;
-  readonly maxMessagesTotal: number;
-}
-
 export interface BackupContext {
   readonly db: Database;
   /** every discord call goes through this (AGENTS.md rule 6). */
@@ -106,10 +100,9 @@ export interface BackupContext {
   readonly log: Logger;
   readonly backupId: string;
   readonly guildId: string;
-  /** the guild's settings, already read: the include set and the ceilings live here. */
+  /** the guild's settings, already read: the include set and the capture
+   *  ceilings live here (config/defaults.ts), edited by /setup. */
   readonly settings: GuildSettings;
-  /** the .env ceilings, which a guild's settings may tighten but never raise. */
-  readonly limits: BackupLimits;
   readonly assets: AssetStore;
   readonly skips: SkipList;
   /**

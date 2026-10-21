@@ -146,7 +146,7 @@ export function pullCommands(deps: PullDeps): SlashCommand[] {
       async run(ctx: CommandContext): Promise<CommandResult> {
         const denied = await refusal(deps, ctx);
         if (denied !== null) return denied;
-        return { page: configPageFor(deps, ctx.guildId), ephemeral: true };
+        return { page: await configPageFor(deps, ctx.guildId), ephemeral: true };
       },
     },
   ];
@@ -258,7 +258,7 @@ async function skipReason(
   if (!account.hasToken) return "no token was granted";
   if (!account.scopes.includes("guilds.join")) return "the token has no guilds.join scope";
   const counter = await getAccountCounter(deps.db, account.userId, guildId, utcDay(now));
-  const decision = decideAttempt(counter, now, deps.limits);
+  const decision = decideAttempt(counter, now, await deps.limits(guildId));
   return decision.allowed ? null : decision.reason;
 }
 
@@ -392,7 +392,7 @@ export async function countersPageFor(
     guildId,
     lines,
     totals: { attempts, successes, failures, restricted },
-    limits: deps.limits,
+    limits: await deps.limits(guildId),
     refreshId: pullCustomId({
       guildId,
       object: PULL_OBJECT.counters,
@@ -447,11 +447,19 @@ export async function resetPageFor(
 }
 
 /** the limits in force, and where they come from. */
-export function configPageFor(deps: PullDeps, guildId: string): ReturnType<typeof configPage> {
+export async function configPageFor(
+  deps: PullDeps,
+  guildId: string,
+): Promise<ReturnType<typeof configPage>> {
   return configPage({
     guildId,
-    limits: deps.limits,
+    limits: await deps.limits(guildId),
     sources: PULL_LIMIT_SOURCES,
+    editId: pullCustomId({
+      guildId,
+      object: PULL_OBJECT.config,
+      action: PULL_ACTION.edit,
+    }),
     backId: pullCustomId({
       guildId,
       object: PULL_OBJECT.config,

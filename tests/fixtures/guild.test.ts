@@ -370,7 +370,8 @@ describe("makeContext", () => {
     expect(typeof ctx.guildId).toBe("string");
     expect(ctx.backupId).toBe(FIXTURE_BACKUP_ID);
     expect(ctx.settings).toEqual(makeSettings());
-    expect(ctx.limits).toEqual({ maxMessagesPerChannel: 1000, maxMessagesTotal: 10_000 });
+    expect(ctx.settings.backup_max_messages_per_channel).toBe(1000);
+    expect(ctx.settings.backup_max_messages_total).toBe(10_000);
     expect(ctx.log.level).toBe("error");
     expect(typeof ctx.log.error).toBe("function");
     await expect(ctx.checkpoint("roles", { done: 0, total: null })).resolves.toBeUndefined();
