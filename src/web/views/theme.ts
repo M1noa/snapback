@@ -392,25 +392,6 @@ const SEAL = `
 .seal.is-failed .badge { background: linear-gradient(180deg, oklch(0.80 0.15 22), var(--err)); color: oklch(0.16 0.03 22); }
 `;
 
-const FOOT = `
-.foot {
-  width: 100%;
-  max-width: 34rem;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: center;
-  gap: var(--sp-2) var(--sp-4);
-  padding-block: var(--sp-5) var(--sp-6);
-  border-top: 1px solid var(--line);
-  font-size: var(--text-sm);
-  color: var(--ink-3);
-  text-align: center;
-}
-.foot span { min-width: 0; }
-.foot .dot { color: var(--line-2); }
-`;
-
 const MOTION = `
 .rise {
   opacity: 0;
@@ -443,11 +424,9 @@ const RESPONSIVE = `
   .bar { padding-block: var(--sp-6) var(--sp-3); }
   .lede { font-size: var(--text-base); }
   .button { width: 100%; justify-content: center; }
-  .foot { flex-direction: column; gap: var(--sp-1); }
-  .foot .dot { display: none; }
 }
 `;
 
 /** every stylesheet the site ships, in the order it has to load. the page's own
  *  hue override is appended after this, so it wins. */
-export const THEME_CSS = `${FONT_FACES}${TOKENS}${BASE}${GRAIN}${SHELL}${TEXT}${CONTROLS}${SEAL}${FOOT}${MOTION}${RESPONSIVE}`;
+export const THEME_CSS = `${FONT_FACES}${TOKENS}${BASE}${GRAIN}${SHELL}${TEXT}${CONTROLS}${SEAL}${MOTION}${RESPONSIVE}`;

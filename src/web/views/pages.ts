@@ -47,9 +47,6 @@ export function page(input: PageInput): string {
 <main>
 ${input.body}
 </main>
-<footer class="foot">
-<span>no trackers</span><span class="dot" aria-hidden="true">·</span><span>no third-party scripts</span>
-</footer>
 </div>
 </body>
 </html>`;
