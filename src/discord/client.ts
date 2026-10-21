@@ -112,8 +112,12 @@ export class DiscordClient {
       headers["x-audit-log-reason"] = encodeURIComponent(options.reason);
     }
 
-    let body: string | undefined;
-    if (options.body !== undefined) {
+    let body: string | FormData | undefined;
+    if (options.body instanceof FormData) {
+      // multipart carries its own boundary, so the content-type is left to fetch.
+      // restoring a message with an attachment is the only caller (rule 6).
+      body = options.body;
+    } else if (options.body !== undefined) {
       headers["content-type"] = "application/json";
       body = JSON.stringify(options.body);
     }

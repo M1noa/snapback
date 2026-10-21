@@ -19,6 +19,7 @@ interface Call {
   method: string;
   headers: Record<string, string>;
   body: string | undefined;
+  form: FormData | undefined;
 }
 
 // records what the client actually sent, so a casing or header bug fails here.
@@ -38,6 +39,7 @@ function recordingFetch(respond: (call: Call, index: number) => Response): {
       method: init?.method ?? "GET",
       headers,
       body: typeof init?.body === "string" ? init.body : undefined,
+      form: init?.body instanceof FormData ? init.body : undefined,
     };
     calls.push(call);
     return respond(call, calls.length - 1);
@@ -95,6 +97,17 @@ describe("DiscordClient request shape", () => {
     const sent = JSON.parse(calls[0]?.body ?? "{}");
     expect(sent).toEqual({ allowed_mentions: { parse: [] }, embeds: [] });
     expect(sent.allowedMentions).toBeUndefined();
+  });
+
+  test("a formdata body is passed through, because only fetch can set its boundary", async () => {
+    const { fetch, calls } = recordingFetch(() => json(200, {}));
+    const form = new FormData();
+    form.set("payload_json", JSON.stringify({ content: "" }));
+    form.set("files[0]", new Blob([new Uint8Array(4)]), "a.png");
+    await makeClient(fetch).request({ method: "POST", route: "/channels/1/messages", body: form });
+    expect(calls[0]?.headers["content-type"]).toBeUndefined();
+    expect(calls[0]?.form?.get("payload_json")).toBe('{"content":""}');
+    expect([...(calls[0]?.form?.keys() ?? [])]).toContain("files[0]");
   });
 
   test("a GET sends no body and no content-type", async () => {

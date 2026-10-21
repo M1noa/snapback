@@ -218,9 +218,8 @@ async function postMessage(
       });
     } else {
       // discord takes a file in a multipart body: the message in payload_json
-      // and the bytes in files[n], whose index is the attachment's id. the
-      // client posts every body as json, so it needs to learn to pass a
-      // FormData through before an attachment survives (src/discord/client.ts).
+      // and the bytes in files[n], whose index is the attachment's id. the client
+      // passes a FormData straight through, boundary and all (src/discord/client.ts).
       const form = new FormData();
       form.set(
         "payload_json",
