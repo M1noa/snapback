@@ -95,6 +95,32 @@ export async function markGuildRemoved(
   await db.run("UPDATE guilds SET removed_at = ? WHERE guild_id = ?", [removedAt, guildId]);
 }
 
+/** what discord says the guild is, written from the gateway so the default
+ *  name on the web pages stays the live one. settings and added_at survive a
+ *  conflict untouched: this path is about who discord says the guild is, not
+ *  about anything the operator configured. */
+export async function syncGuildIdentity(
+  db: Database,
+  identity: {
+    guildId: string;
+    name: string;
+    iconUrl: string | null;
+    ownerUserId: string | null;
+    at: string;
+  },
+): Promise<void> {
+  await db.run(
+    `INSERT INTO guilds (guild_id, name, icon_url, owner_user_id, added_at, removed_at)
+     VALUES (?, ?, ?, ?, ?, NULL)
+     ON CONFLICT (guild_id) DO UPDATE SET
+       name = excluded.name,
+       icon_url = excluded.icon_url,
+       owner_user_id = excluded.owner_user_id,
+       removed_at = NULL`,
+    [identity.guildId, identity.name, identity.iconUrl, identity.ownerUserId, identity.at],
+  );
+}
+
 export async function setGuildSettings(
   db: Database,
   guildId: string,

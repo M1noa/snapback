@@ -162,6 +162,50 @@ describe("guilds", () => {
       settings_json: DEFAULT_GUILD_SETTINGS,
     });
   });
+
+  test("syncGuildIdentity tracks discord without touching settings", async () => {
+    // a guild the bot newly joined: the row starts as the discord names it.
+    const FRESH = "333456789012345678";
+    await guilds.syncGuildIdentity(db, {
+      guildId: FRESH,
+      name: "from discord",
+      iconUrl: "https://cdn.discordapp.com/icons/1/a.png",
+      ownerUserId: OWNER,
+      at: NOW,
+    });
+    const fresh = await guilds.getGuild(db, FRESH);
+    expect(fresh?.guild_id).toBe(FRESH);
+    expect(fresh?.added_at).toBe(NOW);
+    expect(fresh?.removed_at).toBeNull();
+    // a fresh row carries no settings: the defaults answer, not a copy.
+    expect(await guilds.getGuildSettings(db, FRESH)).toBeNull();
+
+    // on an existing row the rename lands but the join time and the stored
+    // settings stay exactly as the operator left them.
+    const before = await guilds.getGuildSettings(db, SNOWFLAKE);
+    await guilds.syncGuildIdentity(db, {
+      guildId: SNOWFLAKE,
+      name: "live",
+      iconUrl: "https://cdn.discordapp.com/icons/1/b.png",
+      ownerUserId: OWNER,
+      at: LATER,
+    });
+    const live = await guilds.getGuild(db, SNOWFLAKE);
+    expect(live?.name).toBe("live");
+    expect(live?.added_at).toBe(NOW);
+    expect(await guilds.getGuildSettings(db, SNOWFLAKE)).toEqual(before);
+
+    // a re-add after a kick re-opens the row.
+    await guilds.markGuildRemoved(db, SNOWFLAKE, LATER);
+    await guilds.syncGuildIdentity(db, {
+      guildId: SNOWFLAKE,
+      name: "live",
+      iconUrl: null,
+      ownerUserId: OWNER,
+      at: LATER,
+    });
+    expect((await guilds.getGuild(db, SNOWFLAKE))?.removed_at).toBeNull();
+  });
 });
 
 describe("guild_admins", () => {

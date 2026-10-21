@@ -14,7 +14,12 @@ import { getAdmin } from "./db/queries/admins.ts";
 import { insertAudit } from "./db/queries/audit.ts";
 import { countBackupMessagesByBackup } from "./db/queries/backup-messages.ts";
 import { getBackup, listBackupsByGuild } from "./db/queries/backups.ts";
-import { getGuild, getGuildSettings, listActiveGuilds } from "./db/queries/guilds.ts";
+import {
+  getGuild,
+  getGuildSettings,
+  listActiveGuilds,
+  syncGuildIdentity,
+} from "./db/queries/guilds.ts";
 import { getRetentionPolicy } from "./db/queries/retention.ts";
 import { listPanelsForGuild } from "./db/queries/verify-panels.ts";
 import {
@@ -165,6 +170,14 @@ function hexToNumber(hex: string): number | undefined {
   return Number.parseInt(trimmed, 16);
 }
 
+// a hash with no segment is no asset: discord omits the field rather than
+// sending an empty one. same shape the capture path builds its urls with.
+function iconUrl(guildId: string, hash: string | null): string | null {
+  if (hash === null || hash === "") return null;
+  const ext = hash.startsWith("a_") ? "gif" : "png";
+  return `https://cdn.discordapp.com/icons/${guildId}/${hash}.${ext}`;
+}
+
 export async function boot(): Promise<Boot> {
   const startedAt = Date.now();
   const log = createLogger({ level: env.app.logLevel });
@@ -196,6 +209,31 @@ export async function boot(): Promise<Boot> {
 
   // 3. gateway. oceanic owns the connection (D4PLAN 2, 4).
   const gateway = new Gateway({ token: env.discord.token, log });
+
+  // what discord says a guild is, kept fresh where the web pages read it: a
+  // server rename lands on the landing page without a capture. no settings and
+  // no job rows are touched, and a guild create re-opens the row after a kick.
+  const syncIdentity = (member: {
+    id: string;
+    name: string;
+    icon: string | null;
+    ownerID: string | null;
+  }): void => {
+    void syncGuildIdentity(db, {
+      guildId: member.id,
+      name: member.name,
+      iconUrl: iconUrl(member.id, member.icon),
+      ownerUserId: member.ownerID,
+      at: new Date().toISOString(),
+    }).catch((error: unknown) =>
+      log.error("guild identity sync failed", {
+        guild_id: member.id,
+        message: error instanceof Error ? error.message : String(error),
+      }),
+    );
+  };
+  gateway.client.on("guildCreate", syncIdentity);
+  gateway.client.on("guildUpdate", syncIdentity);
 
   // 4. interactions. the enqueue is deliberately left unwired: the default throws,
   // which surfaces as a failed interaction rather than a silently dropped job.
