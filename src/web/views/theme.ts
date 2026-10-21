@@ -9,6 +9,8 @@
 // two faces: sora for text, geist mono for the tracked labels and status
 // words. all self-hosted from /assets/fonts.
 
+import { CLOSE_SECONDS } from "./countdown.ts";
+
 /** hue used when nothing overrides it. a blue-violet, calm, not discord's. */
 export const DEFAULT_HUE = 286;
 
@@ -138,21 +140,20 @@ a:focus-visible, button:focus-visible {
 }
 `;
 
-/** the grain. a 96px tile repeated over a 200% box that keeps stepping to a new
- *  offset, so the field never settles. below the content, above the paper. */
+/** the grain, exactly the way the crypto site runs it: a 400px tile repeated
+ *  over a 200% box that keeps stepping to a new offset, so the field never
+ *  settles. it paints over the page like film grain; clicks pass through. */
 const GRAIN = `
 .grain {
   position: fixed;
   inset: -50%;
   width: 200%;
   height: 200%;
-  z-index: 1;
+  z-index: 3;
   pointer-events: none;
-  background: url(/assets/noise.png) repeat 0 0;
-  background-size: 96px 96px;
-  opacity: 0.115;
-  animation: grain 0.42s linear infinite;
-  will-change: transform;
+  background: transparent url(/assets/noise.png) repeat 0 0;
+  opacity: 0.9;
+  animation: grain 0.2s infinite;
 }
 @keyframes grain {
   0%   { transform: translate(0, 0) }
@@ -190,14 +191,12 @@ const SHELL = `
 .gitlab {
   display: inline-flex;
   align-items: center;
-  gap: var(--sp-2);
-  padding: 0.55rem 1rem;
+  justify-content: center;
+  padding: 0.55rem;
   border: 1px solid var(--border);
   border-radius: var(--r-pill);
   background-color: oklch(0.86 0.105 var(--h) / 0.06);
   color: var(--ink-3);
-  font: 500 var(--text-xs)/1 var(--font-mono);
-  letter-spacing: 0.08em;
   text-decoration: none;
   transition:
     color var(--dur-2) var(--ease-snappy),
@@ -402,6 +401,39 @@ const SEAL = `
 .seal.is-failed .badge { background: linear-gradient(180deg, oklch(0.80 0.15 22), var(--err)); color: oklch(0.16 0.03 22); }
 `;
 
+/** the close countdown: a bar that drains over the same six seconds the script
+ *  counts, and the sentence under it. the bar is decoration, so a browser that
+ *  cannot animate it drops it and keeps the words. */
+const CLOSE = `
+.close {
+  width: 100%;
+  max-width: 15rem;
+  margin: var(--sp-7) auto 0;
+}
+.close .track {
+  height: 2px;
+  overflow: hidden;
+  border-radius: var(--r-pill);
+  background-color: var(--line-2);
+}
+.close .track .fill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background-color: var(--ok);
+  transform-origin: left center;
+  animation: drain ${CLOSE_SECONDS}s linear forwards;
+}
+@keyframes drain { from { transform: scaleX(1) } to { transform: scaleX(0) } }
+.close .note {
+  margin: var(--sp-3) 0 0;
+  font: 500 var(--text-xs)/1 var(--font-mono);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ok);
+}
+`;
+
 const MOTION = `
 .rise {
   opacity: 0;
@@ -425,6 +457,8 @@ const MOTION = `
     animation-delay: 0ms !important;
   }
   .rise { transform: none; }
+  /* a bar that cannot drain honestly is not shown; the countdown words carry it. */
+  .close .track { display: none; }
 }
 `;
 
@@ -438,4 +472,4 @@ const RESPONSIVE = `
 
 /** every stylesheet the site ships, in the order it has to load. the page's own
  *  hue override is appended after this, so it wins. */
-export const THEME_CSS = `${FONT_FACES}${TOKENS}${BASE}${GRAIN}${SHELL}${TEXT}${CONTROLS}${SEAL}${MOTION}${RESPONSIVE}`;
+export const THEME_CSS = `${FONT_FACES}${TOKENS}${BASE}${GRAIN}${SHELL}${TEXT}${CONTROLS}${SEAL}${CLOSE}${MOTION}${RESPONSIVE}`;

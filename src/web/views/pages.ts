@@ -7,11 +7,14 @@
 // chosen here, on the server, so the same page looks different each load
 // without shipping a line of javascript.
 
+import { countdownScript } from "./countdown.ts";
 import { hueStyle, pastelHue, THEME_CSS, themeColor } from "./theme.ts";
 
 export interface PageInput {
   readonly title: string;
   readonly body: string;
+  /** the page's hue. omitted means a random pastel. */
+  readonly hue?: number;
 }
 
 /** the gitlab mark, inlined so nothing is fetched at page load. */
@@ -27,9 +30,10 @@ const CROSS = `<path d="M7 7 17 17M17 7 7 17" pathLength="1" fill="none" stroke=
  *  plainly, claiming nothing about its state. */
 const SERVER_GLYPH = `<svg class="glyph" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><rect x="3" y="4" width="18" height="6" rx="2.5"/><rect x="3" y="14" width="18" height="6" rx="2.5"/><path d="M6.8 7h.01M6.8 17h.01"/></svg>`;
 
-/** the shell every page renders through. the hue is picked per response. */
+/** the shell every page renders through. the hue is picked per response unless
+ *  the page asks for its own. */
 export function page(input: PageInput): string {
-  const hue = pastelHue();
+  const hue = input.hue ?? pastelHue();
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -48,7 +52,7 @@ export function page(input: PageInput): string {
 ${input.body}
 </main>
 <footer class="foot">
-<a class="gitlab" href="https://gitlab.com/M1noa/Snapback" rel="noreferrer">${GITLAB_SVG}<span>M1noa/Snapback</span></a>
+<a class="gitlab" href="https://gitlab.com/M1noa/Snapback" rel="noreferrer" aria-label="M1noa/Snapback on GitLab">${GITLAB_SVG}</a>
 </footer>
 </div>
 </body>
@@ -148,6 +152,11 @@ export interface ResultPageInput {
   readonly statusWord?: string;
 }
 
+/** the hue a result takes, so the whole page reads as its outcome instead of
+ *  whatever pastel the request drew. 158 is the ok green, 22 the err red. */
+const HUE_OK = 158;
+const HUE_ERR = 22;
+
 export function resultPage(input: ResultPageInput): string {
   const word = input.statusWord ?? (input.ok ? "verified" : "not verified");
   // a name fits the display face; a sentence does not, so a failure title is
@@ -156,8 +165,20 @@ export function resultPage(input: ResultPageInput): string {
   const heading = name ?? (input.ok ? "You are verified" : "Verification did not finish");
   const title = input.ok && input.guildName !== null ? `${word} · ${input.guildName}` : word;
 
+  // the note says the tab can be closed without a script, and the countdown
+  // replaces that sentence the moment it starts. a browser that will not close
+  // the tab leaves the sentence true.
+  const close = input.ok
+    ? `<div class="close rise" style="--i:4">
+<div class="track" aria-hidden="true"><span class="fill"></span></div>
+<p class="note" id="sb-close" aria-live="polite">You can close this tab.</p>
+</div>
+${countdownScript()}`
+    : "";
+
   return page({
     title,
+    hue: input.ok ? HUE_OK : HUE_ERR,
     body: `${seal({
       name: input.guildName,
       iconUrl: null,
@@ -166,7 +187,8 @@ export function resultPage(input: ResultPageInput): string {
     })}
 <p class="status ${input.ok ? "is-ok" : "is-err"} rise" style="--i:1">${escapeHtml(word)}</p>
 <h1 class="rise" style="--i:2">${escapeHtml(heading)}</h1>
-<p class="lede rise" style="--i:3">${escapeHtml(input.detail)}</p>`,
+<p class="lede rise" style="--i:3">${escapeHtml(input.detail)}</p>
+${close}`,
   });
 }
 
