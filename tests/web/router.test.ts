@@ -37,7 +37,7 @@ describe("the web router", () => {
 
   test("the fonts are served under /assets", async () => {
     const serve = router();
-    const response = await serve(ctx("/assets/fonts/geist-latin.woff2"));
+    const response = await serve(ctx("/assets/fonts/geist-mono-latin.woff2"));
     expect(response.status).toBe(200);
   });
 
@@ -124,6 +124,29 @@ describe("the pages", () => {
     expect(notOk).toContain("did not finish");
     expect(ok).not.toContain("/legal");
     expect(ok).not.toContain("revoke");
+  });
+
+  test("a verified page counts down and closes itself", () => {
+    const ok = resultPage({ ok: true, guildName: "the guild", detail: "done." });
+    // six seconds, spelled in the script and in the bar's animation.
+    expect(ok).toContain('id="sb-close"');
+    expect(ok).toContain("var left = 6;");
+    expect(ok).toContain("window.close()");
+    // the sentence it leaves behind is true even with no script.
+    expect(ok).toContain("You can close this tab.");
+  });
+
+  test("a failed page stays open and says so", () => {
+    const notOk = resultPage({ ok: false, guildName: null, detail: "expired." });
+    expect(notOk).not.toContain('id="sb-close"');
+    expect(notOk).not.toContain("window.close()");
+  });
+
+  test("a result carries its own hue, green for ok and red for failed", () => {
+    const ok = resultPage({ ok: true, guildName: null, detail: "done." });
+    const notOk = resultPage({ ok: false, guildName: null, detail: "expired." });
+    expect(ok).toContain("--h:158");
+    expect(notOk).toContain("--h:22");
   });
 
   test("escape covers the five characters that matter", () => {

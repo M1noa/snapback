@@ -8,6 +8,7 @@
 // without shipping a line of javascript.
 
 import { countdownScript } from "./countdown.ts";
+import { openerScript } from "./opener.ts";
 import { hueStyle, pastelHue, THEME_CSS, themeColor } from "./theme.ts";
 
 export interface PageInput {
@@ -130,8 +131,9 @@ export function homePage(input: HomePageInput): string {
   const button =
     input.verifyUrl === null
       ? ""
-      : `<a class="button" href="${escapeHtml(input.verifyUrl)}">Continue with Discord${ARROW_SVG}</a>
-<p class="fine">Opens discord.com. Close the tab when it is finished.</p>`;
+      : `<a class="button" id="sb-open" href="${escapeHtml(input.verifyUrl)}">Continue with Discord${ARROW_SVG}</a>
+<p class="fine">Opens discord.com in a new tab, which closes itself when it is finished.</p>
+${openerScript()}`;
 
   return page({
     title: `verify for ${name}`,

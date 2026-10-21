@@ -6,9 +6,11 @@
 // security policy allows this script by hash: editing the script changes the
 // policy, and the policy cannot name a script that is not this one.
 
+import { COUNTDOWN_SCRIPT_HASH } from "../views/countdown.ts";
+import { OPENER_SCRIPT_HASH } from "../views/opener.ts";
+
 /** the cookie the script writes and the callback reads back. */
 export const COOKIE_NAME = "sb-fp";
-
 const RAW_SCRIPT = `
 (function () {
   try {
@@ -66,7 +68,8 @@ export function fingerprintScript(): string {
 /** the sha256 the policy must allow the inline script by. */
 const SCRIPT_HASH: string = new Bun.CryptoHasher("sha256").update(RAW_SCRIPT).digest("base64");
 
-/** the policy every page gets. the only script allowed in is ours, by hash,
- *  images come from this origin (the grain tile) and discord's cdn (guild
- *  icons), and the forms field is none because no page has one. */
-export const WEB_CSP = `default-src 'none'; img-src 'self' https://cdn.discordapp.com; font-src 'self'; style-src 'unsafe-inline'; script-src 'sha256-${SCRIPT_HASH}'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'`;
+/** the only scripts allowed in are ours, by hash: this one, the landing page's
+ *  opener and the result page's close countdown. images come from this origin
+ *  (the grain tile) and discord's cdn (guild icons), and the forms field is none
+ *  because no page has one. */
+export const WEB_CSP = `default-src 'none'; img-src 'self' https://cdn.discordapp.com; font-src 'self'; style-src 'unsafe-inline'; script-src 'sha256-${SCRIPT_HASH}' 'sha256-${COUNTDOWN_SCRIPT_HASH}' 'sha256-${OPENER_SCRIPT_HASH}'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'`;
