@@ -1,0 +1,251 @@
+<!doctype html>
+<!-- renders the icon and banner frames. the surface and frame index come in as
+  the url query (?surface=icon|banner&frame=0..N-1). one pastel hue, fixed: no
+  sweep. every animated value is periodic in FRAMES, so the gif wraps on
+  itself: the grain steps its ten offsets, the letters ride a sine and the
+  badge breathes. frame N (one past the loop) is the poster, bit-identical
+  logic to frame 0. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<style>
+  @font-face {
+    font-family: "Sora";
+    src: url("../../assets/fonts/sora-latin.woff2") format("woff2");
+    font-weight: 100 900;
+  }
+  @font-face {
+    font-family: "Geist Mono";
+    src: url("../../assets/fonts/geist-mono-latin.woff2") format("woff2");
+    font-weight: 100 900;
+  }
+  @font-face {
+    font-family: "Rubik 80s Fade";
+    src: url("../../assets/fonts/rubik-80s-fade-latin.woff2") format("woff2");
+    font-weight: 400;
+  }
+
+  /* the house pastel, one hue: black page, surfaces and text derived from the
+     same triple. --h never moves per frame. */
+  html {
+    --h: 286;
+    --bg-a: oklch(0.185 0.022 var(--h));
+    --bg-b: oklch(0.125 0.014 calc(var(--h) + 38));
+    --accent:    oklch(0.810 0.095 var(--h));
+    --accent-hi: oklch(0.875 0.080 calc(var(--h) + 22));
+    --ink:   oklch(0.920 0.028 var(--h));
+    --ink-3: oklch(0.630 0.045 var(--h));
+    --plate:    oklch(0.215 0.032 var(--h));
+    --plate-hi: oklch(0.330 0.048 calc(var(--h) + 22));
+    --check: oklch(0.170 0.022 var(--h));
+
+    /* per-surface sizing, set by the script from the query */
+    --plate-size: 320px;
+    --plate-radius: 31%;
+    --word-size: 104px;
+    --word-stroke: 2px;
+    --stack-gap: 0px;
+    --row-gap: 0px;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 100%; height: 100%; overflow: hidden; }
+
+  body[id="icon"] .art-banner { display: none; }
+  body[id="banner"] .art-icon { display: none; }
+
+  .art {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: radial-gradient(120% 90% at 50% 40%, var(--bg-a), var(--bg-b));
+  }
+
+  .glow {
+    position: absolute;
+    left: 50%;
+    top: 42%;
+    width: 84%;
+    height: 84%;
+    translate: -50% -50%;
+    border-radius: 50%;
+    background: radial-gradient(closest-side, oklch(0.80 0.11 var(--h) / 0.20), transparent 70%);
+  }
+
+  .stack {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--stack-gap);
+  }
+
+  .plate {
+    position: relative;
+    width: var(--plate-size);
+    height: var(--plate-size);
+    border-radius: var(--plate-radius);
+    background: linear-gradient(180deg, var(--plate-hi), var(--plate));
+    box-shadow:
+      inset 0 1px 0 oklch(1 0 0 / 0.20),
+      0 24px 60px oklch(0 0 0 / 0.55),
+      0 8px 24px oklch(0.55 0.10 var(--h) / 0.22);
+    display: grid;
+    place-items: center;
+  }
+
+  .badge {
+    width: 63%;
+    aspect-ratio: 1;
+    border-radius: 28%;
+    background: linear-gradient(180deg, var(--accent-hi), var(--accent));
+    box-shadow:
+      inset 0 2px 0 oklch(1 0 0 / 0.6),
+      inset 0 -10px 20px oklch(0.50 0.11 var(--h) / 0.35),
+      0 14px 30px oklch(0.45 0.10 var(--h) / 0.45);
+    display: grid;
+    place-items: center;
+    transform-origin: 50% 55%;
+  }
+
+  .check {
+    width: 52%;
+    height: 52%;
+    fill: none;
+    stroke: var(--check);
+    stroke-width: 2.6;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+
+  .row { display: flex; align-items: center; gap: var(--row-gap); }
+
+  .word { display: flex; align-items: baseline; }
+  .word span {
+    font-family: "Rubik 80s Fade", serif;
+    font-size: var(--word-size);
+    margin-right: 3px;
+    /* the pastel fills the halftone (the glyph holes stay holes) and fattens
+       the thin glyph strokes with a matching rim, so the silhouette carries
+       on the dark page */
+    background: linear-gradient(180deg, var(--accent-hi) 8%, var(--accent) 60%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    -webkit-text-stroke: var(--word-stroke) var(--accent-hi);
+    paint-order: stroke fill;
+    will-change: transform;
+  }
+
+  .eyebrow {
+    font-family: "Geist Mono", monospace;
+    font-weight: 500;
+    font-size: 17px;
+    letter-spacing: 0.30em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+  }
+
+  /* the grain field, her rule: one tile, 200% box, steps its offsets */
+  .grain {
+    position: absolute;
+    inset: -50%;
+    width: 200%;
+    height: 200%;
+    opacity: 0.14;
+    background: url("../../assets/noise.png") repeat;
+    background-size: 96px;
+    mix-blend-mode: overlay;
+    pointer-events: none;
+  }
+</style>
+</head>
+<body id="icon">
+<div class="art art-icon" id="surface-icon">
+  <div class="glow"></div>
+  <div class="stack">
+    <div class="plate">
+      <div class="badge">
+        <svg class="check" viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M3.5 12.6 9.6 18.8 20.5 6.7"></path>
+        </svg>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="art art-banner" id="surface-banner">
+  <div class="glow"></div>
+  <div class="stack">
+    <div class="eyebrow">verification</div>
+    <div class="row">
+      <div class="plate">
+        <div class="badge">
+          <svg class="check" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M3.5 12.6 9.6 18.8 20.5 6.7"></path>
+          </svg>
+        </div>
+      </div>
+      <div class="word"><span>s</span><span>n</span><span>a</span><span>p</span><span>b</span><span>a</span><span>c</span><span>k</span></div>
+    </div>
+  </div>
+</div>
+
+<div class="grain" id="grain" aria-hidden="true"></div>
+
+<script>
+  const params = new URLSearchParams(globalThis.location.search);
+  const surface = params.get("surface") === "banner" ? "banner" : "icon";
+  const frame = Math.max(0, Number(params.get("frame") ?? "0"));
+  const FRAMES = 10;
+
+  document.body.id = surface;
+
+  // per-surface sizing: one declaration each, no selector overrides
+  if (surface === "icon") {
+    document.documentElement.style.setProperty("--plate-size", "320px");
+    document.documentElement.style.setProperty("--plate-radius", "31%");
+    document.documentElement.style.setProperty("--word-size", "104px");
+  } else {
+    document.documentElement.style.setProperty("--plate-size", "112px");
+    document.documentElement.style.setProperty("--plate-radius", "30%");
+    document.documentElement.style.setProperty("--word-size", "92px");
+    document.documentElement.style.setProperty("--word-stroke", "2.5px");
+    document.documentElement.style.setProperty("--stack-gap", "26px");
+    document.documentElement.style.setProperty("--row-gap", "30px");
+  }
+
+  const art = document.getElementById(`surface-${surface}`);
+  const badgeBox = art.querySelector(".badge");
+  const letters = art.querySelectorAll(".word span");
+  const glow = art.querySelector(".glow");
+  const grain = document.getElementById("grain");
+
+  const PH = Math.PI * 2;
+  // any value here repeats bit for bit when phase lands on its period, so the
+  // frame-0 and frame-N renders are identical and the gif loops clean
+  const phase = (frame % FRAMES) * (PH / FRAMES);
+
+  // the ten grain offsets, the way the site steps the tile
+  const OFFSETS = [
+    [1, -2], [0, -1], [-1, 1], [2, 0], [0, 2],
+    [-2, -1], [1, 1], [-1, 0], [2, 2], [0, 0],
+  ];
+  const [gx, gy] = OFFSETS[frame % FRAMES];
+  grain.style.translate = `${gx}% ${gy}%`;
+
+  // the word rides a low wave, one letter after the other
+  letters.forEach((l, i) => {
+    l.style.transform = `translateY(${(Math.sin(phase - i * 0.5) * 4).toFixed(2)}px)`;
+  });
+
+  // a breath, not a pop: the badge swells two percent and settles
+  badgeBox.style.transform = `scale(${(1 + 0.012 * Math.sin(phase)).toFixed(4)})`;
+
+  // the pastel halo behind the plate breathes half a stop
+  glow.style.opacity = (0.62 + 0.2 * Math.sin(phase + 1.2)).toFixed(3);
+</script>
+</body>
+</html>
