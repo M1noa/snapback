@@ -19,7 +19,11 @@ import {
 import { registerBackupHandlers } from "../../../src/discord/commands/backup/handlers.ts";
 import { backupCommands, expectedConfirm } from "../../../src/discord/commands/backup/index.ts";
 import { countComponents, PAGE_LIMIT } from "../../../src/discord/components/page.ts";
-import { parseCustomId, Router } from "../../../src/discord/interactions/router.ts";
+import {
+  type HandlerSurface,
+  parseCustomId,
+  Router,
+} from "../../../src/discord/interactions/router.ts";
 import { MemoryStateStore } from "../../../src/discord/interactions/state.ts";
 import { createLogger } from "../../../src/lib/log.ts";
 import { DEFAULT_RETENTION } from "../../../src/services/retention/index.ts";
@@ -74,6 +78,7 @@ function fakeDeps(overrides: Partial<BackupDeps> = {}): BackupDeps {
     } as unknown as BackupDeps["jobs"],
     now: () => 1_717_200_000_000,
     retention: async () => ({ ...DEFAULT_RETENTION, guild_id: GUILD }),
+    saveRetention: async () => {},
     settings: async () => DEFAULT_GUILD_SETTINGS,
     state: new MemoryStateStore(),
     backupDir: "/tmp/snapback-backup-test",
@@ -87,11 +92,42 @@ function fakeDeps(overrides: Partial<BackupDeps> = {}): BackupDeps {
   };
 }
 
+/** the surface a press arrives on. a button has no values, a modal submit does. */
+function fakeSurface(
+  options: { values?: Record<string, string>; source?: "component" | "modal" } = {},
+): {
+  surface: HandlerSurface;
+  messages: string[];
+  modals: { customID: string; title: string; components: readonly unknown[] }[];
+} {
+  const messages: string[] = [];
+  const modals: { customID: string; title: string; components: readonly unknown[] }[] = [];
+  const surface: HandlerSurface = {
+    reply: async (request) => {
+      messages.push(JSON.stringify(request.message));
+    },
+    openModal: async (modal) => {
+      modals.push(modal);
+    },
+    values: options.values ?? {},
+    source: options.source ?? "component",
+  };
+  return { surface, messages, modals };
+}
+
 function walk(node: unknown, visit: (n: { customID?: string }) => void): void {
   if (node === null || typeof node !== "object") return;
   const record = node as { customID?: string; components?: unknown[] };
   visit(record);
   if (Array.isArray(record.components)) for (const child of record.components) walk(child, visit);
+}
+
+function idsOf(node: unknown): string[] {
+  const ids: string[] = [];
+  walk(node, (child) => {
+    if (typeof child.customID === "string") ids.push(child.customID);
+  });
+  return ids;
 }
 
 describe("the /backup command group", () => {
@@ -174,6 +210,89 @@ describe("the /backup command group", () => {
   test("the delete command arms only when the typed value matches exactly", () => {
     expect(expectedConfirm(makeBackup())).toBe("nightly");
     expect(expectedConfirm(makeBackup({ label: null }))).toBe("0190a000");
+  });
+});
+
+describe("the retention policy", () => {
+  const field = (cursor: string) =>
+    backupCustomId({
+      guildId: GUILD,
+      object: BACKUP_OBJECT.prune,
+      action: BACKUP_ACTION.policy,
+      cursor,
+    });
+
+  async function route(surface: HandlerSurface, deps: BackupDeps): Promise<void> {
+    const router = new Router({ authorize: async () => ({ kind: "allow" }) });
+    registerBackupHandlers(router, deps);
+    const prune = backupCommands(deps).find((command) => command.subcommand === "prune");
+    const result = await prune?.run({ guildId: GUILD, userId: USER, options: {} });
+    const id = idsOf(result?.page).find((produced) =>
+      produced.includes(`:${BACKUP_ACTION.policy}:`),
+    );
+    await router.route(id!, { userId: USER, guildId: GUILD, isOwner: false }, surface);
+  }
+
+  test("the button opens a modal seeded with what is stored", async () => {
+    const deps = fakeDeps({
+      retention: async () => ({
+        ...DEFAULT_RETENTION,
+        guild_id: GUILD,
+        keep_days: 30,
+        keep_count: null,
+        enabled: true,
+      }),
+    });
+    const { surface, modals } = fakeSurface();
+    await route(surface, deps);
+    expect(modals).toHaveLength(1);
+    expect(modals[0]?.title).toBe("what this server keeps");
+    expect(JSON.stringify(modals[0]?.components)).toContain("30");
+  });
+
+  test("the submit stores the numbers prune reads", async () => {
+    const saved: unknown[] = [];
+    const deps = fakeDeps({ saveRetention: async (row) => void saved.push(row) });
+    const submitted = fakeSurface({
+      source: "modal",
+      values: { [field("days")]: "14", [field("count")]: "5" },
+    });
+    await route(submitted.surface, deps);
+    expect(saved).toEqual([
+      { guild_id: GUILD, keep_days: 14, keep_count: 5, keep_kind_json: null, enabled: true },
+    ]);
+  });
+
+  test("blank means no rule, and both blank switches the policy off", async () => {
+    const saved: { enabled?: boolean; keep_days?: number | null }[] = [];
+    const deps = fakeDeps({
+      saveRetention: async (row) => void saved.push(row as { enabled?: boolean }),
+      retention: async () => ({
+        ...DEFAULT_RETENTION,
+        guild_id: GUILD,
+        keep_days: 30,
+        enabled: true,
+      }),
+    });
+    const submitted = fakeSurface({
+      source: "modal",
+      values: { [field("days")]: "", [field("count")]: "" },
+    });
+    await route(submitted.surface, deps);
+    expect(saved[0]?.keep_days).toBeNull();
+    expect(saved[0]?.enabled).toBe(false);
+  });
+
+  test("a value that is not a number is refused, and nothing is written", async () => {
+    const saved: unknown[] = [];
+    const deps = fakeDeps({ saveRetention: async (row) => void saved.push(row) });
+    const submitted = fakeSurface({
+      source: "modal",
+      values: { [field("days")]: "soon", [field("count")]: "" },
+    });
+    await route(submitted.surface, deps);
+    expect(saved).toEqual([]);
+    expect(submitted.messages.join("")).toContain("does not fit");
   });
 });
 

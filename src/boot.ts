@@ -20,7 +20,7 @@ import {
   listActiveGuilds,
   syncGuildIdentity,
 } from "./db/queries/guilds.ts";
-import { getRetentionPolicy } from "./db/queries/retention.ts";
+import { getRetentionPolicy, upsertRetentionPolicy } from "./db/queries/retention.ts";
 import { listPanelsForGuild } from "./db/queries/verify-panels.ts";
 import {
   clearRecordIp,
@@ -337,6 +337,7 @@ export async function boot(): Promise<Boot> {
     jobs,
     now: () => Date.now(),
     retention: async (guildId) => (await getRetentionPolicy(db, guildId)) ?? DEFAULT_RETENTION,
+    saveRetention: async (row) => await upsertRetentionPolicy(db, row),
     settings: async (guildId) => (await getGuildSettings(db, guildId)) ?? DEFAULT_GUILD_SETTINGS,
     state: new MemoryStateStore(),
     backupDir: env.storage.backupDir,

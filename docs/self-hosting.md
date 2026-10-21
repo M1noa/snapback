@@ -72,7 +72,7 @@ Pruning is deterministic:
 4. `keep_days` removes anything older than the window; `keep_count` removes anything past the newest N. Both rules apply together, so a backup is removed if either rule removes it.
 5. Rows and asset files are deleted together. Asset files with no row are swept as orphans.
 
-`/backup prune` runs it with `dry_run` on by default and reports what would go, with reasons.
+`/backup prune` runs it with `dry_run` on by default and reports what would go, with reasons. The numbers are set from that page: **set the policy** opens a modal with the day limit and the count limit, both optional. Blank means no rule, and clearing both disables pruning. `keep_kind` has no control yet and stays `null`, which means every kind is eligible.
 
 Retention applies to verification records too, not only backups. A guild that sets `keep_days: 90` has records older than 90 days deleted by the same sweep, with the count reported.
 

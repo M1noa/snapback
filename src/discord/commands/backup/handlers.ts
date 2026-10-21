@@ -8,9 +8,12 @@
 
 import { rm } from "node:fs/promises";
 import { join } from "node:path";
+import { TextInputStyles } from "oceanic.js";
 import { purgeBackup } from "../../../db/queries/backup-purge.ts";
 import { getJob } from "../../../db/queries/jobs.ts";
+import { clampInt } from "../../../lib/validate.ts";
 import { applyPrune, DEFAULT_RETENTION, planPrune } from "../../../services/retention/index.ts";
+import { label, textInput } from "../../components/row.ts";
 import { failurePage } from "../../interactions/dispatch.ts";
 import type { Handler, HandlerContext, HandlerResult, Router } from "../../interactions/router.ts";
 import { STATE_TTL_MS } from "../../interactions/state.ts";
@@ -160,6 +163,11 @@ function confirmHandler(deps: BackupDeps): Handler {
             object: BACKUP_OBJECT.prune,
             action: BACKUP_ACTION.prune,
           }),
+          policyId: backupCustomId({
+            guildId: ctx.id.guild,
+            object: BACKUP_OBJECT.prune,
+            action: BACKUP_ACTION.policy,
+          }),
           listId: backupCustomId({
             guildId: ctx.id.guild,
             object: BACKUP_OBJECT.list,
@@ -208,6 +216,11 @@ function pruneHandler(deps: BackupDeps): Handler {
             object: BACKUP_OBJECT.prune,
             action: BACKUP_ACTION.prune,
           }),
+          policyId: backupCustomId({
+            guildId: ctx.id.guild,
+            object: BACKUP_OBJECT.prune,
+            action: BACKUP_ACTION.policy,
+          }),
           listId: backupCustomId({
             guildId: ctx.id.guild,
             object: BACKUP_OBJECT.list,
@@ -240,6 +253,11 @@ function pruneHandler(deps: BackupDeps): Handler {
           action: BACKUP_ACTION.confirm,
           cursor: nonce,
         }),
+        policyId: backupCustomId({
+          guildId: ctx.id.guild,
+          object: BACKUP_OBJECT.prune,
+          action: BACKUP_ACTION.policy,
+        }),
         listId: backupCustomId({
           guildId: ctx.id.guild,
           object: BACKUP_OBJECT.list,
@@ -252,9 +270,119 @@ function pruneHandler(deps: BackupDeps): Handler {
   };
 }
 
+// the policy's numbers, and the range each one accepts. two numbers, so they
+// live in the modal rather than a page of their own.
+const KEEP_DAYS = { min: 1, max: 3650 } as const;
+const KEEP_COUNT = { min: 1, max: 500 } as const;
+
+/** the modal's field read, trimmed. a select row can come back as an array. */
+function typed(ctx: HandlerContext, id: string): string {
+  const value = ctx.surface.values[id];
+  if (typeof value === "string") return value.trim();
+  if (Array.isArray(value) && typeof value[0] === "string") return value[0].trim();
+  return "";
+}
+
+/** the retention policy: the button opens the modal, the submit stores the
+ *  numbers and shows the plan again. blank means no rule, not zero. */
+function policyHandler(deps: BackupDeps): Handler {
+  const base = (guildId: string, cursor: string) =>
+    backupCustomId({
+      guildId,
+      object: BACKUP_OBJECT.prune,
+      action: BACKUP_ACTION.policy,
+      cursor,
+    });
+
+  return async (ctx) => {
+    const guildId = ctx.id.guild;
+
+    if (ctx.surface.source !== "modal") {
+      const stored = await deps.retention(guildId);
+      const policy = stored ?? { ...DEFAULT_RETENTION, guild_id: guildId };
+      await ctx.surface.openModal({
+        customID: base(guildId, ""),
+        title: "what this server keeps",
+        components: [
+          label({
+            label: "keep for (days)",
+            description: `anything older than this goes. blank = no age rule. ${KEEP_DAYS.min}-${KEEP_DAYS.max}`,
+            component: textInput({
+              id: base(guildId, "days"),
+              style: TextInputStyles.SHORT,
+              required: false,
+              maxLength: 4,
+              value: policy.keep_days === null ? undefined : String(policy.keep_days),
+            }),
+          }),
+          label({
+            label: "keep the newest",
+            description: `only the newest N stay. blank = no count rule. ${KEEP_COUNT.min}-${KEEP_COUNT.max}`,
+            component: textInput({
+              id: base(guildId, "count"),
+              style: TextInputStyles.SHORT,
+              required: false,
+              maxLength: 3,
+              value: policy.keep_count === null ? undefined : String(policy.keep_count),
+            }),
+          }),
+        ],
+      });
+      return { kind: "reply" };
+    }
+
+    const fields = [
+      { key: "days", label: "keep for", range: KEEP_DAYS },
+      { key: "count", label: "keep the newest", range: KEEP_COUNT },
+    ] as const;
+    const numbers: Record<string, number | null> = {};
+    for (const field of fields) {
+      const raw = typed(ctx, base(guildId, field.key));
+      if (raw === "") {
+        numbers[field.key] = null;
+        continue;
+      }
+      const value = clampInt(raw, { min: field.range.min, max: field.range.max });
+      if (value === null) {
+        return await answer(
+          ctx,
+          failurePage(
+            "that value does not fit",
+            `**${field.label}** has to be a whole number between ${field.range.min} and ${field.range.max}. nothing was written.`,
+            undefined,
+            "press set the policy, fix the number, and submit again.",
+          ),
+        );
+      }
+      numbers[field.key] = value;
+    }
+
+    const keepDays = numbers.days ?? null;
+    const keepCount = numbers.count ?? null;
+    await deps.saveRetention({
+      guild_id: guildId,
+      keep_days: keepDays,
+      keep_count: keepCount,
+      // every kind is in scope: a kind filter needs a checkbox group, which a
+      // modal cannot hold (D4PLAN 17.2).
+      keep_kind_json: null,
+      enabled: keepDays !== null || keepCount !== null,
+    });
+    await deps.audit({
+      guildId,
+      actorUserId: ctx.identity.userId,
+      action: "backup.retention",
+      target: guildId,
+      detail: { keepDays, keepCount },
+    });
+    // the plan against the numbers that were just stored, so the press that set
+    // them also shows what they would remove.
+    return await pruneHandler(deps)(ctx);
+  };
+}
+
 /** the export button on the info page: a job, because writing a large backup
- *  outlives an interaction (rule 7). */
-function exportHandler(deps: BackupDeps): Handler {
+ *  outlives an interaction (rule 7). */ function exportHandler(deps: BackupDeps): Handler {
   return async (ctx) => {
     const row = await lookupBackup(deps, ctx.id.guild, ctx.id.cursor);
     if (row === null) {
@@ -313,6 +441,7 @@ export function registerBackupHandlers(router: Router, deps: BackupDeps): void {
   router.register(BACKUP_SURFACE, BACKUP_ACTION.delete, deleteHandler(deps));
   router.register(BACKUP_SURFACE, BACKUP_ACTION.confirm, confirmHandler(deps));
   router.register(BACKUP_SURFACE, BACKUP_ACTION.prune, pruneHandler(deps));
+  router.register(BACKUP_SURFACE, BACKUP_ACTION.policy, policyHandler(deps));
   router.register(BACKUP_SURFACE, BACKUP_ACTION.export, exportHandler(deps));
   router.register(BACKUP_SURFACE, BACKUP_ACTION.pause, pauseHandler(deps));
   router.register(BACKUP_SURFACE, BACKUP_ACTION.cancel, cancelHandler(deps));

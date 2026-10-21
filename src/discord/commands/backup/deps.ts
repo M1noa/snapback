@@ -33,6 +33,7 @@ export const BACKUP_ACTION = {
   delete: "delete",
   confirm: "confirm",
   prune: "prune",
+  policy: "policy",
   refresh: "refresh",
   pause: "pause",
   cancel: "cancel",
@@ -66,6 +67,9 @@ export interface BackupDeps {
   /** epoch ms. injected so a page's relative timestamps are testable. */
   readonly now: () => number;
   readonly retention: (guildId: string) => Promise<RetentionRow>;
+  /** the policy's only writer. prune reads a row nobody could create, so the
+   *  numbers are set from the page that uses them (D4PLAN 17.2). */
+  readonly saveRetention: (row: RetentionRow) => Promise<void>;
   readonly settings: (guildId: string) => Promise<GuildSettings>;
   /** the confirm nonce and the selection payload live here, never in a customID. */
   readonly state: StateStore;
@@ -96,6 +100,7 @@ export const BACKUP_SPECS: readonly CustomIdSpec[] = [
   { surface: BACKUP_SURFACE, action: BACKUP_ACTION.delete },
   { surface: BACKUP_SURFACE, action: BACKUP_ACTION.confirm },
   { surface: BACKUP_SURFACE, action: BACKUP_ACTION.prune },
+  { surface: BACKUP_SURFACE, action: BACKUP_ACTION.policy },
   { surface: BACKUP_SURFACE, action: BACKUP_ACTION.export },
   { surface: BACKUP_SURFACE, action: BACKUP_ACTION.pause },
   { surface: BACKUP_SURFACE, action: BACKUP_ACTION.cancel },

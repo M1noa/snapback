@@ -329,6 +329,11 @@ export function backupCommands(deps: BackupDeps): SlashCommand[] {
               object: BACKUP_OBJECT.prune,
               action: BACKUP_ACTION.prune,
             }),
+            policyId: backupCustomId({
+              guildId: ctx.guildId,
+              object: BACKUP_OBJECT.prune,
+              action: BACKUP_ACTION.policy,
+            }),
             listId: backupCustomId({
               guildId: ctx.guildId,
               object: BACKUP_OBJECT.list,

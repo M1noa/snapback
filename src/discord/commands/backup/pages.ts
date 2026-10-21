@@ -222,13 +222,14 @@ export function prunePage(input: {
   readonly removals: readonly { readonly label: string; readonly reason: string }[];
   readonly keptCount: number;
   readonly confirmId: string;
+  readonly policyId: string;
   readonly listId: string;
   readonly dryRun: boolean;
 }): ContainerComponent {
   const policy = input.policy;
   const summary =
     policy.keep_days === null && policy.keep_count === null
-      ? "no policy is set, so nothing is ever pruned. set `keep_days` or `keep_count` first."
+      ? "no policy is set, so nothing is ever pruned. press **set the policy** and give it a number of days, a count, or both."
       : `keeping ${[
           policy.keep_days === null ? null : `anything newer than ${policy.keep_days} day(s)`,
           policy.keep_count === null ? null : `the newest ${policy.keep_count}`,
@@ -254,7 +255,12 @@ export function prunePage(input: {
     sections,
     controls: [
       actionRow([
-        button({ id: input.confirmId, label: "delete them", style: ButtonStyles.DANGER }),
+        button({ id: input.policyId, label: "set the policy", style: ButtonStyles.PRIMARY }),
+        // nothing to delete means no delete button: a danger control that leads
+        // to an empty plan teaches the wrong thing.
+        ...(input.removals.length === 0
+          ? []
+          : [button({ id: input.confirmId, label: "delete them", style: ButtonStyles.DANGER })]),
         button({ id: input.listId, label: "cancel", style: ButtonStyles.SECONDARY }),
       ]),
     ],
