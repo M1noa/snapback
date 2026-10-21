@@ -14,6 +14,9 @@ export const GROUP_DESCRIPTIONS: Readonly<Record<string, string>> = {
   snapback: "snapback bot status, diagnostics, and version",
   backup: "capture this server, and read what was captured",
   restore: "put a backup back into a server, category by category",
+  verify: "the verification panel, its records, and the refresh sweep",
+  users: "look up one member record, export it, or blacklist someone",
+  pull: "add the members who granted a token back into this server",
 };
 
 export interface CommandManifest {

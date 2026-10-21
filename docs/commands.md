@@ -58,11 +58,40 @@ The wizard. Stateful and resumable; the subcommands jump straight to a step.
 | `/snapback status` | uptime, gateway, queue, database, and version at a glance |
 | `/snapback diagnostics` | runs every self-test and returns a copyable report |
 
+## /verify
+
+| Subcommand | Options | Does |
+|---|---|---|
+| `/verify panel` | `scopes` (multi-select, defaults to identify, email, guilds.join) | builds or edits the verification panel and prints its link |
+| `/verify records` | `page` | paginated list of the records this server holds |
+| `/verify record` | `user` | one person's record in full |
+| `/verify refresh` | | refreshes the OAuth tokens that are due |
+| `/verify delete` | `user`, `scope` (the record, the address, the token, or all of it) | erases what was captured |
+| `/verify stats` | | verification counts for this server |
+
+## /users
+
+| Subcommand | Options | Does |
+|---|---|---|
+| `/users lookup` | `user` | what this server holds about a person |
+| `/users export` | `scope` | writes this server's records out as json |
+| `/users blacklist` | `action`, `kind`, `value` | reads the entries you want to look at, for this server |
+
+## /pull
+
+| Subcommand | Options | Does |
+|---|---|---|
+| `/pull start` | `exclude_revoked` (bool), `max` (int) | adds the accounts that granted a token back into this server |
+| `/pull status` | | attempts, successes, failures, and what is restricted |
+| `/pull counters` | | today's attempts, successes and failures, per account |
+| `/pull reset` | `user` (autocomplete) | clears one account's counters by hand |
+| `/pull config` | | the limits in force, and where they come from |
+
+Every pull attempt is recorded, and an account is refused when it is inside the failure cooldown or its daily limit is spent. `pull` has no join link: a person is added through the token they granted, never through a url and never with the bot's own token.
+
 ## Not registered yet
 
-`D4PLAN.md` 8 specifies more than this build registers: a data-export step in the wizard, a records browser, a pull engine, a user lookup, and the version and help pages under the bot group. The plan is where they are written down. They are not in this file because they are not commands an operator can run yet, and a doc that lists them would send people looking for a surface that is not there.
-
-The verify command module in `src/discord/commands/verify/` holds the panel builder, the record list, the record page, the refresh sweep, and the delete path. It is not wired into the boot, so those commands do not appear in Discord.
+`D4PLAN.md` 8 specifies more than this build registers: a data-export step in the wizard, a records browser, and the help pages under the bot group. The plan is where they are written down.
 
 ## Guides
 

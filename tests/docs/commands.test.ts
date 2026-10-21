@@ -12,12 +12,18 @@ import { fileURLToPath } from "node:url";
 import type { BackupDeps } from "../../src/discord/commands/backup/deps.ts";
 import { backupCommands } from "../../src/discord/commands/backup/index.ts";
 import { buildDefinitions } from "../../src/discord/commands/index.ts";
+import type { PullDeps } from "../../src/discord/commands/pull/deps.ts";
+import { pullCommands } from "../../src/discord/commands/pull/index.ts";
 import type { RestoreDeps } from "../../src/discord/commands/restore/deps.ts";
 import { restoreCommands } from "../../src/discord/commands/restore/index.ts";
 import { setupCommands } from "../../src/discord/commands/setup/index.ts";
 import { diagnosticsCommand } from "../../src/discord/commands/system/diagnostics.ts";
 import { statusCommand } from "../../src/discord/commands/system/status.ts";
 import type { SlashCommand } from "../../src/discord/commands/types.ts";
+import type { UsersDeps } from "../../src/discord/commands/users/deps.ts";
+import { usersCommands } from "../../src/discord/commands/users/index.ts";
+import type { VerifyDeps } from "../../src/discord/commands/verify/deps.ts";
+import { verifyCommands } from "../../src/discord/commands/verify/index.ts";
 import { OPTION_TYPE } from "../../src/discord/registry.ts";
 import type { SetupDeps } from "../../src/setup/deps.ts";
 
@@ -35,6 +41,9 @@ const commands: SlashCommand[] = [
   ...setupCommands({} as unknown as SetupDeps),
   ...backupCommands({} as unknown as BackupDeps),
   ...restoreCommands({} as unknown as RestoreDeps),
+  ...verifyCommands({} as unknown as VerifyDeps),
+  ...usersCommands({} as unknown as UsersDeps),
+  ...pullCommands({} as unknown as PullDeps),
 ];
 
 // the registered surface, read off the same definitions the boot registers.
