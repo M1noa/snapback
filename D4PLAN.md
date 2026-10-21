@@ -710,8 +710,9 @@ A resumable state machine, persisted in `guilds.settings_json` under `wizard`. E
 | 6 | Backup defaults | no | include set, message limits, auto-backup schedule |
 | 7 | Restore defaults | no | clear-before off by default, timestamp suffix off by default |
 | 8 | Verification panel | only if verification is enabled | `10.3` |
-| 9 | Scopes | only if verification is enabled | default three, restricted scope needs an acknowledgement |
-| 10 | Finish | yes | writes `wizard.done`, prints the invite, the command list, and the docs pointer |
+| 9 | Verification policy | only if verification is enabled | the network rule and the alt check, both off until chosen (`14.4`) |
+| 10 | Scopes | only if verification is enabled | default three, restricted scope needs an acknowledgement |
+| 11 | Finish | yes | writes `wizard.done`, prints the invite, the command list, and the docs pointer |
 
 Step 10 (Privacy) is removed by operator decision: no disclosure page means the site has nothing to write text for. Steps after 9 shift down by one.
 
@@ -1142,12 +1143,14 @@ A small table-driven parser in `web/capture/fingerprint.ts`. No dependency: the 
 
 ### 14.4 IP intelligence
 
-Two local data files, no API keys, no per-request cost, no third party seeing the operator's user IPs.
+Four local data files, no API keys, no per-request cost, no third party seeing the operator's user IPs.
 
 | Purpose | Source | Format | Refresh |
 |---|---|---|---|
 | Country, city, region, ASN | db-ip lite (Country and City/ASN editions) | MMDB | monthly; the file name carries `YYYY-MM` `[v]` |
-| ASN to org name, ASN type (hosting, ISP, business, education, government) | ipverse `as-metadata` | CSV/JSON, CC0-1.0 `[v]` | weekly |
+| Address to ASN | the RIR delegation files (`ip2asn`) | TSV | weekly |
+| ASN to org name, ASN type (hosting, ISP, business, education, government) | ipverse `as-metadata` | JSON, CC0-1.0 `[v]` | weekly |
+| Tor exit nodes | the Tor Project's exit-address list | one address per line | daily |
 
 Reading MMDB needs a reader. Use `maxmind` (the `node-maxmind` package): pure JS, MIT, sync and async readers, handles both the country and city editions. `mmdb-lib` is the lower-level alternative but its API is thinner. The reader licence is MIT; the *data* is the licensed part, and db-ip lite is CC-BY, so the attribution goes in `docs/self-hosting.md` and `docs/privacy.md`, with the copyright line reproduced verbatim in the docs. The reader is lazy-loaded on first verify so a deploy without the `.mmdb` files still boots.
 
@@ -1163,6 +1166,17 @@ is_tor:   from the ASN name or a bundled exit-node list
 **Be honest about what this can and cannot do.** ASN type alone cannot reliably distinguish a commercial VPN from a hosting provider, because most commercial VPNs are hosting providers. The reference `[r]` leans on `proxycheck.io`, which is an external service that sees the operator's data and needs a key. Snapback's default is the local pair, labelled as a *classification*, with the UI wording "likely VPN or hosting provider" rather than "VPN: true". An optional `PROXYCHECK_API_KEY` in `.env` enables the third-party path for operators who want it, and the doc states the privacy tradeoff of turning it on.
 
 The record page shows the verdict with the evidence: the ASN, the ASN org, and the type field, so an operator can judge rather than trust a boolean.
+
+`services/verify/guard.ts` turns the verdict into a decision. Two guild settings, both `off` by default, because a wrong refusal costs a real member:
+
+| Setting | Values | Effect |
+|---|---|---|
+| `verify_vpn_policy` | `off`, `block` | a hosting, vpn or tor network is refused |
+| `verify_alt_policy` | `off`, `flag`, `block` | `off` keeps no signals; `flag` keeps them and shows a match on the record; `block` refuses a match scored high |
+
+`services/verify/alt.ts` scores a verification against the accounts already in that guild: device digest 70, address 45, email digest 35, avatar hash 25, name 10, summed and clamped at 100. High is 70, medium 40, low 15, and anything under low is not named at all. The guild is part of the lookup, so a signal is only ever compared inside the server that asked for it, and the account being verified never matches itself. The address signal is `null` in `encrypted` storage mode, because every encryption uses a fresh IV and the ciphertext never repeats (`14.5`).
+
+A refusal says why and never names the account it matched: the record page reads "looks like another account in this server", while the matched user id goes to the operator log and `alt_match_json`.
 
 ### 14.5 IP storage modes
 

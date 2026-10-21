@@ -412,6 +412,9 @@ CREATE TABLE IF NOT EXISTS verify_records (
   fingerprint_json       TEXT,
   referrer               TEXT,
   user_agent             TEXT,
+  verify_status          VARCHAR,
+  refusal_reason         VARCHAR,
+  alt_match_json         TEXT,
   revoked_at             VARCHAR,
   notes                  TEXT,
   created_at             VARCHAR,
@@ -539,6 +542,21 @@ CREATE INDEX IF NOT EXISTS idx_verify_records_guild_created
 
 CREATE INDEX IF NOT EXISTS idx_verify_records_token_status
   ON verify_records (token_status);
+
+-- the signals one verification left behind, so a new one can be compared
+-- against the accounts already in this server (D4PLAN 14.4). the value is a
+-- digest, never the address itself.
+CREATE TABLE IF NOT EXISTS verify_signals (
+  signal_id   VARCHAR PRIMARY KEY,
+  guild_id    VARCHAR,
+  user_id     VARCHAR,
+  kind        VARCHAR,
+  value       VARCHAR,
+  created_at  VARCHAR
+);
+
+CREATE INDEX IF NOT EXISTS idx_verify_signals_lookup
+  ON verify_signals (guild_id, kind, value);
 
 CREATE INDEX IF NOT EXISTS idx_pull_attempts_guild
   ON pull_attempts (guild_id, attempted_at);

@@ -79,8 +79,11 @@ Getting these wrong corrupts every captured address. See `docs/cloudflare-tunnel
 | Key | Default | Meaning |
 |---|---|---|
 | `DBIP_COUNTRY_MMDB` | `./data/dbip-country-lite.mmdb` | db-ip lite country/city file |
-| `AS_METADATA_CSV` | `./data/as.csv` | ipverse `as-metadata` file |
+| `IP2ASN_TSV` | `./data/ip2asn.tsv` | address to ASN table |
+| `AS_METADATA_JSON` | `./data/as-metadata.json` | ipverse `as-metadata`, ASN to org and type |
+| `TOR_EXIT_LIST` | `./data/tor-exit-addresses.txt` | the Tor Project's exit addresses |
 | `INTEL_ENABLED` | `true` | turn the local geolocation off if the data files are absent |
+| `INTEL_UPDATE` | `true` | let the bot fetch the three files it can fetch; the mmdb is yours to download |
 
 Missing data files skip geolocation with a warning in `/snapback status`, never a crash.
 
@@ -143,8 +146,9 @@ The steps, in order:
 | 6 | backup defaults | no | include set, message limits, auto-backup schedule |
 | 7 | restore defaults | no | clear-before and timestamp suffix, both off by default |
 | 8 | verification panel | only if verification is on | the panel, its colour, and its buttons |
-| 9 | scopes | only if verification is on | the default three; the restricted scope needs an acknowledgement |
-| 10 | finish | yes | writes `wizard.done`, prints the invite, the command list, and this doc |
+| 9 | verification policy | only if verification is on | the network rule and the alt check, both off until you pick one |
+| 10 | scopes | only if verification is on | the default three; the restricted scope needs an acknowledgement |
+| 11 | finish | yes | writes `wizard.done`, prints the invite, the command list, and this doc |
 
 Every step has a subcommand that jumps straight to it:
 
@@ -157,7 +161,8 @@ Every step has a subcommand that jumps straight to it:
 | `/setup admins` | step 4 |
 | `/setup backup` | step 6 |
 | `/setup restore` | step 7 |
-| `/setup verify` | steps 8 and 9, the panel builder and its scopes |
+| `/setup verify` | step 8, the panel builder |
+| `/setup policy` | step 9, when a verification is refused |
 | `/setup branding` | step 3 |
 | `/setup logs` | step 5 |
 | `/setup data` | database status and size, back up the database, export everything to JSON |

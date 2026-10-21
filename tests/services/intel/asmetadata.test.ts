@@ -1,12 +1,15 @@
 // tests/services/intel/asmetadata.test.ts. the network metadata: the file is
 // parsed once and kept in memory, a network is found by its asn, a network the
-// file does not have is unknown, and a broken row costs nothing but itself.
+// file does not have is unknown, and a broken entry costs nothing but itself.
+//
+// the file the publisher ships is json, and the category is the reason it is
+// worth having: it says what the network is for.
 
 import { afterAll, describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { loadAsMetadata, parseAsMetadataCsv } from "../../../src/services/intel/asmetadata.ts";
+import { parseAsMetadataFile } from "../../../src/services/intel/asmetadata.ts";
 
 const directory = mkdtempSync(join(tmpdir(), "snapback-intel-"));
 
@@ -20,93 +23,119 @@ function write(name: string, text: string): string {
   return path;
 }
 
-// the shape the ipverse publishes: the asn, the registry handle, the
-// organisation, and the country the network is registered in.
-const PUBLISHED = [
-  "asn,handle,description,country-code",
-  "15169,GOOGLE,Google LLC,US",
-  "16509,AMAZON-02,Amazon.com Inc.,US",
-  "7018,ATSI,AT&T Services, Inc.,US",
-  "12552,IP-ONLY,IP-Only Networks AB,SE",
-  "",
-].join("\n");
-
-// the asn of the networks the sample addresses sit in.
-const ADDRESS_ASN: Readonly<Record<string, string>> = {
-  "8.8.8.8": "15169",
-  "1.1.1.1": "13335",
-  "16.0.0.1": "16509",
-};
+// the shape the publisher ships: the asn, the metadata with its category, and
+// the route statistics this reader walks over.
+const PUBLISHED = JSON.stringify(
+  [
+    {
+      asn: 15169,
+      metadata: {
+        handle: "GOOGLE",
+        description: "Google LLC",
+        countryCode: "US",
+        country: "United States",
+        origin: "authoritative",
+        category: "isp",
+        networkRole: "access_provider",
+        registered: "2000-03-30",
+        lastModified: "2026-08-01",
+      },
+      stats: { ipv4: { prefixes: 7, prefixesAggregated: 6, largestPrefix: 22 }, ipv6: null },
+      lastAnnounced: "2026-10-20",
+    },
+    {
+      asn: 16509,
+      metadata: {
+        handle: "AMAZON-02",
+        description: "Amazon.com Inc.",
+        countryCode: "US",
+        country: "United States",
+        origin: "authoritative",
+        category: "hosting",
+        networkRole: "stub",
+        registered: "1997-02-14",
+        lastModified: "2026-10-01",
+      },
+      stats: null,
+      lastAnnounced: "2026-10-20",
+    },
+    {
+      asn: 12552,
+      metadata: {
+        handle: "IP-ONLY",
+        description: "IP-Only Networks AB",
+        countryCode: "SE",
+        country: "Sweden",
+        origin: "authoritative",
+        category: "isp",
+        networkRole: "access_provider",
+        registered: "1997-03-04",
+        lastModified: null,
+      },
+      stats: null,
+      lastAnnounced: null,
+    },
+  ],
+  null,
+  2,
+);
 
 describe("the network metadata", () => {
-  test("the file is parsed once and kept in memory", () => {
-    const path = write("as.csv", PUBLISHED);
-    const metadata = loadAsMetadata(path);
+  test("the file is read and the networks are kept", async () => {
+    const path = write("as.json", PUBLISHED);
+    const metadata = await parseAsMetadataFile(path);
 
-    // the file goes away, the answer does not: everything is in memory now.
-    rmSync(path, { force: true });
-
-    expect(metadata.count).toBe(4);
-    expect(metadata.lookup("15169")?.name).toBe("Google LLC");
-    expect(metadata.lookup("12552")?.name).toBe("IP-Only Networks AB");
+    expect(metadata.count).toBe(3);
+    expect(metadata.lookup("15169")?.description).toBe("Google LLC");
+    expect(metadata.lookup("12552")?.description).toBe("IP-Only Networks AB");
   });
 
-  test("the network of an address carries its name and its asn", () => {
-    const metadata = parseAsMetadataCsv(PUBLISHED);
+  test("the category says what the network is for", async () => {
+    const path = write("as-category.json", PUBLISHED);
+    const metadata = await parseAsMetadataFile(path);
 
-    const asn = ADDRESS_ASN["8.8.8.8"] ?? "";
-    const network = metadata.lookup(asn);
-    expect(network?.name).toBe("Google LLC");
-    expect(network?.asn).toBe("15169");
-    expect(network?.country).toBe("us");
-    expect(network?.registry).toBe("GOOGLE");
+    expect(metadata.lookup("16509")?.category).toBe("hosting");
+    expect(metadata.lookup("15169")?.category).toBe("isp");
+    expect(metadata.lookup("12552")?.networkRole).toBe("access_provider");
   });
 
-  test("a network the file does not have is unknown", () => {
-    const metadata = parseAsMetadataCsv(PUBLISHED);
+  test("a network the file does not have is unknown", async () => {
+    const path = write("as-missing.json", PUBLISHED);
+    const metadata = await parseAsMetadataFile(path);
 
     expect(metadata.lookup("13335")).toBeNull();
     expect(metadata.lookup("not a number")).toBeNull();
     expect(metadata.lookup("")).toBeNull();
   });
 
-  test("the asn is found with or without its prefix", () => {
-    const metadata = parseAsMetadataCsv(PUBLISHED);
+  test("the asn is found with or without its prefix", async () => {
+    const path = write("as-prefix.json", PUBLISHED);
+    const metadata = await parseAsMetadataFile(path);
 
-    expect(metadata.lookup("AS15169")?.name).toBe("Google LLC");
-    expect(metadata.lookup(" 15169 ")?.name).toBe("Google LLC");
+    expect(metadata.lookup("AS15169")?.description).toBe("Google LLC");
+    expect(metadata.lookup(" 15169 ")?.description).toBe("Google LLC");
   });
 
-  test("a malformed row is skipped rather than fatal", () => {
-    const metadata = parseAsMetadataCsv(
-      [
-        "asn,handle,description,country-code",
-        "15169,GOOGLE,Google LLC,US",
-        "not a number,BROKEN,Broken Row,US",
-        ",EMPTY,No Number,US",
-        '16509,AMAZON-02,"Amazon.com Inc., Inc.",US',
-        "",
-      ].join("\n"),
+  test("an entry that is cut in half is skipped rather than fatal", async () => {
+    const path = write(
+      "as-broken.json",
+      '[{"asn": 15169, "metadata": {"handle": "GOOGLE", "description": "Google LLC", "category": "isp"}},',
     );
 
-    expect(metadata.count).toBe(2);
-    expect(metadata.lookup("15169")?.name).toBe("Google LLC");
-    // a quoted name keeps its comma.
-    expect(metadata.lookup("16509")?.name).toBe("Amazon.com Inc., Inc.");
-  });
-
-  test("a comment header names the columns", () => {
-    const metadata = parseAsMetadataCsv(
-      ["# asn,name,country,registry", "15169,Google LLC,US,GOOGLE", ""].join("\n"),
-    );
-
+    const metadata = await parseAsMetadataFile(path);
     expect(metadata.count).toBe(1);
-    expect(metadata.lookup("15169")?.name).toBe("Google LLC");
-    expect(metadata.lookup("15169")?.country).toBe("us");
-    expect(metadata.lookup("15169")?.registry).toBe("GOOGLE");
+    expect(metadata.lookup("15169")?.description).toBe("Google LLC");
   });
 
-  test("a file that is not there is missing", () => {
-    expect(() => loadAsMetadata(join(directory, "absent.csv"))).toThrow("SB_INTEL_AS_CSV_MISSING");
+  test("a file with no entry in it is refused", async () => {
+    const path = write("as-empty.json", "[]");
+
+    await expect(parseAsMetadataFile(path)).rejects.toThrow("SB_INTEL_AS_JSON_INVALID");
+  });
+
+  test("a file that is not there is missing", async () => {
+    await expect(parseAsMetadataFile(join(directory, "absent.json"))).rejects.toThrow(
+      "SB_INTEL_AS_JSON_MISSING",
+    );
   });
 });

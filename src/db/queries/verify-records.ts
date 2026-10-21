@@ -24,7 +24,7 @@ import type {
 } from "../types.ts";
 
 const COLUMNS =
-  "record_id, guild_id, user_id, username, global_name, discriminator, avatar_url, email, email_verified, locale, mfa_enabled, premium_type, flags, connections_json, guilds_json, relationships_json, oauth_scopes_json, oauth_granted_at, oauth_last_checked_at, access_token_enc, refresh_token_enc, token_expires_at, token_status, first_ip_hash, first_ip_enc, last_ip_hash, last_ip_enc, ip_history_json, country_code, country_name, city, region, isp, asn, as_org, ip_type, is_vpn, is_proxy, is_tor, intel_checked_at, fingerprint_json, referrer, user_agent, revoked_at, notes, created_at, updated_at";
+  "record_id, guild_id, user_id, username, global_name, discriminator, avatar_url, email, email_verified, locale, mfa_enabled, premium_type, flags, connections_json, guilds_json, relationships_json, oauth_scopes_json, oauth_granted_at, oauth_last_checked_at, access_token_enc, refresh_token_enc, token_expires_at, token_status, first_ip_hash, first_ip_enc, last_ip_hash, last_ip_enc, ip_history_json, country_code, country_name, city, region, isp, asn, as_org, ip_type, is_vpn, is_proxy, is_tor, intel_checked_at, fingerprint_json, referrer, user_agent, verify_status, refusal_reason, alt_match_json, revoked_at, notes, created_at, updated_at";
 
 // one placeholder per column, in the same order.
 const PLACEHOLDERS = COLUMNS.split(", ")
@@ -55,17 +55,45 @@ const REFRESHED = [
   "last_ip_hash",
   "last_ip_enc",
   "ip_history_json",
+  // the intel, the fingerprint and the verdict belong to the verification that
+  // just happened, so a re-verification replaces them (D4PLAN 14.4).
+  "country_code",
+  "country_name",
+  "city",
+  "region",
+  "isp",
+  "asn",
+  "as_org",
+  "ip_type",
+  "is_vpn",
+  "is_proxy",
+  "is_tor",
+  "intel_checked_at",
+  "fingerprint_json",
+  "verify_status",
+  "refusal_reason",
+  "alt_match_json",
   "updated_at",
 ] as const;
 
-const TOKEN_STATUSES = ["valid", "unauthorized", "revoked", "missing"] as const;
-const IP_TYPES = ["residential", "hosting", "mobile", "unknown"] as const;
+const TOKEN_STATUSES = ["valid", "unauthorized", "revoked", "refused", "missing"] as const;
+const VERIFY_STATUSES = ["verified", "refused"] as const;
+const IP_TYPES = [
+  "residential",
+  "hosting",
+  "mobile",
+  "business",
+  "education",
+  "government",
+  "unknown",
+] as const;
 const EVENT_KINDS = [
   "oauth",
   "refresh",
   "revoked",
   "refreshed_ok",
   "refreshed_fail",
+  "refused",
   "note",
 ] as const;
 
@@ -137,6 +165,9 @@ function toRecordRow(raw: Record<string, SqlValue>): VerifyRecordRow {
     fingerprint_json: toJsonObject(raw.fingerprint_json),
     referrer: toText(raw.referrer) ?? null,
     user_agent: toText(raw.user_agent) ?? null,
+    verify_status: oneOf(raw.verify_status, VERIFY_STATUSES) ?? "verified",
+    refusal_reason: toText(raw.refusal_reason) ?? null,
+    alt_match_json: toJsonObject(raw.alt_match_json),
     revoked_at: toText(raw.revoked_at) ?? null,
     notes: toText(raw.notes) ?? null,
     created_at: toText(raw.created_at) ?? "",
@@ -189,6 +220,9 @@ function bind(row: VerifyRecordRow): (string | number | boolean | null)[] {
     stringifyJson(row.fingerprint_json),
     row.referrer,
     row.user_agent,
+    row.verify_status,
+    row.refusal_reason,
+    stringifyJson(row.alt_match_json),
     row.revoked_at,
     row.notes,
     row.created_at,

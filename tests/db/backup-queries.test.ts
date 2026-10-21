@@ -612,7 +612,7 @@ describe("migration 2", () => {
         "SELECT value FROM meta WHERE key = 'schema_version'",
       );
       expect(Number(version[0]?.value)).toBe(SCHEMA_VERSION);
-      expect(SCHEMA_VERSION).toBe(3);
+      expect(SCHEMA_VERSION).toBe(4);
     } finally {
       await v1.close();
       rmSync(v1Dir, { recursive: true, force: true });

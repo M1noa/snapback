@@ -227,7 +227,7 @@ describe("the boot composition", () => {
       dbBytesPath: null,
       dbDriver: "duckdb",
       commit: null,
-      intelFiles: { countryMmdb: "", asCsv: "" },
+      intelFiles: { countryMmdb: "", ip2asnTsv: "", asMetadataJson: "", torList: "" },
       intelEnabled: false,
       tokenStorage: false,
       commandCount: () => 0,

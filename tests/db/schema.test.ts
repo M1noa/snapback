@@ -43,6 +43,7 @@ const EXPECTED_TABLES = [
   "verify_panels",
   "verify_records",
   "verify_record_events",
+  "verify_signals",
   "pull_attempts",
   "account_counters",
   // retention and export

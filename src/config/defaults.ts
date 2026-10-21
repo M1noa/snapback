@@ -111,6 +111,22 @@ export const MESSAGE_TYPE_RANGE: Readonly<Range> = Object.freeze({ min: 0, max: 
  *  replays as noise in a restored channel, so it is off until someone asks. */
 export const DEFAULT_BACKUP_MESSAGE_TYPES: readonly number[] = Object.freeze([0, 19, 20]);
 
+/**
+ * the vpn policy (D4PLAN 14.4). "off" records what the network is and never
+ * acts on it. "block" refuses a verification from a network that looks like a
+ * vpn, a hosting provider or a tor exit.
+ */
+export const VPN_POLICIES = Object.freeze(["off", "block"] as const);
+export type VerifyVpnPolicy = (typeof VPN_POLICIES)[number];
+
+/**
+ * the anti-alt policy. "off" does not look for another account. "flag" shows
+ * the match and the confidence on the record. "block" also refuses the
+ * verification when the match is a confident one.
+ */
+export const ALT_POLICIES = Object.freeze(["off", "flag", "block"] as const);
+export type VerifyAltPolicy = (typeof ALT_POLICIES)[number];
+
 export interface GuildSettings {
   /** the name the web pages show. null = the server's own name from discord. */
   web_display_name: string | null;
@@ -142,6 +158,10 @@ export interface GuildSettings {
   /** the panel is also the switch: no panel means verification is not in use, so
    *  the wizard does not ask for its three steps (D4PLAN 10.1). */
   verify_panel: VerifyPanelSettings | null;
+  /** what happens when the network looks like a vpn or a hosting provider. */
+  verify_vpn_policy: VerifyVpnPolicy;
+  /** what happens when the verification looks like another account here. */
+  verify_alt_policy: VerifyAltPolicy;
   /** iso timestamp of the restricted-scope acknowledgement (D4PLAN 7.2). */
   acknowledged_restricted_scopes: string | null;
   branding: BrandingSettings;
@@ -384,6 +404,8 @@ export const FIELDS: {
   notify_on_join: bool(false),
   wizard: { default: DEFAULT_WIZARD, read: readWizardState },
   verify_panel: { default: null, read: readVerifyPanel },
+  verify_vpn_policy: { default: "off", read: (v) => oneOf(v, VPN_POLICIES) ?? "off" },
+  verify_alt_policy: { default: "off", read: (v) => oneOf(v, ALT_POLICIES) ?? "off" },
   acknowledged_restricted_scopes: nullableIso(),
   branding: { default: DEFAULT_BRANDING, read: readBranding },
 };

@@ -8,7 +8,7 @@
 import type { Database, MetaRow } from "./types.ts";
 
 // bump only when a migration is added; schema.sql's shape is version 1.
-export const SCHEMA_VERSION = 3;
+export const SCHEMA_VERSION = 4;
 
 export interface Migration {
   readonly version: number;
@@ -42,6 +42,27 @@ export const MIGRATIONS: readonly Migration[] = [
       reason TEXT,
       PRIMARY KEY (guild_id, kind, value)
     )`,
+  },
+  // 4: the ip intelligence on a record (D4PLAN 14.4). the record says how the
+  // verification ended and, when it was refused, why. the signals table holds
+  // what one verification left behind, so a new one can be compared against the
+  // accounts already in this server. schema.sql carries the same shape for a
+  // fresh install.
+  {
+    version: 4,
+    sql: `ALTER TABLE verify_records ADD COLUMN IF NOT EXISTS verify_status VARCHAR;
+      ALTER TABLE verify_records ADD COLUMN IF NOT EXISTS refusal_reason VARCHAR;
+      ALTER TABLE verify_records ADD COLUMN IF NOT EXISTS alt_match_json TEXT;
+      CREATE TABLE IF NOT EXISTS verify_signals (
+        signal_id VARCHAR PRIMARY KEY,
+        guild_id VARCHAR,
+        user_id VARCHAR,
+        kind VARCHAR,
+        value VARCHAR,
+        created_at VARCHAR
+      );
+      CREATE INDEX IF NOT EXISTS idx_verify_signals_lookup
+        ON verify_signals (guild_id, kind, value);`,
   },
 ];
 

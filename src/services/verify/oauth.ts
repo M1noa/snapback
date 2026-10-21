@@ -67,7 +67,17 @@ export interface ExchangeResult {
   /** the server the state was minted for. null when the state carried none. */
   readonly guildId: string | null;
   readonly username: string;
+  readonly globalName: string | null;
+  readonly discriminator: string | null;
+  /** the avatar url, when the account has one. */
+  readonly avatarUrl: string | null;
+  /** the avatar hash. the same avatar on two accounts is a signal (14.4). */
+  readonly avatarHash: string | null;
   readonly email: string | null;
+  readonly flags: number | null;
+  readonly premiumType: number | null;
+  readonly mfaEnabled: boolean | null;
+  readonly locale: string | null;
   readonly scopes: readonly string[];
   readonly guilds: readonly { id: string; name: string | null }[];
   /** the linked accounts. empty when the connections scope was not granted. */
@@ -102,7 +112,14 @@ interface TokenResponse {
 interface DiscordUser {
   id?: unknown;
   username?: unknown;
+  global_name?: unknown;
+  discriminator?: unknown;
+  avatar?: unknown;
   email?: unknown;
+  flags?: unknown;
+  premium_type?: unknown;
+  mfa_enabled?: unknown;
+  locale?: unknown;
 }
 
 interface OAuthApplicationInfo {
@@ -335,11 +352,21 @@ export async function exchangeCode(
     scopes,
   });
 
+  const avatarHash = asText(user.avatar);
+
   return {
     userId,
     guildId: row.guild_id,
     username: asText(user.username) ?? "",
+    globalName: asText(user.global_name),
+    discriminator: asText(user.discriminator),
+    avatarUrl: avatarUrl(userId, avatarHash),
+    avatarHash,
     email,
+    flags: asNumber(user.flags),
+    premiumType: asNumber(user.premium_type),
+    mfaEnabled: typeof user.mfa_enabled === "boolean" ? user.mfa_enabled : null,
+    locale: asText(user.locale),
     scopes,
     guilds: guilds.map((guild) => ({ id: asText(guild.id) ?? "", name: asText(guild.name) })),
     connections: connections.map((connection) => ({
@@ -440,4 +467,11 @@ function asText(value: unknown): string | null {
 
 function asNumber(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+/** the avatar url, from the hash discord sends. an animated avatar ends in .gif. */
+function avatarUrl(userId: string, hash: string | null): string | null {
+  if (hash === null || hash === "") return null;
+  const extension = hash.startsWith("a_") ? "gif" : "png";
+  return `https://cdn.discordapp.com/avatars/${userId}/${hash}.${extension}`;
 }

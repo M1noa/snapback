@@ -27,8 +27,15 @@ export type JsonValue = JsonObject | unknown[] | string | number | boolean | nul
 export type JobStatus = "queued" | "running" | "paused" | "succeeded" | "failed" | "cancelled";
 export type JobKind = "backup" | "restore" | "pull" | "verify_refresh" | "export";
 export type BackupKind = "manual" | "auto" | "pre_restore";
-export type TokenStatus = "valid" | "unauthorized" | "revoked" | "missing";
-export type IpType = "residential" | "hosting" | "mobile" | "unknown";
+export type TokenStatus = "valid" | "unauthorized" | "revoked" | "refused" | "missing";
+export type IpType =
+  | "residential"
+  | "hosting"
+  | "mobile"
+  | "business"
+  | "education"
+  | "government"
+  | "unknown";
 export type OverwriteTargetType = "role" | "member";
 export type PullOutcome = "added" | "already_member" | "failed" | "skipped";
 export type RecordEventKind =
@@ -37,7 +44,14 @@ export type RecordEventKind =
   | "revoked"
   | "refreshed_ok"
   | "refreshed_fail"
+  | "refused"
   | "note";
+
+/** how a verification ended (D4PLAN 14.4). */
+export type VerifyStatus = "verified" | "refused";
+
+/** the signals one verification left behind, used to spot another account. */
+export type VerifySignalKind = "device" | "ip" | "email" | "avatar" | "name";
 export type ExportKind = "backup" | "records" | "all";
 
 /** how many backups a guild keeps, by age or count, filtered by kind (17.2). */
@@ -465,10 +479,26 @@ export interface VerifyRecordRow {
   fingerprint_json: JsonObject | null;
   referrer: string | null;
   user_agent: string | null;
+  /** how the last verification ended. */
+  verify_status: VerifyStatus;
+  /** why it was refused: "vpn" or "alt". */
+  refusal_reason: string | null;
+  /** the account it looks like, the confidence and the signals behind it. */
+  alt_match_json: JsonObject | null;
   revoked_at: string | null;
   notes: string | null;
   created_at: string;
   updated_at: string;
+}
+
+/** one signal one verification left behind. */
+export interface VerifySignalRow {
+  signal_id: string;
+  guild_id: string;
+  user_id: string;
+  kind: VerifySignalKind;
+  value: string;
+  created_at: string;
 }
 
 /** timeline of a record: oauth, refreshes, revoke. append-only. */

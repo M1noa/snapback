@@ -67,7 +67,12 @@ export function createStatusProbe(deps: ProbeDeps): StatusProbe {
 
 export interface DiagnosticsDeps extends ProbeDeps {
   /** whether the mmdb and as-metadata files are on disk. */
-  readonly intelFiles: { readonly countryMmdb: string; readonly asCsv: string };
+  readonly intelFiles: {
+    readonly countryMmdb: string;
+    readonly ip2asnTsv: string;
+    readonly asMetadataJson: string;
+    readonly torList: string;
+  };
   readonly intelEnabled: boolean;
   readonly tokenStorage: boolean;
   readonly commandCount: () => number;
@@ -121,7 +126,7 @@ function intentsProbe(): ProbeResult {
 function intelProbe(deps: DiagnosticsDeps): ProbeResult {
   if (!deps.intelEnabled) return ok("geo data", "intel disabled, geo skipped by configuration");
   const missing: string[] = [];
-  for (const path of [deps.intelFiles.countryMmdb, deps.intelFiles.asCsv]) {
+  for (const path of Object.values(deps.intelFiles)) {
     try {
       statSync(path);
     } catch {
@@ -132,7 +137,7 @@ function intelProbe(deps: DiagnosticsDeps): ProbeResult {
     // a missing data file skips geo, it never stops a boot (D4PLAN 9).
     return warn("geo data", `missing ${missing.join(", ")}; geo lookups are skipped`);
   }
-  return ok("geo data", "country mmdb and as metadata present");
+  return ok("geo data", "country database, ip to asn table, as metadata and tor exits present");
 }
 
 function storageProbe(deps: DiagnosticsDeps): ProbeResult {

@@ -43,10 +43,10 @@ function everythingHandled(base: GuildSettings): GuildSettings {
 }
 
 describe("the step table", () => {
-  test("eleven steps, in order, with unique keys and indices", () => {
-    expect(WIZARD_STEPS.length).toBe(11);
-    expect(WIZARD_STEP_KEYS.length).toBe(11);
-    expect(new Set(WIZARD_STEP_KEYS).size).toBe(11);
+  test("twelve steps, in order, with unique keys and indices", () => {
+    expect(WIZARD_STEPS.length).toBe(12);
+    expect(WIZARD_STEP_KEYS.length).toBe(12);
+    expect(new Set(WIZARD_STEP_KEYS).size).toBe(12);
     for (const [index, step] of WIZARD_STEPS.entries()) {
       expect(step.index).toBe(index);
     }
@@ -66,7 +66,7 @@ describe("the step table", () => {
 
   test("only the verify steps are verify-only", () => {
     const verifyOnly = WIZARD_STEPS.filter((step) => step.verifyOnly).map((step) => step.key);
-    expect(verifyOnly).toEqual(["web", "verify", "scopes"]);
+    expect(verifyOnly).toEqual(["web", "verify", "policy", "scopes"]);
   });
 
   test("findStep is exact, not a substring match", () => {
@@ -89,8 +89,9 @@ describe("pending steps", () => {
     const pending = pendingSteps(withVerification(settings())).map((step) => step.key);
     expect(pending).toContain("web");
     expect(pending).toContain("verify");
+    expect(pending).toContain("policy");
     expect(pending).toContain("scopes");
-    expect(pending.length).toBe(11);
+    expect(pending.length).toBe(12);
   });
 
   test("the panel is what turns verification on", () => {

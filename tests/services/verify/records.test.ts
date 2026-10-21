@@ -193,7 +193,11 @@ describe("the verify records", () => {
     const row = await upsertRecord(deps(), input({ userId: user }));
     const events = await recordsDb.listRecordEvents(db, row.record_id);
     expect(events.map((event) => event.kind)).toEqual(["oauth"]);
-    expect(events[0]?.detail_json).toEqual({ scopes: ["identify", "email"] });
+    expect(events[0]?.detail_json).toEqual({
+      scopes: ["identify", "email"],
+      device: null,
+      status: "verified",
+    });
   });
 
   test("an event with an unknown kind is refused", async () => {

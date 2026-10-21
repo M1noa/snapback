@@ -211,6 +211,29 @@ export interface RecordFields {
   readonly isp: string | null;
   readonly asOrg: string | null;
   readonly ipType: string | null;
+  readonly asn: string | null;
+  readonly isVpn: boolean | null;
+  readonly isTor: boolean | null;
+  /** how the last verification ended, and why it was refused. */
+  readonly verifyStatus: string;
+  readonly refusalReason: string | null;
+  /** the account this one looks like, with the confidence. */
+  readonly altMatch: {
+    readonly userId: string;
+    readonly confidence: number;
+    readonly label: string;
+    readonly signals: readonly string[];
+  } | null;
+  /** what each verification said about the network at the time. */
+  readonly history: readonly {
+    readonly at: string;
+    readonly status: string;
+    readonly reason: string | null;
+    readonly ipType: string | null;
+    readonly asOrg: string | null;
+    readonly isVpn: boolean | null;
+    readonly isTor: boolean | null;
+  }[];
   readonly guilds: readonly string[];
   readonly connections: readonly string[];
   readonly relationshipsCaptured: boolean;
@@ -222,6 +245,13 @@ export interface RecordFields {
     readonly kind: string;
     readonly detail: string;
   }[];
+}
+
+/** why a verification was refused, in the operator's words. */
+export function refusalReasonText(reason: string | null): string {
+  if (reason === "vpn") return "the network looks like a vpn or a hosting provider";
+  if (reason === "alt") return "it looks like another account in this server";
+  return reason ?? "not refused";
 }
 
 /** one record in full. a field that was not captured says so, rather than
@@ -238,6 +268,9 @@ export function recordPage(input: RecordPageInput): ContainerComponent {
           record.globalName === null ? "" : ` · ${record.globalName}`
         }`,
         `scopes: ${record.scopes.join(", ") || "none"} · token: ${record.tokenStatus}`,
+        `verification: ${record.verifyStatus}${
+          record.refusalReason === null ? "" : ` · ${refusalReasonText(record.refusalReason)}`
+        }`,
       ].join("\n"),
     ),
     textDisplay(
@@ -257,6 +290,9 @@ export function recordPage(input: RecordPageInput): ContainerComponent {
           record.ipType,
           "no intel was run",
         )}`,
+        `asn: ${or(record.asn, "no intel was run")} · vpn: ${
+          record.isVpn === null ? "not looked up" : record.isVpn ? "likely" : "no"
+        } · tor: ${record.isTor === null ? "not looked up" : record.isTor ? "yes" : "no"}`,
       ].join("\n"),
     ),
     textDisplay(
@@ -279,6 +315,32 @@ export function recordPage(input: RecordPageInput): ContainerComponent {
         : "friends list: not captured (discord gates that scope behind the Social SDK)",
     ),
     textDisplay(`fingerprint: ${or(record.fingerprint, "the browser sent nothing")}`),
+    ...(record.altMatch === null
+      ? []
+      : [
+          textDisplay(
+            `possible alt of <@${record.altMatch.userId}> · confidence ${record.altMatch.confidence} (${record.altMatch.label}) · the same ${record.altMatch.signals.join(" and ")}`,
+          ),
+        ]),
+    ...(record.history.length === 0
+      ? []
+      : [
+          textDisplay(
+            [
+              "**verifications**",
+              ...record.history.map(
+                (entry) =>
+                  `-# ${relativeTimestamp(Date.parse(entry.at))} · ${entry.status}${
+                    entry.reason === null ? "" : ` (${refusalReasonText(entry.reason)})`
+                  } · ${entry.ipType ?? "unknown"}${
+                    entry.asOrg === null ? "" : ` · ${entry.asOrg}`
+                  }${entry.isVpn === true ? " · likely a vpn" : ""}${
+                    entry.isTor === true ? " · tor" : ""
+                  }`,
+              ),
+            ].join("\n"),
+          ),
+        ]),
     ...(record.events.length === 0
       ? [textDisplay("no events yet.")]
       : record.events.map((event) =>
@@ -385,7 +447,7 @@ export function jobPage(input: {
 export { VERIFY_ACTION, VERIFY_OBJECT, verifyCustomId };
 
 /** the token statuses a record can be in, in the order the page shows them. */
-const TOKEN_STATUSES = ["valid", "unauthorized", "revoked", "missing"] as const;
+const TOKEN_STATUSES = ["valid", "unauthorized", "revoked", "refused", "missing"] as const;
 
 export interface VerifyStats {
   readonly records: number;

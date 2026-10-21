@@ -81,7 +81,12 @@ describe("createStatusProbe", () => {
 function diagnostics(overrides: Partial<DiagnosticsDeps> = {}): DiagnosticsDeps {
   return {
     ...STATUS,
-    intelFiles: { countryMmdb: "/nonexistent/country.mmdb", asCsv: "/nonexistent/as.csv" },
+    intelFiles: {
+      countryMmdb: "/nonexistent/country.mmdb",
+      ip2asnTsv: "/nonexistent/ip2asn.tsv",
+      asMetadataJson: "/nonexistent/as-metadata.json",
+      torList: "/nonexistent/tor-exit-addresses.txt",
+    },
     intelEnabled: true,
     tokenStorage: true,
     commandCount: () => 1,

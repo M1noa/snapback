@@ -1,7 +1,7 @@
 // the shared parts of the /verify surface: the access check and the two record
 // pages.
 
-import type { VerifyRecordRow } from "../../../db/types.ts";
+import type { JsonObject, VerifyRecordRow } from "../../../db/types.ts";
 import { failurePage } from "../../interactions/dispatch.ts";
 import type { CommandContext, CommandResult } from "../types.ts";
 import { VERIFY_ACTION, VERIFY_OBJECT, type VerifyDeps, verifyCustomId } from "./deps.ts";
@@ -111,6 +111,63 @@ function summarise(record: VerifyRecordRow): VerifyRecordSummary {
   };
 }
 
+function text(value: unknown): string | null {
+  return typeof value === "string" && value !== "" ? value : null;
+}
+
+function flag(value: unknown): boolean | null {
+  return typeof value === "boolean" ? value : null;
+}
+
+function number(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+/** the account the record looks like, when the anti-alt check found one. */
+function altMatchOf(stored: JsonObject | null): RecordFields["altMatch"] {
+  if (stored === null) return null;
+  const userId = text(stored.user_id);
+  const confidence = number(stored.confidence);
+  if (userId === null || confidence === null) return null;
+  const signals = Array.isArray(stored.signals)
+    ? stored.signals.filter((item): item is string => typeof item === "string")
+    : [];
+  return {
+    userId,
+    confidence,
+    label: text(stored.label) ?? "unknown",
+    signals,
+  };
+}
+
+/** what each verification said about the network at the time. */
+function historyOf(stored: JsonObject[] | null): RecordFields["history"] {
+  if (stored === null) return [];
+  const entries: {
+    at: string;
+    status: string;
+    reason: string | null;
+    ipType: string | null;
+    asOrg: string | null;
+    isVpn: boolean | null;
+    isTor: boolean | null;
+  }[] = [];
+  for (const entry of stored) {
+    const at = text(entry.at);
+    if (at === null) continue;
+    entries.push({
+      at,
+      status: text(entry.status) ?? "verified",
+      reason: text(entry.reason),
+      ipType: text(entry.ip_type),
+      asOrg: text(entry.as_org),
+      isVpn: flag(entry.is_vpn),
+      isTor: flag(entry.is_tor),
+    });
+  }
+  return entries.reverse();
+}
+
 /** the record's fields, with the ones that were never captured left empty so
  *  the page can say "not captured" rather than showing a blank. */
 function fieldsOf(record: VerifyRecordRow): RecordFields {
@@ -126,6 +183,13 @@ function fieldsOf(record: VerifyRecordRow): RecordFields {
     isp: record.isp,
     asOrg: record.as_org,
     ipType: record.ip_type ?? null,
+    asn: record.asn,
+    isVpn: record.is_vpn,
+    isTor: record.is_tor,
+    verifyStatus: record.verify_status,
+    refusalReason: record.refusal_reason,
+    altMatch: altMatchOf(record.alt_match_json),
+    history: historyOf(record.ip_history_json),
     guilds: [],
     connections: [],
     // the friends list is never captured: discord gates that scope behind the

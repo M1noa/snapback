@@ -417,6 +417,8 @@ const modalId = (key: string): string => sid(SETUP_OBJECT.modal, key);
 const navId = (action: string, cursor = ""): string => sid(SETUP_OBJECT.nav, action, cursor);
 // the logging step's channel select and family checkboxes report under "toggle".
 const logId = (cursor: string): string => sid(SETUP_OBJECT.log, SETUP_ACTION.toggle, cursor);
+// the policy step's two selects report under the step's own action.
+const policyId = (cursor: string): string => sid(SETUP_OBJECT.policy, "policy", cursor);
 
 // ---- the tree walker ------------------------------------------------------
 
@@ -510,11 +512,13 @@ async function fullPass(h: Harness): Promise<void> {
   await press(h, stepId("backup"), new FakeSurface(BACKUP_VALUES));
   await press(h, stepId("restore"), new FakeSurface(RESTORE_VALUES));
   await press(h, modalId("verify"), new FakeSurface(VERIFY_VALUES, "modal"));
+  await press(h, policyId("vpn"), new FakeSurface({ [policyId("vpn")]: "block" }));
+  await press(h, policyId("alt"), new FakeSurface({ [policyId("alt")]: "flag" }));
   await press(h, modalId("scopes"), new FakeSurface(SCOPES_VALUES, "modal"));
   await press(h, stepId("finish"), new FakeSurface()); // completes the wizard
 }
 
-const PASS_SAVES = 12; // setup.open + ten step saves + finish
+const PASS_SAVES = 14; // setup.open + twelve step saves + finish
 
 async function auditRows(db: Database): Promise<AuditLogRow[]> {
   return auditDb.listAuditByGuild(db, GUILD, { limit: 100 });
@@ -538,6 +542,8 @@ const VALUE_FIELDS = [
   "restore_message_timestamp_suffix",
   "notify_on_join",
   "verify_panel",
+  "verify_vpn_policy",
+  "verify_alt_policy",
   "acknowledged_restricted_scopes",
   "branding",
   "web_display_name",
@@ -696,6 +702,7 @@ describe("the setup wizard, end to end", () => {
           "setup.backup",
           "setup.restore",
           "setup.verify",
+          "setup.policy",
           "setup.scopes",
           "setup.finish",
         ].sort(),
@@ -796,12 +803,12 @@ describe("the setup wizard, end to end", () => {
         expect(JSON.stringify(after[field])).toBe(JSON.stringify(snapshot[field]));
       }
 
-      // the second pass wrote 10 rows, not 12. two saves moved nothing so wrote
+      // the second pass wrote 11 rows, not 14. two saves moved nothing so wrote
       // no audit row: setup.open (the opener is already this user) and
       // setup.finish (the wizard is already complete, so completing it again is a
       // no-op). every other save advanced the wizard cursor and nothing else.
       const added = (await auditRows(temp.handle.db)).filter((row) => !firstIds.has(row.id));
-      expect(added).toHaveLength(10);
+      expect(added).toHaveLength(11);
       const addedActions = new Set(added.map((row) => row.action));
       expect(addedActions.has("setup.open")).toBe(false);
       expect(addedActions.has("setup.finish")).toBe(false);

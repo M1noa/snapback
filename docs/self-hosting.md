@@ -24,8 +24,10 @@ DuckDB allows one writer process. The bot owns the file, and the web server runs
 | `data/snapback.duckdb` | the DuckDB file when `DATABASE_URL` is unset |
 | `backups/<backup_id>/assets/` | downloaded icons, emojis, stickers, soundboard sounds, role icons, and attachments for one backup |
 | `data/exports/` | exported files, each with an `expires_at` and swept when it passes |
-| `data/dbip-country-lite.mmdb` | db-ip lite data file, path from `DBIP_COUNTRY_MMDB` |
-| `data/as.csv` | ipverse `as-metadata` file, path from `AS_METADATA_CSV` |
+| `data/dbip-country-lite.mmdb` | db-ip lite data file, path from `DBIP_COUNTRY_MMDB`; not fetched, db-ip gates its downloads |
+| `data/ip2asn.tsv` | address to ASN table, path from `IP2ASN_TSV` |
+| `data/as-metadata.json` | ipverse `as-metadata`, path from `AS_METADATA_JSON` |
+| `data/tor-exit-addresses.txt` | Tor exit nodes, path from `TOR_EXIT_LIST` |
 
 Assets are downloaded rather than referenced, because Discord CDN URLs for emojis, stickers, and avatars are signed and expire. A backup that stores bare URLs restores blank icons six months later.
 
@@ -39,12 +41,16 @@ Tokens are encrypted with a key held outside the database, so restoring the data
 
 ## Intel data files
 
-Geolocation runs locally from two files. No API keys, no per-request cost, no third party seeing your users' addresses.
+Geolocation runs locally from four files. No API keys, no per-request cost, no third party seeing your users' addresses.
 
 | Purpose | Source | Format | Licence | Refresh |
 |---|---|---|---|---|
 | country, city, region, ASN | db-ip lite (Country and City/ASN editions) | MMDB | CC-BY | monthly; the filename carries `YYYY-MM` |
-| ASN to org name and type | ipverse `as-metadata` | CSV/JSON | CC0-1.0 | weekly |
+| address to ASN | the RIR delegation files | TSV | public | weekly |
+| ASN to org name and type | ipverse `as-metadata` | JSON | CC0-1.0 | weekly |
+| tor exit nodes | the Tor Project's exit list | text | public | daily |
+
+`INTEL_UPDATE=true` (the default) lets the bot fetch the three files it does not need an account for, at boot when one is missing and every six hours when one is stale. A failed download keeps the file already on disk.
 
 The MMDB reader is `maxmind` (the `node-maxmind` package), which is MIT. The reader licence is the permissive part; the **data** is the licensed part.
 

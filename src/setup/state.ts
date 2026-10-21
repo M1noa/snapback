@@ -96,6 +96,14 @@ export const WIZARD_STEPS: readonly WizardStep[] = Object.freeze([
   },
   {
     index: 9,
+    key: "policy",
+    title: "verification policy",
+    required: false,
+    verifyOnly: true,
+    summary: "when a verification is refused: the network rule and the alt check",
+  },
+  {
+    index: 10,
     key: "scopes",
     title: "scopes",
     required: false,
@@ -103,7 +111,7 @@ export const WIZARD_STEPS: readonly WizardStep[] = Object.freeze([
     summary: "what the verification asks for, and why",
   },
   {
-    index: 10,
+    index: 11,
     key: "finish",
     title: "finish",
     required: true,

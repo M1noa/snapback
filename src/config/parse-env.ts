@@ -40,8 +40,16 @@ export interface Env {
   };
   readonly intel: {
     readonly enabled: boolean;
+    /** the db-ip country database. the operator's own file. */
     readonly countryMmdb: string;
-    readonly asCsv: string;
+    /** the ip-to-asn table. the bot fetches it. */
+    readonly ip2asnTsv: string;
+    /** the ipverse as-metadata file. the bot fetches it. */
+    readonly asMetadataJson: string;
+    /** the tor exit list. the bot fetches it. */
+    readonly torList: string;
+    /** the bot fetches the files itself. */
+    readonly update: boolean;
   };
   readonly limits: {
     // the only limit that is a property of the machine, not of the guild.
@@ -220,7 +228,12 @@ export function parseEnv(read: EnvSource): EnvResult {
       intel: Object.freeze({
         enabled: bool("INTEL_ENABLED", true),
         countryMmdb: optional("DBIP_COUNTRY_MMDB", "./data/dbip-country-lite.mmdb"),
-        asCsv: optional("AS_METADATA_CSV", "./data/as.csv"),
+        ip2asnTsv: optional("IP2ASN_TSV", "./data/ip2asn.tsv"),
+        asMetadataJson: optional("AS_METADATA_JSON", "./data/as-metadata.json"),
+        torList: optional("TOR_EXIT_LIST", "./data/tor-exit-addresses.txt"),
+        // the three files above are fetched by the bot. the db-ip file is not:
+        // db-ip gives its free downloads to a registered account.
+        update: bool("INTEL_UPDATE", true),
       }),
 
       limits: Object.freeze({

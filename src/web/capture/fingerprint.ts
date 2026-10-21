@@ -11,6 +11,8 @@
 // field is checked for its own type, a field of the wrong type is dropped
 // rather than coerced, and a string is length-capped before it is stored.
 
+import { createHash } from "node:crypto";
+
 /** the fields the page sends and the record keeps. */
 export interface Fingerprint {
   readonly ua: string | null;
@@ -69,6 +71,48 @@ export const FINGERPRINT_FIELD_LABELS = [
   "referring page",
   "time it was read",
 ] as const;
+
+/**
+ * the fields that describe the device rather than the moment.
+ *
+ * the viewport moves when a window is resized, the available screen size
+ * changes when a taskbar appears, the connection type changes when the
+ * network does, the referrer names a page and the clock names a time. none of
+ * them belong in a digest that has to survive a second visit.
+ */
+const DEVICE_FIELDS = [
+  "platform",
+  "screen",
+  "colorDepth",
+  "hwConcurrency",
+  "deviceMemory",
+  "maxTouchPoints",
+  "tz",
+  "languages",
+  "cookies",
+  "doNotTrack",
+  "reducedMotion",
+  "colorScheme",
+  "audioDevices",
+] as const satisfies readonly (keyof Fingerprint)[];
+
+/**
+ * the digest of the device.
+ *
+ * the user agent goes in without its version numbers, so a browser update does
+ * not split one device into two. the digest is what is compared between
+ * accounts; the payload itself is what the record keeps.
+ */
+export function deviceDigest(fingerprint: Fingerprint): string {
+  const parts: string[] = [];
+  for (const field of DEVICE_FIELDS) {
+    const value = fingerprint[field];
+    parts.push(`${field}=${value === null ? "" : String(value)}`);
+  }
+  const agent = fingerprint.ua === null ? "" : fingerprint.ua.replace(/\d+(\.\d+)*/g, "");
+  parts.push(`ua=${agent}`);
+  return createHash("sha256").update(parts.join("\n")).digest("hex");
+}
 
 /** the cap on a value in the summary. the summary is a line on a page, not a
  *  copy of the payload. */

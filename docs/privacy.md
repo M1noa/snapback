@@ -33,7 +33,15 @@ There is no canvas probe, no WebGL probe, and no font probe. The plan bans all t
 
 Only a fixed list of fields is stored. A field of the wrong type is dropped rather than coerced, a string is length-capped, and a number outside its documented range is dropped.
 
-The fingerprint goes into the verification's entry on the record's timeline rather than into a column of its own. The `referrer` and `user_agent` columns on the record are never filled.
+The fingerprint goes into `verify_records.fingerprint_json`, on the record it belongs to, and the device digest goes into the verification's entry on the timeline. The `referrer` and `user_agent` columns on the record are never filled.
+
+## The anti-alt signals
+
+The verification policy step (`/setup policy`) is off by default. When an operator turns the alt check on, a verification also writes a digest to `verify_signals`: the device digest (a SHA-256 over the stable device fields, with the browser version numbers stripped), the stored address in whatever shape the storage mode produced, a SHA-256 of the lowercased email, the avatar hash, and the lowercased username.
+
+Those rows exist to answer one question, inside one server: has this account been seen here before. The lookup is scoped to the guild that asked, the account being verified never matches itself, and a match is shown to an operator on the record, never acted on automatically. In `encrypted` storage mode the address is left out of the comparison entirely, because the ciphertext uses a fresh IV every time and never repeats.
+
+Turning the alt check off stops new signals being written and stops the lookup. Rows already written stay until the record is deleted.
 
 ## The site's own defences
 

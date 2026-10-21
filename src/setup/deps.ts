@@ -25,6 +25,7 @@ export const SETUP_OBJECT = {
   log: "log",
   app: "app",
   panel: "panel",
+  policy: "policy",
   data: "data",
 } as const;
 

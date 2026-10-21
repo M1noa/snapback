@@ -11,9 +11,18 @@
 
 import type { IpStorage } from "../../config/parse-env.ts";
 import * as recordsDb from "../../db/queries/verify-records.ts";
-import type { Database, JsonObject, VerifyRecordRow } from "../../db/types.ts";
+import { insertSignals } from "../../db/queries/verify-signals.ts";
+import type {
+  Database,
+  JsonObject,
+  VerifyRecordRow,
+  VerifySignalRow,
+  VerifyStatus,
+} from "../../db/types.ts";
 import type { Logger } from "../../lib/log.ts";
 import { oneOf } from "../../lib/validate.ts";
+import type { IntelResult } from "../intel/index.ts";
+import type { AltMatch, AltSignals } from "./alt.ts";
 
 // the event kinds the timeline knows. the union lives in db/types.ts; this is
 // the same list at runtime, so an unknown kind is refused instead of being
@@ -24,8 +33,12 @@ const EVENT_KINDS = [
   "revoked",
   "refreshed_ok",
   "refreshed_fail",
+  "refused",
   "note",
 ] as const;
+
+/** how many verifications the history keeps. */
+const MAX_HISTORY = 20;
 
 const MAX_LIST = 500;
 
@@ -49,6 +62,20 @@ export interface RecordInput {
   readonly grantedAt: string;
   readonly firstIpStored: string | null;
   readonly lastIpStored: string | null;
+  /** what the files say about the address. */
+  readonly intel?: IntelResult | null;
+  /** how the verification ended. */
+  readonly status?: VerifyStatus;
+  /** why it was refused: "vpn" or "alt". */
+  readonly refusalReason?: string | null;
+  /** the account it looks like, with the confidence. */
+  readonly alt?: AltMatch | null;
+  /** the fingerprint payload, as the page sent it. */
+  readonly fingerprint?: unknown;
+  /** the digest of the device, when the page sent a fingerprint. */
+  readonly device?: string | null;
+  /** the signals to keep. null when the owner left the anti-alt check off. */
+  readonly signals?: AltSignals | null;
 }
 
 export interface RecordDeps {
@@ -87,16 +114,46 @@ function jsonObjects(values: readonly unknown[]): JsonObject[] {
   return values.filter(isJsonObject);
 }
 
-// the ip history keeps one entry per address the record was seen from, so a
-// second verification from a different address is visible (D4PLAN 14.5). the
-// entry holds the stored value, which is the hash in hash mode and the
-// ciphertext in encrypted mode.
-function history(previous: JsonObject[] | null, value: string | null, at: string): JsonObject[] {
-  const entries = previous ?? [];
-  if (value === null) return entries;
-  const latest = entries[entries.length - 1];
-  if (latest !== undefined && latest.hash === value) return entries;
-  return [...entries, { hash: value, at, event: "verify" }];
+/**
+ * the history of the verifications.
+ *
+ * one entry per verification, not per address: the same address can be used
+ * again, and the second time the network may have changed. the entry holds
+ * what the files said at the time, so the record shows the whole story and
+ * not only the latest verdict (D4PLAN 14.4, 14.5).
+ */
+function history(input: {
+  readonly previous: JsonObject[] | null;
+  readonly value: string | null;
+  readonly at: string;
+  readonly intel: IntelResult | null;
+  readonly status: VerifyStatus;
+  readonly reason: string | null;
+  readonly device: string | null;
+  readonly alt: AltMatch | null;
+}): JsonObject[] {
+  const entries = input.previous ?? [];
+  const entry: JsonObject = {
+    hash: input.value,
+    at: input.at,
+    event: "verify",
+    status: input.status,
+  };
+  if (input.reason !== null) entry.reason = input.reason;
+  if (input.device !== null) entry.device = input.device;
+  if (input.intel !== null) {
+    entry.ip_type = input.intel.ipType;
+    entry.is_vpn = input.intel.isVpn;
+    entry.is_tor = input.intel.isTor;
+    if (input.intel.asn !== null) entry.asn = input.intel.asn;
+    if (input.intel.asOrg !== null) entry.as_org = input.intel.asOrg;
+    if (input.intel.countryCode !== null) entry.country_code = input.intel.countryCode;
+  }
+  if (input.alt !== null) {
+    entry.alt_user_id = input.alt.userId;
+    entry.alt_confidence = input.alt.confidence;
+  }
+  return [...entries, entry].slice(-MAX_HISTORY);
 }
 
 // the detail is free-form and the column holds an object, so a bare value is
@@ -125,6 +182,11 @@ export async function upsertRecord(deps: RecordDeps, input: RecordInput): Promis
     existing === null
       ? ipColumns(mode, input.firstIpStored ?? input.lastIpStored)
       : { hash: existing.first_ip_hash, enc: existing.first_ip_enc };
+
+  const intel = input.intel ?? null;
+  const status: VerifyStatus = input.status ?? "verified";
+  const alt = input.alt ?? null;
+  const device = input.device ?? null;
 
   const row: VerifyRecordRow = {
     record_id: existing?.record_id ?? Bun.randomUUIDv7(),
@@ -155,23 +217,43 @@ export async function upsertRecord(deps: RecordDeps, input: RecordInput): Promis
     first_ip_enc: first.enc,
     last_ip_hash: last.hash,
     last_ip_enc: last.enc,
-    ip_history_json: history(existing?.ip_history_json ?? null, last.hash ?? last.enc, at),
-    // the intel, fingerprint and note columns belong to their own modules.
-    country_code: null,
-    country_name: null,
+    ip_history_json: history({
+      previous: existing?.ip_history_json ?? null,
+      value: last.hash ?? last.enc,
+      at,
+      intel,
+      status,
+      reason: input.refusalReason ?? null,
+      device,
+      alt,
+    }),
+    // what the files said about the address (D4PLAN 14.4).
+    country_code: intel?.countryCode ?? null,
+    country_name: intel?.countryName ?? null,
     city: null,
     region: null,
-    isp: null,
-    asn: null,
-    as_org: null,
-    ip_type: null,
-    is_vpn: null,
-    is_proxy: null,
-    is_tor: null,
-    intel_checked_at: null,
-    fingerprint_json: null,
+    isp: intel?.isp ?? null,
+    asn: intel?.asn ?? null,
+    as_org: intel?.asOrg ?? null,
+    ip_type: intel?.ipType ?? null,
+    is_vpn: intel?.isVpn ?? null,
+    is_proxy: intel?.isProxy ?? null,
+    is_tor: intel?.isTor ?? null,
+    intel_checked_at: intel === null ? null : at,
+    fingerprint_json: isJsonObject(input.fingerprint) ? input.fingerprint : null,
     referrer: null,
     user_agent: null,
+    verify_status: status,
+    refusal_reason: input.refusalReason ?? null,
+    alt_match_json:
+      alt === null
+        ? null
+        : {
+            user_id: alt.userId,
+            confidence: alt.confidence,
+            label: alt.label,
+            signals: [...alt.signals],
+          },
     revoked_at: null,
     notes: null,
     created_at: existing?.created_at ?? at,
@@ -184,20 +266,56 @@ export async function upsertRecord(deps: RecordDeps, input: RecordInput): Promis
     throw new Error("SB_VERIFY_RECORD_MISSING: the record was written but cannot be read back");
   }
 
+  // the signals of this verification, so the next one in this server can be
+  // compared against it (D4PLAN 14.4).
+  await writeSignals(deps.db, input, at);
+
   // a verification is an event on the timeline (D4PLAN 13.3, step 12).
   await addRecordEvent(deps, {
     userId: input.userId,
     guildId: input.guildId,
     kind: "oauth",
-    detail: { scopes: input.oauthScopes },
+    detail: { scopes: input.oauthScopes, device, status },
   });
+
+  // a refusal is an event of its own, so the timeline says what happened.
+  if (status === "refused") {
+    await addRecordEvent(deps, {
+      userId: input.userId,
+      guildId: input.guildId,
+      kind: "refused",
+      detail: { reason: input.refusalReason ?? null },
+    });
+  }
 
   deps.log.info("verify record written", {
     recordId: saved.record_id,
     guildId: saved.guild_id,
     userId: saved.user_id,
+    status,
   });
   return saved;
+}
+
+/** the signals one verification leaves behind. */
+async function writeSignals(db: Database, input: RecordInput, at: string): Promise<void> {
+  const signals = input.signals;
+  if (signals === null || signals === undefined) return;
+  const kinds: readonly (keyof AltSignals)[] = ["device", "ip", "email", "avatar", "name"];
+  const rows: VerifySignalRow[] = [];
+  for (const kind of kinds) {
+    const value = signals[kind];
+    if (value === null || value === "") continue;
+    rows.push({
+      signal_id: Bun.randomUUIDv7(),
+      guild_id: input.guildId,
+      user_id: input.userId,
+      kind,
+      value,
+      created_at: at,
+    });
+  }
+  await insertSignals(db, rows);
 }
 
 /** write an event on a record's timeline. without a guild id the event lands

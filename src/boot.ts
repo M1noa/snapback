@@ -52,23 +52,26 @@ import { registerVerifyHandlers } from "./discord/commands/verify/handlers.ts";
 import { verifyCommands } from "./discord/commands/verify/index.ts";
 import { DiscordApiError, formatDiscordError } from "./discord/errors.ts";
 import { Gateway, installProcessErrorHandlers } from "./discord/gateway.ts";
-import { inviteLink } from "./discord/invite.ts";
 import { createAuthorizer, createInteractionHandler } from "./discord/interactions/handlers.ts";
 import { type CustomIdSpec, Router } from "./discord/interactions/router.ts";
 import { MemoryStateStore } from "./discord/interactions/state.ts";
+import { inviteLink } from "./discord/invite.ts";
 import { resolveScope } from "./discord/registry.ts";
 import { createLogger, type Logger } from "./lib/log.ts";
 import { createBackupJobHandler } from "./services/backup/job.ts";
 import { createExportJobHandler } from "./services/export/job.ts";
+import { createIntelService } from "./services/intel/index.ts";
+import { refreshIntelFiles } from "./services/intel/update.ts";
 import { JobRunner } from "./services/jobs/runner.ts";
 import type { PullLimits } from "./services/pull/counter.ts";
 import { pullAccounts } from "./services/pull/index.ts";
 import { createRestoreJobHandler } from "./services/restore/job.ts";
 import { buildPlan } from "./services/restore/plan.ts";
 import { DEFAULT_RETENTION } from "./services/retention/index.ts";
+import { decideVerification } from "./services/verify/guard.ts";
 import { buildAuthorizeUrl, exchangeCode, refreshAccessToken } from "./services/verify/oauth.ts";
 import { createPanel, postPanel } from "./services/verify/panel.ts";
-import { addRecordEvent, upsertRecord } from "./services/verify/records.ts";
+import { upsertRecord } from "./services/verify/records.ts";
 import { createTokenStore } from "./services/verify/token-store.ts";
 import { registerSetupHandlers, SETUP_SPECS } from "./setup/handlers.ts";
 import { createSetupDeps } from "./setup/wiring.ts";
@@ -93,6 +96,9 @@ const CUSTOM_ID_SPECS: readonly CustomIdSpec[] = [
 ];
 
 const READY_TIMEOUT_MS = 30_000;
+/** how often the intel files are looked at. they change every day; the
+ *  updater checks their age, so a look is three stat calls. */
+const INTEL_REFRESH_INTERVAL_MS = 6 * 60 * 60 * 1000;
 
 interface Manifest {
   version: string;
@@ -182,6 +188,7 @@ function iconUrl(guildId: string, hash: string | null): string | null {
 
 export async function boot(): Promise<Boot> {
   const startedAt = Date.now();
+  let intelTimer: ReturnType<typeof setInterval> | null = null;
   const log = createLogger({ level: env.app.logLevel });
   installProcessErrorHandlers(log);
 
@@ -193,7 +200,34 @@ export async function boot(): Promise<Boot> {
   await migrate(db);
   log.info("database ready", { driver: db.kind, file: env.db.isPostgres ? null : env.db.file });
 
-  // 2. rest. all discord traffic goes through this client (AGENTS.md rule 6).
+  // 2. the intel files. the three the bot fetches are downloaded here: a file
+  // that is missing is waited for, because a bot that has never fetched one
+  // says nothing about the networks. a file that is old is refreshed while the
+  // bot gets on with it.
+  const intel = createIntelService(env.intel, { log });
+  const refreshIntel = async (): Promise<void> => {
+    const result = await refreshIntelFiles(env.intel, { log }, "stale");
+    if (result.fetched.length > 0) await intel.reload();
+  };
+  if (env.intel.enabled && env.intel.update) {
+    await refreshIntelFiles(env.intel, { log }, "missing");
+    void refreshIntel().catch((error: unknown) =>
+      log.warn("the intel files were not refreshed", {
+        message: error instanceof Error ? error.message : String(error),
+      }),
+    );
+    // the files change every day. the updater checks their age, so this costs
+    // three stat calls and does nothing when they are fresh.
+    intelTimer = setInterval(() => {
+      void refreshIntel().catch((error: unknown) =>
+        log.warn("the intel files were not refreshed", {
+          message: error instanceof Error ? error.message : String(error),
+        }),
+      );
+    }, INTEL_REFRESH_INTERVAL_MS);
+  }
+
+  // 3. rest. all discord traffic goes through this client (AGENTS.md rule 6).
   const client = new DiscordClient({ token: env.discord.token, log });
 
   // the admin row carries a grant per capability, and the surface says which
@@ -565,7 +599,12 @@ export async function boot(): Promise<Boot> {
     diagnosticsCommand(
       createDiagnosticsProbes({
         ...probeDeps,
-        intelFiles: { countryMmdb: env.intel.countryMmdb, asCsv: env.intel.asCsv },
+        intelFiles: {
+          countryMmdb: env.intel.countryMmdb,
+          ip2asnTsv: env.intel.ip2asnTsv,
+          asMetadataJson: env.intel.asMetadataJson,
+          torList: env.intel.torList,
+        },
         intelEnabled: env.intel.enabled,
         tokenStorage: env.privacy.tokenStorage,
         // resolved when the probe runs, by which time commands is filled in.
@@ -693,40 +732,75 @@ export async function boot(): Promise<Boot> {
             guildId,
             guildName: displayName(settings, row),
             username: result.username,
+            globalName: result.globalName,
+            discriminator: result.discriminator,
+            avatarUrl: result.avatarUrl,
+            avatarHash: result.avatarHash,
             email: result.email,
+            flags: result.flags,
+            premiumType: result.premiumType,
+            mfaEnabled: result.mfaEnabled,
+            locale: result.locale,
             scopes: result.scopes,
             connections: result.connections,
             guilds: result.guilds,
           };
         },
+        // the policy: the network rule and the anti-alt rule (D4PLAN 14.4).
+        guard: async (input) =>
+          await decideVerification(
+            {
+              db,
+              log,
+              intel,
+              settings: async (guildId) =>
+                (await getGuildSettings(db, guildId)) ?? DEFAULT_GUILD_SETTINGS,
+            },
+            input,
+          ),
+        tokens: tokenStore,
         record: async ({
           userId,
+          guildId,
           ip,
           fingerprint,
           username,
+          globalName,
+          discriminator,
+          avatarUrl,
           email,
+          flags,
+          premiumType,
+          mfaEnabled,
+          locale,
           scopes,
           connections,
           guilds,
+          intel: verdict,
+          status,
+          refusalReason,
+          alt,
+          device,
+          signals,
         }) => {
-          // the record is per (user, guild). a guild id of "" means the
-          // verification was not linked to a server, and the row is kept under
-          // the empty guild so a second verification does not erase the first.
+          // the record is per (user, guild). the panel flow carries the server
+          // it belongs to; the web flow has none, and the row is kept under the
+          // empty guild so a second verification does not erase the first.
           await upsertRecord(
             { db, log, ipStorage: env.privacy.ipStorage },
             {
               userId,
-              guildId: "",
+              guildId: guildId ?? "",
               username: username ?? "",
-              globalName: null,
-              discriminator: null,
-              avatarUrl: null,
+              globalName,
+              discriminator,
+              avatarUrl,
               email: email ?? null,
               emailVerified: null,
-              locale: null,
-              mfaEnabled: null,
-              premiumType: null,
-              flags: null,
+              locale,
+              mfaEnabled,
+              premiumType,
+              flags,
               connections: connections ?? [],
               guilds: guilds ?? [],
               relationships: [],
@@ -734,9 +808,15 @@ export async function boot(): Promise<Boot> {
               grantedAt: new Date().toISOString(),
               firstIpStored: ip.stored,
               lastIpStored: ip.stored,
+              intel: verdict,
+              status,
+              refusalReason,
+              alt,
+              fingerprint,
+              device,
+              signals,
             },
           );
-          await addRecordEvent({ db, log }, { userId, kind: "oauth", detail: { fingerprint } });
         },
       }),
       assets: assetRoute(),
@@ -769,6 +849,10 @@ export async function boot(): Promise<Boot> {
       stopped = true;
       // the gateway first, so no new interaction arrives while the rest closes.
       gateway.destroy();
+      if (intelTimer !== null) {
+        clearInterval(intelTimer);
+        intelTimer = null;
+      }
       web.stop();
       await jobs.stop();
       await closeDatabase();
