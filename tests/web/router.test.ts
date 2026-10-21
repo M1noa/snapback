@@ -66,8 +66,11 @@ describe("the pages", () => {
       verifyUrl: "/?guild=123&start=1",
     });
     expect(html).toContain("the guild");
-    expect(html).toContain("Verify for");
+    expect(html).toContain("verify for");
     expect(html).toContain("Continue with Discord");
+    expect(html).toContain('class="grain"');
+    expect(html).toContain("/assets/noise.png");
+    expect(html).toMatch(/:root\{--h:\d+\}/);
     expect(html).not.toContain("/legal");
     expect(html).not.toContain("/revoke");
   });

@@ -43,7 +43,7 @@ export function notFound(): WebResponse {
     headers: { "content-type": "text/html; charset=utf-8" },
     body: page({
       title: "not found",
-      body: `<div class="single"><h1>This page does not exist</h1><p class="lede">The verification link a server generates is the one to use.</p></div>`,
+      body: `<p class="eyebrow">404</p><h1>This page does not exist</h1><p class="lede">The verification link a server generates is the one to use.</p>`,
     }),
   };
 }

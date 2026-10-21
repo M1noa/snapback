@@ -21,8 +21,9 @@ describe("the font assets", () => {
   test("each allowed font is served as woff2 and cached hard", async () => {
     const serve = assetRoute();
     for (const path of [
-      "/assets/fonts/geist-latin.woff2",
+      "/assets/fonts/sora-latin.woff2",
       "/assets/fonts/geist-mono-latin.woff2",
+      "/assets/fonts/rubik-80s-fade-latin.woff2",
     ]) {
       const response = await serve(ctx(path));
       expect(response.status).toBe(200);
@@ -31,6 +32,13 @@ describe("the font assets", () => {
       expect(response.body).toBeInstanceOf(Uint8Array);
       expect((response.body as Uint8Array).byteLength).toBeGreaterThan(1000);
     }
+  });
+
+  test("the grain tile is served as a png that never expires", async () => {
+    const response = await assetRoute()(ctx("/assets/noise.png"));
+    expect(response.status).toBe(200);
+    expect(response.headers["content-type"]).toBe("image/png");
+    expect(response.headers["cache-control"]).toContain("immutable");
   });
 
   test("anything else under /assets is a 404", async () => {

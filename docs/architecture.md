@@ -34,7 +34,7 @@ Shutdown runs the other way: the gateway first, so no new interaction arrives wh
 | Discord surface | `src/discord/commands/`, `src/discord/interactions/`, `src/discord/components/`, `src/discord/registry.ts` | the slash commands, the component handlers, the custom id router, the short-lived interaction state, the registration diff |
 | Domain services | `src/services/` | the actual work: capture, restore, verify, pull, retention, export, the job runner, the scheduler |
 | Wizard | `src/setup/` | the twelve wizard steps, the portal checklist, the self-test, the guide renderer |
-| Web | `src/web/` | `Bun.serve`, three routes plus the two font files under `/assets/fonts/`, the client IP capture, the fingerprint reader, the theme tokens (`views/theme.ts`) and the HTML views (`views/pages.ts`) |
+| Web | `src/web/` | `Bun.serve`, three routes plus the fonts and noise tile under `/assets/`, the client IP capture, the fingerprint reader, the theme tokens (`views/theme.ts`) and the HTML views (`views/pages.ts`) |
 | Data | `src/db/` | one portable schema for two engines, the row types, the query modules |
 | Shared | `src/lib/` | the logger and the redaction, the CDN fetch, the snowflake helpers, the validators |
 

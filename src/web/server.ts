@@ -82,7 +82,7 @@ export function createServer(deps: ServerDeps): WebServer {
           headers: { "content-type": "text/html; charset=utf-8" },
           body: page({
             title: "something went wrong",
-            body: `<div class="single"><h1>Something went wrong</h1><p class="lede">Try again in a moment. If it keeps happening, tell the person who sent you here.</p></div>`,
+            body: `<p class="eyebrow">error</p><h1>Something went wrong</h1><p class="lede">Try again in a moment. If it keeps happening, tell the person who sent you here.</p>`,
           }),
         };
       }

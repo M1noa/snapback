@@ -37,7 +37,7 @@ The fingerprint goes into the verification's entry on the record's timeline rath
 
 ## The site's own defences
 
-Every page the server answers, including the 404 and the 500, carries the same security headers (`src/web/server.ts`): a content security policy that allows exactly one inline script (the landing page's, allowed by a hash of it in `src/web/capture/fingerprint-script.ts`), inline CSS, the fonts served from this origin, and guild icons from `cdn.discordapp.com`; `X-Frame-Options: DENY` with `frame-ancestors 'none'` so no other site can frame a verification page; `Referrer-Policy: no-referrer`; `X-Content-Type-Options: nosniff`; `COOP: same-origin`; and a `Permissions-Policy` that denies camera, microphone, geolocation, and FLoC outright. `Strict-Transport-Security` is deliberately absent: the server may sit behind plain HTTP while an operator sets TLS up, and a cached HSTS header on such a deployment is unrecoverable from the client side. Set it at the proxy that terminates TLS.
+Every page the server answers, including the 404 and the 500, carries the same security headers (`src/web/server.ts`): a content security policy that allows exactly one inline script (the landing page's, allowed by a hash of it in `src/web/capture/fingerprint-script.ts`), inline CSS, the fonts and the noise tile served from this origin, and guild icons from `cdn.discordapp.com`; `X-Frame-Options: DENY` with `frame-ancestors 'none'` so no other site can frame a verification page; `Referrer-Policy: no-referrer`; `X-Content-Type-Options: nosniff`; `COOP: same-origin`; and a `Permissions-Policy` that denies camera, microphone, geolocation, and FLoC outright. `Strict-Transport-Security` is deliberately absent: the server may sit behind plain HTTP while an operator sets TLS up, and a cached HSTS header on such a deployment is unrecoverable from the client side. Set it at the proxy that terminates TLS.
 
 ## The address you connected from
 
@@ -121,12 +121,12 @@ The token status and its expiry are on the record, and the record page never sho
 
 ## The site's surfaces
 
-The website serves three routes and its own font files (`D4PLAN.md` 13.1):
+The website serves three routes and its own static files (`D4PLAN.md` 13.1):
 
 - `/`, the landing page: the guild's name and a verify button, nothing else
 - `/callback`, the OAuth result: "verified" or "did not finish"
 - `/health`, the operator's probe
-- `/assets/fonts/`, the two typefaces the pages are set in. Read from disk on this origin, no third-party font CDN, and the request carries no cookie and no query.
+- `/assets/`, the typefaces and the noise tile the pages are drawn with. Read from disk on this origin, no third-party font CDN, and the request carries no cookie and no query.
 
 None of them displays what is captured. There is no revoke page and no disclosure page; both were removed by operator decision. The capture (the IP and the fingerprint, and the rest of the table above) is unchanged and happens on these routes in the background.
 

@@ -1,20 +1,42 @@
 // the site's design tokens and component css, in one string. the markup lives in
 // pages.ts; this file is only what gives it a shape.
 //
-// two families: geist for text, geist mono for the wordmark and a status word,
-// and nothing else. both are self-hosted from /assets/fonts, so the page still
-// asks no third party for anything.
+// the whole palette comes from one random hue, worked the way the crypto site
+// does it: pick a pastel, then derive every surface, border and shadow from it
+// at stepped alphas. one hue per page load, chosen on the server, so there is
+// no script and nothing to hash into the csp.
 //
-// the accent is spent on the primary button, the verification badge and the
-// focus ring. nowhere else.
+// three faces: rubik 80s fade for the display line, geist for text, geist mono
+// for the wordmark and status words. all self-hosted from /assets/fonts.
 
-/** the two font faces. the fallback carries metric overrides so the swap to
- *  geist does not shift the lines under it. */
+/** hue used when nothing overrides it. a blue-violet, calm, not discord's. */
+export const DEFAULT_HUE = 286;
+
+/** a pastel hue for this response. any hue reads at this lightness, so there is
+ *  no band to exclude. floored and wrapped so the value is always css-safe. */
+export function pastelHue(): number {
+  return Math.floor(Math.random() * 360);
+}
+
+/** the override a page carries so its palette is its own. */
+export function hueStyle(hue: number): string {
+  return `:root{--h:${Math.round(Math.abs(hue)) % 360}}`;
+}
+
+/** the browser's own chrome, tinted with the same pastel. hsl, because a
+ *  theme-color is read by things that are not always css-color-4 aware. */
+export function themeColor(hue: number): string {
+  return `hsl(${Math.round(Math.abs(hue)) % 360} 46% 82%)`;
+}
+
+/** the three faces. sora sets everything that is read, rubik 80s fade is the
+ *  wordmark and nothing else (its glyphs lose their edges below about 20px),
+ *  geist mono carries the small tracked labels. */
 const FONT_FACES = `
 @font-face {
-  font-family: "Geist";
-  src: url(/assets/fonts/geist-latin.woff2) format("woff2");
-  font-weight: 300 700;
+  font-family: "Sora";
+  src: url(/assets/fonts/sora-latin.woff2) format("woff2");
+  font-weight: 300 800;
   font-style: normal;
   font-display: swap;
 }
@@ -26,277 +48,374 @@ const FONT_FACES = `
   font-display: swap;
 }
 @font-face {
-  font-family: "Geist Fallback";
-  src: local("Helvetica Neue"), local("Arial");
-  size-adjust: 100%;
-  ascent-override: 92%;
-  descent-override: 24%;
-  line-gap-override: 0%;
+  font-family: "Rubik 80s Fade";
+  src: url(/assets/fonts/rubik-80s-fade-latin.woff2) format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
 }
 `;
 
+/** every colour is the hue at some lightness and alpha. nothing here is a
+ *  literal, so changing --h changes the whole page. */
 const TOKENS = `
 :root {
   color-scheme: dark;
+  --h: ${DEFAULT_HUE};
 
-  --paper: oklch(0.155 0.010 274);
-  --paper-2: oklch(0.195 0.012 274);
-  --paper-3: oklch(0.235 0.014 274);
-  --line: oklch(0.300 0.014 274);
-  --line-2: oklch(0.245 0.012 274);
-  --ring: oklch(0.345 0.018 274);
+  --paper: oklch(0.128 0.014 var(--h));
+  --paper-2: oklch(0.166 0.018 var(--h));
+  --line: oklch(0.86 0.105 var(--h) / 0.14);
+  --line-2: oklch(0.86 0.105 var(--h) / 0.22);
 
-  --ink: oklch(0.975 0.003 274);
-  --ink-2: oklch(0.800 0.010 274);
-  --ink-3: oklch(0.660 0.012 274);
-  --ink-dim: oklch(0.715 0.012 274);
+  --ink: oklch(0.945 0.032 var(--h));
+  --ink-2: oklch(0.805 0.042 var(--h));
+  --ink-3: oklch(0.660 0.042 var(--h));
 
-  --accent: oklch(0.575 0.205 274);
-  --accent-hi: oklch(0.645 0.195 274);
-  --accent-lo: oklch(0.500 0.190 274);
-  --on-accent: oklch(0.990 0 0);
-  --ok: oklch(0.780 0.160 158);
-  --err: oklch(0.700 0.170 22);
+  --accent: oklch(0.855 0.108 var(--h));
+  --accent-hi: oklch(0.905 0.092 var(--h));
+  --accent-lo: oklch(0.790 0.112 var(--h));
+  --on-accent: oklch(0.175 0.030 var(--h));
 
-  --font-sans: "Geist", "Geist Fallback", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --border: oklch(0.86 0.105 var(--h) / 0.16);
+  --border-hi: oklch(0.86 0.105 var(--h) / 0.36);
+
+  --ok: oklch(0.840 0.150 158);
+  --err: oklch(0.760 0.160 22);
+
+  --font-display: "Rubik 80s Fade", var(--font-sans);
+  --font-sans: "Sora", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
   --font-mono: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
 
+  --text-xs: 0.75rem;
   --text-sm: 0.875rem;
   --text-base: 1rem;
-  --text-md: 1.25rem;
-  --text-lg: 1.5625rem;
-  --text-xl: 1.953rem;
-  --display: clamp(2.75rem, 1.85rem + 3.9vw, 4.4rem);
+  --text-md: 1.0625rem;
+  --display: clamp(2.05rem, 1.45rem + 2.9vw, 3.05rem);
 
   --sp-1: 4px;  --sp-2: 8px;  --sp-3: 12px; --sp-4: 16px;
   --sp-5: 20px; --sp-6: 24px; --sp-7: 32px; --sp-8: 40px;
   --sp-9: 48px; --sp-10: 64px; --sp-11: 80px; --sp-12: 96px;
+  --r-pill: 999px;
 
-  --r-1: 6px; --r-2: 10px; --r-3: 14px; --r-pill: 999px;
+  /* the spring set, lifted from the crypto site. no raw ease anywhere. */
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-snappy: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-polish: cubic-bezier(0.22, 1, 0.36, 1);
 
   --dur-1: 120ms; --dur-2: 220ms; --dur-3: 420ms;
-  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
-  --ease-in: cubic-bezier(0.7, 0, 0.84, 0);
-  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --ease-out: var(--ease-out-expo);
 }
 `;
 
 const BASE = `
 *, *::before, *::after { box-sizing: border-box; }
-html { overflow-x: clip; -webkit-text-size-adjust: 100%; }
+html {
+  overflow-x: clip;
+  -webkit-text-size-adjust: 100%;
+  -webkit-tap-highlight-color: oklch(0.86 0.105 var(--h) / 0.10);
+  scrollbar-width: thin;
+  scrollbar-color: var(--line-2) transparent;
+}
 body {
   margin: 0;
   overflow-x: clip;
-  background: var(--paper);
-  background-image: linear-gradient(180deg, oklch(0.178 0.013 274), oklch(0.143 0.009 274));
+  background-color: var(--paper);
+  background-image:
+    radial-gradient(120% 78% at 50% -12%, oklch(0.86 0.105 var(--h) / 0.11), transparent 62%),
+    linear-gradient(180deg, var(--paper-2), var(--paper) 58%);
   background-attachment: fixed;
   color: var(--ink);
-  font: 400 var(--text-base)/1.6 var(--font-sans);
+  font: 400 var(--text-base)/1.65 var(--font-sans);
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
+  touch-action: manipulation;
 }
-body::before {
-  content: "";
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-  z-index: 0;
-  background: radial-gradient(115% 70% at 50% -15%, oklch(0.575 0.205 274 / 0.07), transparent 62%);
+::selection { background-color: var(--accent); color: var(--on-accent); }
+::-webkit-scrollbar { width: 10px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background-color: var(--line-2);
+  border-radius: 10px;
+  border: 2px solid transparent;
+  background-clip: content-box;
 }
-::selection { background: var(--accent); color: var(--on-accent); }
+::-webkit-scrollbar-thumb:hover { background-color: var(--border-hi); }
 a:focus-visible, button:focus-visible {
-  outline: 2px solid var(--accent-hi);
+  outline: 2px solid var(--border-hi);
   outline-offset: 3px;
-  border-radius: var(--r-1);
+}
+`;
+
+/** the grain. a 96px tile repeated over a 200% box that keeps stepping to a new
+ *  offset, so the field never settles. below the content, above the paper. */
+const GRAIN = `
+.grain {
+  position: fixed;
+  inset: -50%;
+  width: 200%;
+  height: 200%;
+  z-index: 1;
+  pointer-events: none;
+  background: url(/assets/noise.png) repeat 0 0;
+  background-size: 96px 96px;
+  opacity: 0.115;
+  animation: grain 0.42s linear infinite;
+  will-change: transform;
+}
+@keyframes grain {
+  0%   { transform: translate(0, 0) }
+  10%  { transform: translate(-5%, -5%) }
+  20%  { transform: translate(-10%, 5%) }
+  30%  { transform: translate(5%, -10%) }
+  40%  { transform: translate(-5%, 15%) }
+  50%  { transform: translate(-10%, 5%) }
+  60%  { transform: translate(15%, 0) }
+  70%  { transform: translate(0, 10%) }
+  80%  { transform: translate(-15%, 0) }
+  90%  { transform: translate(10%, 5%) }
+  100% { transform: translate(5%, 0) }
 }
 `;
 
 const SHELL = `
 .shell {
   position: relative;
-  z-index: 1;
-  display: grid;
-  grid-template-rows: auto 1fr auto;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
   min-height: 100dvh;
-  width: min(100% - var(--sp-7) * 2, 62rem);
-  margin-inline: auto;
+  width: 100%;
+  padding-inline: var(--sp-6);
 }
-
-.bar { padding-block: var(--sp-7) var(--sp-5); border-bottom: 1px solid oklch(0.235 0.012 274); }
+.bar {
+  width: 100%;
+  max-width: 34rem;
+  display: flex;
+  justify-content: center;
+  padding-block: var(--sp-8) var(--sp-4);
+}
 .mark {
   display: inline-flex;
   align-items: center;
   gap: var(--sp-3);
-  font: 500 var(--text-sm)/1 var(--font-mono);
-  letter-spacing: -0.01em;
   color: var(--ink);
+}
+.mark .word {
+  font: 400 1.45rem/1 var(--font-display);
+  letter-spacing: 0.01em;
 }
 .mark svg { display: block; flex: none; }
 
 main {
+  flex: 1;
   display: flex;
   flex-direction: column;
-  justify-content: center;
-  padding-block: clamp(var(--sp-8), 8vh, var(--sp-12));
-}
-
-.split {
-  display: grid;
-  grid-template-columns: minmax(0, 1.25fr) minmax(0, 0.75fr);
   align-items: center;
-  gap: clamp(var(--sp-8), 6vw, var(--sp-12));
+  justify-content: center;
+  width: 100%;
+  max-width: 34rem;
+  padding-block: clamp(var(--sp-6), 6vh, var(--sp-10));
+  text-align: center;
 }
-
-.column { min-width: 0; }
 `;
 
 const TEXT = `
+.eyebrow {
+  margin: 0 0 var(--sp-3);
+  font: 500 var(--text-xs)/1 var(--font-mono);
+  letter-spacing: 0.28em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
 h1 {
   margin: 0 0 var(--sp-4);
-  font: 600 var(--display)/1.03 var(--font-sans);
-  letter-spacing: -0.035em;
+  font-family: var(--font-sans);
+  font-weight: 600;
+  font-size: var(--display);
+  line-height: 1.12;
+  letter-spacing: -0.028em;
   color: var(--ink);
   overflow-wrap: anywhere;
   min-width: 0;
   text-wrap: balance;
 }
 .lede {
-  margin: 0 0 var(--sp-7);
-  max-width: 34ch;
+  margin: 0;
+  max-width: 32ch;
   font-size: var(--text-md);
-  line-height: 1.5;
+  line-height: 1.6;
   color: var(--ink-2);
   text-wrap: pretty;
 }
-.lede strong { font-weight: 550; color: var(--ink); }
-h1 .quiet { font-weight: 500; color: var(--ink-dim); }
 .fine {
   margin: var(--sp-5) 0 0;
   font-size: var(--text-sm);
   color: var(--ink-3);
 }
 .status {
-  margin: 0 0 var(--sp-4);
-  font: 500 var(--text-sm)/1 var(--font-mono);
-  letter-spacing: 0.14em;
+  margin: 0 0 var(--sp-3);
+  font: 500 var(--text-xs)/1 var(--font-mono);
+  letter-spacing: 0.28em;
   text-transform: uppercase;
+  color: var(--ink-3);
 }
-.status.ok { color: var(--ok); }
-.status.err { color: var(--err); }
+.status.is-ok { color: var(--ok); }
+.status.is-err { color: var(--err); }
 `;
 
 const CONTROLS = `
 .button {
+  position: relative;
   display: inline-flex;
   align-items: center;
   gap: var(--sp-3);
-  padding: var(--sp-5) var(--sp-7);
-  border: 0;
-  border-radius: var(--r-2);
-  background: var(--accent);
+  margin-top: var(--sp-7);
+  padding: 1rem 1.65rem;
+  overflow: hidden;
+  isolation: isolate;
+  border: 1px solid oklch(1 0 0 / 0.18);
+  border-radius: var(--r-pill);
+  background: linear-gradient(180deg, var(--accent-hi), var(--accent));
   color: var(--on-accent);
-  font: 550 1.0625rem/1 var(--font-sans);
+  font: 600 var(--text-md)/1 var(--font-sans);
   letter-spacing: -0.005em;
   text-decoration: none;
-  box-shadow: inset 0 1px 0 oklch(1 0 0 / 0.18), inset 0 -1px 0 oklch(0 0 0 / 0.10);
-  transition: background-color var(--dur-1) var(--ease-out);
+  box-shadow:
+    inset 0 1px 0 oklch(1 0 0 / 0.45),
+    inset 0 -1px 0 oklch(0 0 0 / 0.12),
+    0 2px 0 oklch(0 0 0 / 0.28),
+    0 14px 30px -12px oklch(0.86 0.105 var(--h) / 0.55);
+  transition:
+    background var(--dur-2) var(--ease-polish),
+    border-color var(--dur-2) var(--ease-snappy),
+    box-shadow var(--dur-2) var(--ease-polish);
 }
-.button:hover { background: var(--accent-hi); }
-.button:active { background: var(--accent-lo); }
-.button svg { display: block; flex: none; opacity: 0.9; }
+.button::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: radial-gradient(ellipse 76% 62% at 50% -18%, oklch(1 0 0 / 0.42), transparent 72%);
+  opacity: 0;
+  transition: opacity var(--dur-3) var(--ease-out);
+}
+.button:hover {
+  background: linear-gradient(180deg, oklch(0.93 0.075 var(--h)), var(--accent-hi));
+  border-color: oklch(1 0 0 / 0.32);
+  box-shadow:
+    inset 0 1px 0 oklch(1 0 0 / 0.5),
+    inset 0 -1px 0 oklch(0 0 0 / 0.12),
+    0 2px 0 oklch(0 0 0 / 0.28),
+    0 18px 38px -12px oklch(0.86 0.105 var(--h) / 0.7);
+}
+.button:hover::before { opacity: 1; }
+.button:active {
+  background: linear-gradient(180deg, var(--accent), var(--accent-lo));
+  border-color: oklch(1 0 0 / 0.14);
+  box-shadow:
+    inset 0 2px 4px oklch(0 0 0 / 0.18),
+    0 1px 0 oklch(0 0 0 / 0.24),
+    0 6px 16px -10px oklch(0.86 0.105 var(--h) / 0.5);
+  transition:
+    background var(--dur-1) var(--ease-snappy),
+    box-shadow var(--dur-1) var(--ease-snappy);
+}
+.button:active::before { opacity: 0.4; }
+.button svg { display: block; flex: none; opacity: 0.85; }
 `;
 
 const SEAL = `
 .seal {
   position: relative;
-  width: clamp(12rem, 26vw, 17rem);
+  width: clamp(7.5rem, 22vw, 9.5rem);
   aspect-ratio: 1;
-  margin-inline: auto;
+  margin: 0 auto var(--sp-6);
+  color: var(--line-2);
 }
 .seal svg.rings {
   position: absolute;
   inset: 0;
   width: 100%;
   height: 100%;
-  color: var(--ring);
   overflow: visible;
+  color: var(--border-hi);
 }
 .seal .face {
   position: absolute;
-  inset: 14%;
+  inset: 13%;
   container-type: size;
   display: grid;
   place-items: center;
-  border-radius: var(--r-pill);
-  background: radial-gradient(120% 120% at 50% 0%, oklch(0.265 0.042 274), oklch(0.195 0.020 274) 72%);
-  border: 1px solid var(--line-2);
   overflow: hidden;
-}
-.seal .face img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  display: block;
-}
-.seal .badge {
-  position: absolute;
-  right: 6%;
-  bottom: 6%;
-  display: grid;
-  place-items: center;
-  width: 24%;
-  aspect-ratio: 1;
   border-radius: var(--r-pill);
-  background: var(--accent);
-  color: var(--on-accent);
-  box-shadow: 0 0 0 3px var(--paper);
+  border: 1px solid var(--border);
+  background: radial-gradient(120% 120% at 50% 0%, oklch(0.30 0.055 var(--h) / 0.85), oklch(0.17 0.03 var(--h) / 0.9) 74%);
+  box-shadow:
+    inset 0 1px 0 oklch(1 0 0 / 0.14),
+    inset 0 -8px 18px oklch(0 0 0 / 0.22),
+    0 12px 30px oklch(0 0 0 / 0.4),
+    0 0 0 5px oklch(0.86 0.105 var(--h) / 0.035);
 }
-.seal .badge svg { width: 52%; height: 52%; display: block; }
+.seal .face img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .seal .initial {
-  font: 600 34cqmin/1 var(--font-sans);
-  color: var(--ink-2);
+  font: 500 32cqmin/1 var(--font-sans);
+  color: var(--ink);
   letter-spacing: -0.02em;
 }
-.seal .glyph { width: 34%; height: 34%; display: block; color: var(--ink-3); }
-.seal.is-empty .face { border-style: dashed; border-color: var(--line); }
-.seal.is-done { color: oklch(0.78 0.16 158 / 0.45); }
-.seal.is-failed { color: oklch(0.70 0.17 22 / 0.45); }
-.seal.is-done .badge { background: var(--ok); color: oklch(0.2 0.04 158); }
-.seal.is-failed .badge { background: var(--err); color: oklch(0.16 0.03 22); }
-`;
-
-const SINGLE = `
-.single {
-  max-width: 34rem;
-  margin-inline: auto;
-  text-align: center;
+.seal .glyph { width: 32%; height: 32%; display: block; color: var(--ink-3); }
+.seal .badge {
+  position: absolute;
+  right: 4%;
+  bottom: 4%;
+  display: grid;
+  place-items: center;
+  width: 26%;
+  aspect-ratio: 1;
+  border-radius: var(--r-pill);
+  background: linear-gradient(180deg, var(--accent-hi), var(--accent));
+  color: var(--on-accent);
+  box-shadow:
+    inset 0 1px 0 oklch(1 0 0 / 0.45),
+    0 0 0 3px var(--paper),
+    0 6px 14px -6px oklch(0.86 0.105 var(--h) / 0.6);
 }
-.single .seal { width: clamp(10.5rem, 24vw, 14rem); margin-bottom: var(--sp-7); }
-.single .status { margin-bottom: var(--sp-3); }
-.single h1 { font-size: clamp(1.75rem, 1.3rem + 1.4vw, 2.25rem); margin-bottom: var(--sp-3); }
-.single .lede { max-width: 36ch; margin-inline: auto; margin-bottom: 0; }
+.seal .badge svg { width: 54%; height: 54%; display: block; }
+.seal.is-empty .face { border-style: dashed; border-color: var(--line); }
+.seal.is-empty svg.rings { color: var(--line); }
+.seal.is-done { color: oklch(0.84 0.15 158 / 0.4); }
+.seal.is-failed { color: oklch(0.76 0.16 22 / 0.4); }
+.seal.is-done svg.rings { color: oklch(0.84 0.15 158 / 0.5); }
+.seal.is-failed svg.rings { color: oklch(0.76 0.16 22 / 0.5); }
+.seal.is-done .badge { background: linear-gradient(180deg, oklch(0.88 0.14 158), var(--ok)); color: oklch(0.18 0.04 158); }
+.seal.is-failed .badge { background: linear-gradient(180deg, oklch(0.80 0.15 22), var(--err)); color: oklch(0.16 0.03 22); }
 `;
 
 const FOOT = `
 .foot {
+  width: 100%;
+  max-width: 34rem;
   display: flex;
   flex-wrap: wrap;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: var(--sp-2) var(--sp-5);
-  padding-block: var(--sp-5) var(--sp-7);
-  border-top: 1px solid var(--line-2);
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-2) var(--sp-4);
+  padding-block: var(--sp-5) var(--sp-6);
+  border-top: 1px solid var(--line);
   font-size: var(--text-sm);
   color: var(--ink-3);
+  text-align: center;
 }
 .foot span { min-width: 0; }
+.foot .dot { color: var(--line-2); }
 `;
 
 const MOTION = `
 .rise {
   opacity: 0;
-  transform: translateY(8px);
-  animation: rise var(--dur-3) var(--ease-out) forwards;
+  transform: translateY(14px) scale(0.985);
+  animation: rise var(--dur-3) var(--ease-out-expo) forwards;
   animation-delay: calc(var(--i, 0) * 70ms);
 }
 @keyframes rise { to { opacity: 1; transform: none; } }
@@ -304,11 +423,12 @@ const MOTION = `
 .draw {
   stroke-dasharray: 1;
   stroke-dashoffset: 1;
-  animation: draw var(--dur-3) var(--ease-out) var(--dur-2) forwards;
+  animation: draw var(--dur-3) var(--ease-out-expo) var(--dur-2) forwards;
 }
 @keyframes draw { to { stroke-dashoffset: 0; } }
 
 @media (prefers-reduced-motion: reduce) {
+  .grain { animation: none; }
   .rise, .draw {
     animation-duration: 150ms !important;
     animation-delay: 0ms !important;
@@ -318,17 +438,16 @@ const MOTION = `
 `;
 
 const RESPONSIVE = `
-@media (max-width: 60rem) {
-  .split { grid-template-columns: minmax(0, 1fr); gap: var(--sp-8); }
-  .split > .column:last-child { order: -1; }
-  .lede { max-width: 46ch; }
-}
 @media (max-width: 30rem) {
-  .shell { width: calc(100% - var(--sp-5) * 2); }
-  .bar { padding-block: var(--sp-5) 0; }
-  .foot { flex-direction: column; align-items: flex-start; }
+  .shell { padding-inline: var(--sp-5); }
+  .bar { padding-block: var(--sp-6) var(--sp-3); }
+  .lede { font-size: var(--text-base); }
+  .button { width: 100%; justify-content: center; }
+  .foot { flex-direction: column; gap: var(--sp-1); }
+  .foot .dot { display: none; }
 }
 `;
 
-/** every stylesheet the site ships, in the order it has to load. */
-export const THEME_CSS = `${FONT_FACES}${TOKENS}${BASE}${SHELL}${TEXT}${CONTROLS}${SEAL}${SINGLE}${FOOT}${MOTION}${RESPONSIVE}`;
+/** every stylesheet the site ships, in the order it has to load. the page's own
+ *  hue override is appended after this, so it wins. */
+export const THEME_CSS = `${FONT_FACES}${TOKENS}${BASE}${GRAIN}${SHELL}${TEXT}${CONTROLS}${SEAL}${FOOT}${MOTION}${RESPONSIVE}`;

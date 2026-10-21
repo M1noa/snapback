@@ -52,7 +52,7 @@ const server = Bun.serve({
     if (url.pathname === "/") {
       return new Response(index(), { headers: { "content-type": "text/html; charset=utf-8" } });
     }
-    if (url.pathname.startsWith("/assets/fonts/")) {
+    if (url.pathname.startsWith("/assets/")) {
       const file = Bun.file(new URL(`../../${url.pathname.slice(1)}`, import.meta.url));
       if (!(await file.exists())) return new Response("not found", { status: 404 });
       return new Response(file);

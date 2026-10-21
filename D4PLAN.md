@@ -995,20 +995,20 @@ The end report lists per category: created, edited, skipped, failed, with the fi
 
 ### 13.1 Routes
 
-Three routes, one process, no framework, plus the static files those pages need (two font files, served from an allowlist under `/assets/fonts/`).
+Three routes, one process, no framework, plus the static files those pages need (three font files and one grain tile), served from an allowlist under `/assets/`.
 
 | Route | Method | Purpose |
 |---|---|---|
 | `/` | GET | landing page. If `?guild=<id>` is present, shows that guild's name and a Verify button. Otherwise a neutral page. The page does not describe what is captured (operator decision). |
 | `/callback` | GET | OAuth redirect target. Exchanges the code, captures the client IP and fingerprint, writes the record, shows a result page. |
 | `/health` | GET | JSON: version, uptime, DB reachable, gateway state, job queue depth. Also the `?probe=1` mode used by the wizard's tunnel check. |
-| `/assets/fonts/*` | GET | the two self-hosted woff2 files the stylesheet names. Paths are an allowlist (`src/web/assets.ts`), never a join, and a miss is the same 404 as any other path. Cached `immutable` for a year because the filenames carry no query and the bytes never change. |
+| `/assets/*` | GET | the three self-hosted woff2 files and the noise tile the stylesheet names. Paths are an allowlist (`src/web/assets.ts`), never a join, and a miss is the same 404 as any other path. Cached `immutable` for a year because the filenames carry no query and the bytes never change. |
 
 The `/revoke` and `/legal` pages are removed by operator decision: the site no longer discloses what is captured, and revocation runs through the bot's own `/verify revoke` instead of a web route. The capture itself is unchanged (`14`); only the member-facing surfaces are.
 
 Everything else 404s with a plain page. No directory listing, no error page that leaks a path.
 
-Every response, including the 404 and the 500, carries the same security headers: a content security policy that allows exactly one inline script (the landing page's, allowed by a hash of it), inline CSS, the two fonts from this origin (`font-src 'self'`), and guild icons from `cdn.discordapp.com`; `X-Frame-Options: DENY` with `frame-ancestors 'none'`; `Referrer-Policy: no-referrer`; `X-Content-Type-Options: nosniff`; `COOP: same-origin`; and a `Permissions-Policy` that denies camera, microphone, geolocation, and FLoC. HSTS is left to the proxy that terminates TLS (`docs/privacy.md` says why). The landing page with no `?guild=` runs no inline script at all.
+Every response, including the 404 and the 500, carries the same security headers: a content security policy that allows exactly one inline script (the landing page's, allowed by a hash of it), inline CSS, fonts and the grain tile from this origin (`font-src 'self'`, `img-src 'self'`), and guild icons from `cdn.discordapp.com`; `X-Frame-Options: DENY` with `frame-ancestors 'none'`; `Referrer-Policy: no-referrer`; `X-Content-Type-Options: nosniff`; `COOP: same-origin`; and a `Permissions-Policy` that denies camera, microphone, geolocation, and FLoC. HSTS is left to the proxy that terminates TLS (`docs/privacy.md` says why). The landing page with no `?guild=` runs no inline script at all.
 
 ### 13.2 The panel
 
