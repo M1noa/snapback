@@ -64,6 +64,8 @@ export interface AuthorizeResult {
 /** what the callback learned about the user. */
 export interface ExchangeResult {
   readonly userId: string;
+  /** the server the state was minted for. null when the state carried none. */
+  readonly guildId: string | null;
   readonly username: string;
   readonly email: string | null;
   readonly scopes: readonly string[];
@@ -335,6 +337,7 @@ export async function exchangeCode(
 
   return {
     userId,
+    guildId: row.guild_id,
     username: asText(user.username) ?? "",
     email,
     scopes,

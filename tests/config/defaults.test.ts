@@ -26,6 +26,17 @@ describe("readGuildSettings", () => {
     expect(settings.auto_backup_enabled).toBe(false);
   });
 
+  test("web_display_name only stores text, blank means unset", () => {
+    expect(readGuildSettings({}).web_display_name).toBeNull();
+    expect(readGuildSettings({ web_display_name: 42 }).web_display_name).toBeNull();
+    expect(readGuildSettings({ web_display_name: "  " }).web_display_name).toBeNull();
+    // trimmed on the way in, and clamped to the same ceiling the modal clamps to.
+    expect(readGuildSettings({ web_display_name: " nightly " }).web_display_name).toBe("nightly");
+    expect(readGuildSettings({ web_display_name: "x".repeat(140) }).web_display_name).toHaveLength(
+      100,
+    );
+  });
+
   test("a value of the wrong type is ignored, not coerced", () => {
     const settings = readGuildSettings({
       ephemeral_default: "false",

@@ -1,5 +1,6 @@
-// the landing route (D4PLAN 13.1, 13.3). it shows the guild's name and a Verify
-// button, and the button starts the OAuth flow: the state is minted here and the
+// the landing route (D4PLAN 13.1, 13.3). it shows the server's name (the
+// operator's override, or the name the gateway keeps fresh) and a Verify button,
+// and the button starts the OAuth flow: the state is minted here and the
 // browser goes to discord.
 //
 // the fingerprint is collected by the same page and kept in a cookie, so the
@@ -7,9 +8,10 @@
 // the browser's own properties, and it makes no request to anyone. a page with
 // no server attached runs no script at all: nothing is collected for nobody.
 
-import { getGuild } from "../../db/queries/guilds.ts";
+import { getGuild, getGuildSettings } from "../../db/queries/guilds.ts";
 import type { Database } from "../../db/types.ts";
 import { fingerprintScript } from "../capture/fingerprint-script.ts";
+import { displayName } from "../display-name.ts";
 import type { RequestContext, WebResponse } from "../router.ts";
 import { homePage } from "../views/pages.ts";
 
@@ -25,8 +27,12 @@ export function homeRoute(deps: HomeDeps) {
     let guildName: string | null = null;
     let guildIconUrl: string | null = null;
     if (guildId !== null && guildId !== "") {
-      const row = await getGuild(deps.db, guildId);
-      guildName = row?.name ?? null;
+      // the name the operator set, or the server's own name.
+      const [row, settings] = await Promise.all([
+        getGuild(deps.db, guildId),
+        getGuildSettings(deps.db, guildId),
+      ]);
+      guildName = displayName(settings, row);
       guildIconUrl = row?.icon_url ?? null;
     }
 

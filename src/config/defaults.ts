@@ -112,6 +112,8 @@ export const MESSAGE_TYPE_RANGE: Readonly<Range> = Object.freeze({ min: 0, max: 
 export const DEFAULT_BACKUP_MESSAGE_TYPES: readonly number[] = Object.freeze([0, 19, 20]);
 
 export interface GuildSettings {
+  /** the name the web pages show. null = the server's own name from discord. */
+  web_display_name: string | null;
   ephemeral_default: boolean;
   log_channel_id: string | null;
   /** enabled log-channel families, from LOG_EVENT_FAMILIES (D4PLAN 16). */
@@ -347,6 +349,7 @@ function messageTypeList(fallback: readonly number[]): Field<readonly number[]> 
 export const FIELDS: {
   readonly [K in keyof GuildSettings]: Field<GuildSettings[K]>;
 } = {
+  web_display_name: { default: null, read: (v) => boundedText(v, 100) },
   ephemeral_default: bool(true),
   log_channel_id: nullableId(),
   log_events: textList(LOG_EVENT_FAMILIES),

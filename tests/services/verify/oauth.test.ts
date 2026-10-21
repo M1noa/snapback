@@ -327,6 +327,14 @@ describe("the callback", () => {
     expect(h.calls).toHaveLength(callsAfterFirst);
   });
 
+  test("hands the guild the state was minted for back to the caller", async () => {
+    const h = harness();
+    const { state } = await authorize(h);
+
+    const result = await exchangeCode(h.deps, { code: "the-code", state });
+    expect(result?.guildId).toBe(GUILD);
+  });
+
   test("takes the granted scopes from /oauth2/@me, not from the request", async () => {
     const h = harness({ answers: { grantedScopes: ["identify"] } });
     const { state } = await authorize(h, ["identify", "email", "guilds"]);

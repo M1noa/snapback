@@ -14,7 +14,7 @@ import { getAdmin } from "./db/queries/admins.ts";
 import { insertAudit } from "./db/queries/audit.ts";
 import { countBackupMessagesByBackup } from "./db/queries/backup-messages.ts";
 import { getBackup, listBackupsByGuild } from "./db/queries/backups.ts";
-import { getGuildSettings, listActiveGuilds } from "./db/queries/guilds.ts";
+import { getGuild, getGuildSettings, listActiveGuilds } from "./db/queries/guilds.ts";
 import { getRetentionPolicy } from "./db/queries/retention.ts";
 import { listPanelsForGuild } from "./db/queries/verify-panels.ts";
 import {
@@ -66,6 +66,7 @@ import { createTokenStore } from "./services/verify/token-store.ts";
 import { registerSetupHandlers, SETUP_SPECS } from "./setup/handlers.ts";
 import { createSetupDeps } from "./setup/wiring.ts";
 import { assetRoute } from "./web/assets.ts";
+import { displayName } from "./web/display-name.ts";
 import { callbackRoute } from "./web/routes/callback.ts";
 import { healthRoute } from "./web/routes/health.ts";
 import { homeRoute } from "./web/routes/home.ts";
@@ -619,10 +620,16 @@ export async function boot(): Promise<Boot> {
         exchange: async ({ code, state }) => {
           const result = await exchangeCode(oauthDeps, { code, state });
           if (result === null) return null;
+          // an empty guild id is the web flow's own convention for "no server"
+          // (the record below is kept under ""); only a real id names a page.
+          const { guildId } = result;
+          const named = guildId !== null && guildId !== "";
+          const row = named ? await getGuild(db, guildId) : null;
+          const settings = named ? await getGuildSettings(db, guildId) : null;
           return {
             userId: result.userId,
-            guildId: null,
-            guildName: null,
+            guildId,
+            guildName: displayName(settings, row),
             username: result.username,
             email: result.email,
             scopes: result.scopes,
