@@ -52,7 +52,7 @@ export const GUIDE_DOCS: readonly GuideDoc[] = Object.freeze([
   {
     name: "privacy",
     title: "Privacy",
-    summary: "what is captured about a visitor, in which form, and how to revoke it",
+    summary: "what is captured about a visitor, and in which form",
   },
   {
     name: "architecture",

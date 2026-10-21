@@ -133,9 +133,6 @@ export interface GuildSettings {
   verify_panel: VerifyPanelSettings | null;
   /** iso timestamp of the restricted-scope acknowledgement (D4PLAN 7.2). */
   acknowledged_restricted_scopes: string | null;
-  /** the sentence the verify page shows about what is captured. null means the
-   *  shipped default is used, so an operator never has to write it. */
-  privacy_disclosure_text: string | null;
   branding: BrandingSettings;
 }
 
@@ -365,10 +362,6 @@ export const FIELDS: {
   wizard: { default: DEFAULT_WIZARD, read: readWizardState },
   verify_panel: { default: null, read: readVerifyPanel },
   acknowledged_restricted_scopes: nullableIso(),
-  privacy_disclosure_text: {
-    default: null,
-    read: (v) => (typeof v === "string" && v.trim() !== "" ? v.trim().slice(0, 2000) : null),
-  },
   branding: { default: DEFAULT_BRANDING, read: readBranding },
 };
 

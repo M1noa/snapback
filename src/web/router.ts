@@ -1,7 +1,11 @@
-// the web router (D4PLAN 13.1). five routes, one process, no framework.
+// the web router (D4PLAN 13.1). three routes, one process, no framework, plus
+// the font files under /assets.
 //
 // everything that is not one of them is a 404 with a plain page. there is no
 // directory listing, and no error page that leaks a path.
+//
+// the site is deliberately just the verification: a landing page and the
+// result. no disclosure page, no revoke page.
 
 import { page } from "./views/pages.ts";
 
@@ -17,7 +21,8 @@ export interface RequestContext {
 export interface WebResponse {
   readonly status: number;
   readonly headers: Record<string, string>;
-  readonly body: string;
+  /** bytes for the font files, a string for every page. */
+  readonly body: string | Uint8Array;
 }
 
 export type Route = (ctx: RequestContext) => Promise<WebResponse> | WebResponse;
@@ -25,9 +30,9 @@ export type Route = (ctx: RequestContext) => Promise<WebResponse> | WebResponse;
 export interface RouterOptions {
   readonly home: Route;
   readonly callback: Route;
-  readonly revoke: Route;
   readonly health: Route;
-  readonly legal: Route;
+  /** the font files. the one path that is a prefix rather than an exact match. */
+  readonly assets: Route;
 }
 
 /** the 404 body. the same shell every page uses, and no path in it: a 404 that
@@ -38,7 +43,7 @@ export function notFound(): WebResponse {
     headers: { "content-type": "text/html; charset=utf-8" },
     body: page({
       title: "not found",
-      body: `<p class="eyebrow">not found</p><h1>not found</h1><p class="lede">that page does not exist. the verification link a server generates is the one to use.</p>`,
+      body: `<div class="single"><h1>This page does not exist</h1><p class="lede">The verification link a server generates is the one to use.</p></div>`,
     }),
   };
 }
@@ -53,13 +58,10 @@ export function createRouter(
         return await options.home(ctx);
       case "/callback":
         return await options.callback(ctx);
-      case "/revoke":
-        return await options.revoke(ctx);
       case "/health":
         return await options.health(ctx);
-      case "/legal":
-        return await options.legal(ctx);
       default:
+        if (ctx.path.startsWith("/assets/")) return await options.assets(ctx);
         return notFound();
     }
   };

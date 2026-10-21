@@ -65,11 +65,10 @@ import { addRecordEvent, upsertRecord } from "./services/verify/records.ts";
 import { createTokenStore } from "./services/verify/token-store.ts";
 import { registerSetupHandlers, SETUP_SPECS } from "./setup/handlers.ts";
 import { createSetupDeps } from "./setup/wiring.ts";
+import { assetRoute } from "./web/assets.ts";
 import { callbackRoute } from "./web/routes/callback.ts";
 import { healthRoute } from "./web/routes/health.ts";
 import { homeRoute } from "./web/routes/home.ts";
-import { legalRoute } from "./web/routes/legal.ts";
-import { revokeRoute } from "./web/routes/revoke.ts";
 import { createServer } from "./web/server.ts";
 
 // every customID surface this build produces. the boot assertion below refuses to
@@ -566,7 +565,7 @@ export async function boot(): Promise<Boot> {
     );
   }
 
-  // the web layer. five routes, one process. the verify flow needs the oauth
+  // the web layer. four routes, one process. the verify flow needs the oauth
   // client secret, and without it the routes still answer and the flow refuses.
   const tokenStore = createTokenStore({
     db,
@@ -584,9 +583,6 @@ export async function boot(): Promise<Boot> {
     tokens: tokenStore,
     clientIp: null,
   };
-  const disclosureUrl = `${env.web.publicBaseUrl}/legal`;
-  const revokeUrl = `${env.web.publicBaseUrl}/revoke`;
-
   const web = createServer({
     db,
     log,
@@ -609,8 +605,6 @@ export async function boot(): Promise<Boot> {
           });
           return built.url;
         },
-        disclosureUrl,
-        revokeUrl,
       }),
       callback: callbackRoute({
         db,
@@ -629,7 +623,6 @@ export async function boot(): Promise<Boot> {
             userId: result.userId,
             guildId: null,
             guildName: null,
-            captured: ["identify", ...result.scopes],
             username: result.username,
             email: result.email,
             scopes: result.scopes,
@@ -676,17 +669,8 @@ export async function boot(): Promise<Boot> {
           );
           await addRecordEvent({ db, log }, { userId, kind: "oauth", detail: { fingerprint } });
         },
-        disclosureUrl,
-        revokeUrl,
       }),
-      revoke: revokeRoute({
-        db,
-        log,
-        tokens: tokenStore,
-        records: { remove: async () => {} },
-        disclosureUrl,
-        revokeUrl,
-      }),
+      assets: assetRoute(),
       health: healthRoute({
         db,
         log,
@@ -695,19 +679,6 @@ export async function boot(): Promise<Boot> {
         schemaVersion: SCHEMA_VERSION,
         gateway: () => (gateway.client.ready ? "ready" : "not ready"),
         queueDepth: () => 0,
-      }),
-      legal: legalRoute({
-        db,
-        log,
-        // the scopes come from the panel itself, so the page cannot claim less
-        // than the panel asks for (D4PLAN 19.3).
-        panel: async (guildId) => {
-          const panels = await listPanelsForGuild(db, guildId);
-          const panel = panels[0];
-          return panel === undefined ? null : { scopes: panel.scopes_json };
-        },
-        operatorText:
-          "verification is optional, and it is this server's way of keeping a member list honest.",
       }),
     },
     port: env.web.port,

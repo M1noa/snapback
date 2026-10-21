@@ -17,9 +17,6 @@ export interface HomeDeps {
   readonly db: Database;
   /** the authorize url for a guild, or null when the flow is not wired. */
   readonly authorizeUrl: (guildId: string) => Promise<string | null>;
-  /** the disclosure text's url. */
-  readonly disclosureUrl: string;
-  readonly revokeUrl: string;
 }
 
 export function homeRoute(deps: HomeDeps) {
@@ -63,8 +60,6 @@ export function homeRoute(deps: HomeDeps) {
         guildName,
         guildIconUrl,
         verifyUrl,
-        disclosureUrl: deps.disclosureUrl,
-        revokeUrl: deps.revokeUrl,
       }).replace("</body>", `${script}</body>`),
     };
   };

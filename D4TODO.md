@@ -26,7 +26,7 @@ Paths such as `db/`, `lib/`, `discord/`, `services/`, and `web/` are relative to
 | custom ids | `sb:<surface>:<guild>:<object>:<action>:<cursor>` (`D4PLAN.md` 9.3) |
 | long payloads | `interaction_state` table, short random id in the customID, 15 minute TTL |
 | geo/asn | db-ip lite + ipverse, local files, no third party at request time |
-| mmdb reader | `maxmind` (MIT). Data attribution for db-ip (CC-BY) goes on `/legal` and `docs/self-hosting.md` |
+| mmdb reader | `maxmind` (MIT). Data attribution for db-ip (CC-BY) goes in `docs/privacy.md` and `docs/self-hosting.md` |
 | role icons | captured as `icon` + `unicode_emoji`, both gated on the guild's `ROLE_ICONS` feature |
 | relationships | schema and UI kept, capture path disabled behind "requires Social SDK access" |
 | tokens | AES-256-GCM, decrypted only in the token refresh path and the pull join |
@@ -74,7 +74,7 @@ Answers marked here were resolved from the Discord docs and are recorded in `D4P
       Run: `bun scripts/spike/duckdb.ts`. 1.5.6-r.1 under Bun 1.3.14. Opens 70 ms, returns `bigint` for `BIGINT`, accepts several DDL statements in one call, `INSERT OR IGNORE` and `CAST(? AS JSON)` both work, `Bun.sql` present. 1000 prepared inserts 350 ms; the same 1000 as one multi-row statement 15.6 ms, so batch on the write path.
 - [x] Oceanic 1.15 sends a Components V2 container from Bun with a plain object payload, and a button in it responds.
       Run: `bun scripts/spike/oceanic-cv2.ts`. Payload shape and the 40-cap counter verified offline against the library's own enums. `IS_COMPONENTS_V2 = 32768`, and every type number matches `D4PLAN.md` 9. No builder classes exist. The gateway send itself still needs a token and a test guild: do that first thing in Phase 3, since it is the one claim here that only a live send can settle.
-- [x] mmdb reader: `maxmind` (MIT). db-ip data is CC-BY, attribution on `/legal` and `docs/self-hosting.md`.
+- [x] mmdb reader: `maxmind` (MIT). db-ip data is CC-BY, attribution in `docs/privacy.md` and `docs/self-hosting.md`.
 - [x] role icons: `icon` (image data) and `unicode_emoji` on the role object, set in the same create/modify body, gated on `ROLE_ICONS`. Do not drop from v1.
 - [x] friends/pending/blocked: `relationships.read` is Social-SDK-gated with no public REST route. Keep the schema, ship the capture disabled.
 - [x] bulk delete: 2 to 100 ids, 14 day window, non-existent ids still count toward the range, a single id is a `400`.
@@ -131,7 +131,7 @@ Answers marked here were resolved from the Discord docs and are recorded in `D4P
 
 - [x] resumable state machine in `guilds.settings_json` under `wizard`, each step `{done, skipped, at}`. Re-running edits rather than duplicating.
       `src/setup/state.ts` holds the twelve steps as data plus the pure transitions, `wizard.steps.<key>` is `{done, skipped, at}`, and `openSetup` reopens at the first incomplete step. `tests/setup/state.test.ts`.
-- [~] steps 0-11 from `D4PLAN.md` 10.1, plus a subcommand for each: `status`, `app`, `web`, `admins`, `backup`, `restore`, `verify`, `branding`, `logs`, `privacy`, `data`, `guide`.
+- [~] steps 0-10 from `D4PLAN.md` 10.1 (the privacy step is removed by operator decision, so the steps after 9 shift down), plus a subcommand for each: `status`, `app`, `web`, `admins`, `backup`, `restore`, `verify`, `branding`, `logs`, `data`, `guide`.
       All twelve steps ship under `src/setup/steps/`, and `/setup` carries `open`, `status`, `guide`, and one subcommand per step, derived from `WIZARD_STEPS` so a new step cannot be added without one. `welcome`, `scopes`, and `finish` need none: `D4PLAN.md` 8 lists none of them and the step machine drives them. **`data` is not registered.** There is no `data` step, and the two verbs that make the page worth opening (back up the database, export everything to JSON) need the export path from a later phase; a status-and-size page would repeat the database line `/snapback diagnostics` already prints, so it waits for rows it can export. `docs/commands.md` keeps its `/setup data` row, because that file mirrors `D4PLAN.md` 8 including unshipped groups.
 - [x] file upload for avatar and banner through the modal `file_upload` component, size checked and non-square centre-cropped before upload, GIF accepted for the avatar.
       `src/setup/image.ts` sniffs the real format from the bytes rather than trusting the declared type, enforces the size ceiling, and centre-crops a non-square PNG. A non-square jpeg or gif is refused with one fix ("this build has no jpeg decoder, so a non-square jpeg is not cropped: crop it and re-upload") rather than silently mangled, and a square gif is accepted as an avatar. The transport resolves the uploaded attachment to its cdn url before a step sees it, because an id alone cannot be fetched. `tests/setup/image.test.ts`.
@@ -209,8 +209,8 @@ Still open in this phase:
 
 ## Phase 7 - website, oauth, verify
 
-- [x] `web/server.ts` on `bun.serve`, `web/router.ts`, five routes: `/`, `/callback`, `/revoke`, `/health`, `/legal` (`D4PLAN.md` 13.1). No `/v/{slug}`, no public geo route.
-      `src/web/`. everything that is not one of the five is a plain 404 with no path of ours in it, and a route that throws is a plain 500 with the detail in the log.
+- [x] `web/server.ts` on `bun.serve`, `web/router.ts`, three routes: `/`, `/callback`, `/health` (`D4PLAN.md` 13.1). No `/v/{slug}`, no public geo route.
+      `src/web/`. everything that is not one of the three is a plain 404 with no path of ours in it, and a route that throws is a plain 500 with the detail in the log. the `/revoke` and `/legal` pages are removed by operator decision: the site no longer discloses, and revocation runs through `/verify revoke`.
 - [x] one function builds the authorize URL, in `services/verify/oauth.ts`. Search the repo for a second copy and delete it.
       `buildAuthorizeUrl` in `src/services/verify/oauth.ts` is the only one: `grep -rn "oauth2/authorize" src/` finds that one and the constant beside it.
 - [x] `state`: 32 random bytes base64url, bound to guild, client ip, and expiry, single use, validated on callback. Stored in memory with the `oauth_states` table behind it. Guild id as state is banned.
@@ -222,15 +222,15 @@ Still open in this phase:
 - [x] IP capture (`web/capture/ip.ts`): `CF-Connecting-IP` in cloudflare mode, else right-to-left walk of `X-Forwarded-For` with `TRUSTED_PROXY_DEPTH`, else socket. Validate every candidate, never store a bare string.
       every candidate is checked with `net.isIP` before it is believed, and the stored form is the hash or the ciphertext unless the operator asked for the plain address.
 - [x] fingerprint (`web/capture/fingerprint.ts`): attributes collected client side and posted with the nonce, stored on the pending row and merged on callback.
-      the landing page's script collects the browser's own properties into a short-lived cookie and the callback reads it back. the field list is the fixed one in `D4PLAN.md` 14.2 (no canvas, no WebGL, no font probe), the parser drops a field with the wrong type or a number outside its range, and `/legal` renders the same list the code reads, so the three cannot drift. a landing page with no server attached runs no script.
+      the landing page's script collects the browser's own properties into a short-lived cookie and the callback reads it back. the field list is the fixed one in `D4PLAN.md` 14.2 (no canvas, no WebGL, no font probe), the parser drops a field with the wrong type or a number outside its range, and the list is documented in `docs/privacy.md`. it is not shown on the website (operator decision, the `/legal` page is gone). a landing page with no server attached runs no script.
 - [x] tokens encrypted before insert, never returned to a command.
       `src/services/verify/token-store.ts`. a store with no key refuses to hold a token, with one fixed `SB_` code.
 - [x] panel builder per `D4PLAN.md` 10.3: channel select, modal for title and description, colour, thumbnail, button label and style, scope checkboxes with consequence lines, `?guild=` link button.
       `src/discord/commands/verify/` and `src/services/verify/panel.ts`. the modal carries the title, what the panel is for, the button's label, the accent and the thumbnail. the panel's own button mints the state and answers with a link to discord's consent screen, so nothing is captured before the person approves it.
-- [x] disclosure text generated from the panel's scope list, not typed into a template.
-      the panel's own disclosure line comes from the scope catalogue, and the `/legal` page reads the panel's scope list, so neither can claim less than the panel asks discord for. the operator's paragraph follows it.
-- [ ] check: end-to-end verify with a test app, record row complete, `/revoke` clears tokens and keeps the record, tunnel mode captures a real IP not a loopback.
-      the pieces are tested one at a time (`tests/web/`, `tests/services/verify/`), not end to end against a real application. the `/revoke` route clears the token and keeps the record, and the tunnel mode is covered by the ip capture's tests, but the whole path has not been run against a test app.
+- [x] ~~disclosure text generated from the panel's scope list, not typed into a template~~ removed: the site no longer discloses, operator's call.
+      the panel's copy line is now `pressing the button opens discord's own consent screen, which lists every permission this server asks for.` (`docs/scopes.md`). there is no `/legal` page and no revoke route; `docs/privacy.md` carries what the record keeps.
+- [ ] check: end-to-end verify with a test app, record row complete, tunnel mode captures a real IP not a loopback.
+      the pieces are tested one at a time (`tests/web/`, `tests/services/verify/`), not end to end against a real application. `/verify revoke` clears the token and keeps the record, and the tunnel mode is covered by the ip capture's tests, but the whole path has not been run against a test app.
 
 ## Phase 8 - records and refresh
 
@@ -365,7 +365,7 @@ Tracked here so they do not get quietly answered by a guess. Answered ones are s
 
 - ~~`relationships.read` by scope alone?~~ Social-SDK-gated, no public REST route. Capture disabled, schema kept.
 - ~~role icons: field name and endpoint?~~ `icon` + `unicode_emoji`, same create/modify body, `ROLE_ICONS`-gated.
-- ~~mmdb reader and licence?~~ `maxmind`, MIT. db-ip data is CC-BY, attributed on `/legal`.
+- ~~mmdb reader and licence?~~ `maxmind`, MIT. db-ip data is CC-BY, attributed in `docs/privacy.md`.
 - ~~bulk delete limits?~~ 2 to 100 ids, a 2 week window, ids that do not exist still count toward the range. Duplicate ids are a `400`. A 1-element array is below the documented minimum of 2 rather than an error the docs name.
 - ~~file upload ceiling per boost tier?~~ Re-verified against `developers/reference.mdx` and `resources/channel.mdx`. 20 MiB per file by default, raised from 10 MiB in September 2026. The 25 MiB figure is the per-message request size, not a boost tier. Boost tiers add their own limits. The number is per uploader as well, so read `attachment_size_limit` off the interaction instead of hardcoding anything. D4PLAN 17.3 corrected.
 - ~~role and channel caps?~~ `30005` is "maximum number of guild roles reached (250)", `30013` is "maximum number of guild channels reached (500)". Documented as fixed; no primary source varies them by boost tier or feature. Doc-verified only, not triggered against a live guild at the cap.

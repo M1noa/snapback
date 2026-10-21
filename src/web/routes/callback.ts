@@ -22,7 +22,6 @@ export interface CallbackDeps {
     userId: string;
     guildId: string | null;
     guildName: string | null;
-    captured: string[];
     username: string;
     email: string | null;
     scopes: readonly string[];
@@ -41,19 +40,18 @@ export interface CallbackDeps {
     connections: readonly unknown[];
     guilds: readonly unknown[];
   }) => Promise<void>;
-  readonly disclosureUrl: string;
-  readonly revokeUrl: string;
 }
+
+/** the one sentence a failed callback shows. it names the fix, not the cause. */
+const FAILED_DETAIL =
+  "We could not complete the verification. The link may have expired, so start again from the server's verification link.";
 
 export function callbackRoute(deps: CallbackDeps) {
   return async (ctx: RequestContext): Promise<WebResponse> => {
     const code = ctx.query.get("code");
     const state = ctx.query.get("state");
     if (code === null || state === null) {
-      return failed(
-        "we could not complete the verification, the link may have expired. try clicking Verify again.",
-        deps,
-      );
+      return failed(FAILED_DETAIL);
     }
 
     const ip = captureIp(ctx.headers, ctx.remoteAddress, deps.ip);
@@ -76,17 +74,11 @@ export function callbackRoute(deps: CallbackDeps) {
           message: error instanceof Error ? error.message : String(error),
         });
       }
-      return failed(
-        "we could not complete the verification, the link may have expired. try clicking Verify again.",
-        deps,
-      );
+      return failed(FAILED_DETAIL);
     }
 
     if (exchanged === null) {
-      return failed(
-        "we could not complete the verification, the link may have expired. try clicking Verify again.",
-        deps,
-      );
+      return failed(FAILED_DETAIL);
     }
 
     try {
@@ -113,9 +105,7 @@ export function callbackRoute(deps: CallbackDeps) {
       body: resultPage({
         ok: true,
         guildName: exchanged.guildName,
-        detail: `captured: ${exchanged.captured.join(", ")}. you can revoke this at any time.`,
-        disclosureUrl: deps.disclosureUrl,
-        revokeUrl: deps.revokeUrl,
+        detail: "You can close this page now.",
       }),
     };
   };
@@ -136,7 +126,7 @@ function fingerprintFrom(cookie: string | null): unknown {
   return null;
 }
 
-function failed(detail: string, deps: CallbackDeps): WebResponse {
+function failed(detail: string): WebResponse {
   return {
     status: 400,
     headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" },
@@ -144,8 +134,6 @@ function failed(detail: string, deps: CallbackDeps): WebResponse {
       ok: false,
       guildName: null,
       detail,
-      disclosureUrl: deps.disclosureUrl,
-      revokeUrl: deps.revokeUrl,
     }),
   };
 }

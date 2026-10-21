@@ -1,236 +1,172 @@
 // the pages the web layer renders. server-rendered html, one file per page, and
 // nothing in them that a person did not ask for: no trackers, no third-party
-// requests, no webfonts, and no embedded scripts beyond the fingerprint the
-// plan names.
+// scripts, and no embedded scripts beyond the fingerprint the plan names.
 //
-// tokens first (hallmark): dark slate paper close to discord's own dark, a
-// mono display and a sans body, and one accent, spent only on the verify
-// button. no colour that is not a token below.
+// the shape is a diptych: the ask on the left, the seal on the right. the seal
+// is the same object on every page, so a person sees one thing happen to one
+// thing rather than two unrelated screens.
+
+import { THEME_CSS } from "./theme.ts";
 
 export interface PageInput {
   readonly title: string;
   readonly body: string;
-  /** the guild the page is about, when there is one. */
-  readonly guildName?: string | null;
-  readonly guildIconUrl?: string | null;
-  /** the header's two links. defaults point at the disclosure and revoke pages. */
-  readonly disclosureHref?: string;
-  readonly revokeHref?: string;
 }
 
-/** the shell's header links. a page can point them somewhere else, but the
- *  default is disclosure then revoke. */
-const DEFAULT_HREFS: { disclosureHref: string; revokeHref: string } = {
-  disclosureHref: "/legal",
-  revokeHref: "/revoke",
-};
+const MARK_SVG = `<svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><rect width="18" height="18" rx="5" fill="var(--accent)"/><path d="M5 9.4 7.9 12.3 13 7.1" fill="none" stroke="var(--on-accent)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+
+const ARROW_SVG = `<svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h13"/><path d="m12.5 5.5 6.5 6.5-6.5 6.5"/></svg>`;
+
+const CHECK = `<path d="M5.2 12.6 9.6 17 18.8 6.6" pathLength="1" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>`;
+
+const CROSS = `<path d="M7 7 17 17M17 7 7 17" pathLength="1" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/>`;
+
+/** what the seal holds when it has neither an icon nor a name: a server, drawn
+ *  plainly, claiming nothing about its state. */
+const SERVER_GLYPH = `<svg class="glyph" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><rect x="3" y="4" width="18" height="6" rx="2.5"/><rect x="3" y="14" width="18" height="6" rx="2.5"/><path d="M6.8 7h.01M6.8 17h.01"/></svg>`;
+
+/** the shell every page renders through. */
 export function page(input: PageInput): string {
-  const hrefs = { ...DEFAULT_HREFS, ...input };
   return `<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="referrer" content="no-referrer">
+<meta name="color-scheme" content="dark">
 <title>${escapeHtml(input.title)}</title>
-<style>
-/* hallmark · macrostructure: long document · genre: atmospheric, technical ·
-   theme: snapback slate (paper 0.185 / display mono / accent blurple 277) */
-:root {
-  color-scheme: dark;
-  --paper: oklch(0.185 0.014 265);
-  --surface: oklch(0.225 0.016 265);
-  --rule: oklch(0.33 0.018 265);
-  --ink: oklch(0.94 0.008 262);
-  --muted: oklch(0.7 0.012 258);
-  --faint: oklch(0.56 0.012 258);
-  --accent: oklch(0.55 0.2 277);
-  --accent-hover: oklch(0.6 0.2 277);
-  --accent-wash: oklch(0.3 0.05 277);
-  --accent-ink: oklch(0.99 0.002 265);
-  --ok: oklch(0.72 0.15 152);
-  --err: oklch(0.68 0.18 20);
-  --font-display: ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
-  --font-body: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-  --space-1: 4px; --space-2: 8px; --space-3: 12px; --space-4: 16px;
-  --space-5: 24px; --space-6: 32px; --space-7: 48px; --space-8: 64px;
-  --radius: 10px; --radius-sm: 6px; --radius-xs: 4px;
-  --dur: 120ms; --ease: cubic-bezier(0.22, 0.61, 0.36, 1);
-}
-* { box-sizing: border-box; }
-html, body { margin: 0; padding: 0; }
-body { background: var(--paper); color: var(--ink); font: 400 1rem/1.55 var(--font-body); }
-::selection { background: var(--accent); color: var(--accent-ink); }
-a:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-.wrap { min-height: 100dvh; max-width: 44rem; margin: 0 auto; padding: var(--space-4) var(--space-4) var(--space-6); display: flex; flex-direction: column; }
-.bar { display: flex; align-items: baseline; gap: var(--space-4); row-gap: var(--space-1); flex-wrap: wrap; padding: var(--space-3) 0 var(--space-4); }
-.mark { display: inline-flex; align-items: center; gap: var(--space-2); font: 600 0.8rem/1 var(--font-display); letter-spacing: 0.14em; }
-.mark::before { content: ""; width: 9px; height: 9px; background: var(--accent); }
-.bar nav { margin-left: auto; display: flex; gap: var(--space-4); }
-.bar nav a { color: var(--muted); font: 500 0.8rem/1.2 var(--font-display); text-decoration: none; }
-.bar nav a:hover, .bar nav a:active { color: var(--ink); text-decoration: underline; text-underline-offset: 3px; }
-main { flex: 1; padding-top: var(--space-5); }
-.eyebrow { font: 500 0.72rem/1 var(--font-display); letter-spacing: 0.22em; color: var(--faint); margin: 0 0 var(--space-2); }
-h1 { font: 500 clamp(1.45rem, 1.15rem + 1.6vw, 1.9rem)/1.2 var(--font-display); margin: 0 0 var(--space-4); overflow-wrap: anywhere; min-width: 0; }
-h1.pad { text-decoration: underline; text-decoration-color: var(--accent); text-decoration-thickness: 2px; text-underline-offset: 5px; }
-.lede { color: var(--muted); margin: 0 0 var(--space-5); max-width: 40rem; }
-.lede strong { color: var(--ink); }
-.icon { width: 48px; height: 48px; border-radius: var(--radius-sm); border: 1px solid var(--rule); margin: 0 0 var(--space-4); }
-.panel { background: var(--surface); border: 1px solid var(--rule); border-radius: var(--radius); padding: var(--space-4) var(--space-5); margin: 0 0 var(--space-5); }
-.fields { list-style: none; margin: 0; padding: 0; }
-.fields li { display: grid; grid-template-columns: 6.5rem 1fr; gap: var(--space-4); padding: var(--space-3) 0; border-top: 1px solid var(--rule); font-size: 0.95rem; }
-.fields li:first-child { border-top: 0; padding-top: 0; }
-.fields b { font: 600 0.74rem/1.6 var(--font-display); letter-spacing: 0.1em; }
-.fields span { color: var(--muted); min-width: 0; }
-.fields code { font: 500 0.82em/1.4 var(--font-display); color: var(--ink); background: var(--accent-wash); padding: 0.05em 0.35em; border-radius: var(--radius-xs); }
-.slate { background: var(--surface); border-left: 3px solid var(--rule); border-radius: 0 var(--radius) var(--radius) 0; padding: var(--space-4) var(--space-5); margin: 0 0 var(--space-5); }
-.slate.ok { border-left-color: var(--ok); }
-.slate.err { border-left-color: var(--err); }
-.status { font: 600 0.76rem/1 var(--font-display); letter-spacing: 0.24em; margin: 0 0 var(--space-3); }
-.status.ok { color: var(--ok); }
-.status.err { color: var(--err); }
-.slate p { margin: 0; }
-.button { display: inline-block; padding: 0.9rem 1.4rem; background: var(--accent); color: var(--accent-ink); font: 600 0.95rem/1 var(--font-body); border-radius: var(--radius-sm); text-decoration: none; transition: background var(--dur) var(--ease); }
-.button:hover { background: var(--accent-hover); }
-.button:active { transform: translateY(1px); }
-.links { display: flex; gap: var(--space-5); flex-wrap: wrap; margin: var(--space-5) 0 0; font-size: 0.9rem; }
-.links a { color: var(--muted); text-decoration: underline; text-decoration-color: var(--rule); text-underline-offset: 3px; }
-.links a:hover { color: var(--ink); text-decoration-color: var(--muted); }
-.prose { max-width: 40rem; }
-.prose p { margin: 0 0 var(--space-4); font-size: 0.98rem; }
-.prose p.lede { font-size: 1rem; }
-.prose code { font: 500 0.85em/1.4 var(--font-display); color: var(--ink); background: var(--accent-wash); padding: 0.05em 0.35em; border-radius: var(--radius-xs); overflow-wrap: anywhere; }
-.foot { border-top: 1px solid var(--rule); margin-top: var(--space-8); padding-top: var(--space-4); font: 400 0.72rem/1.6 var(--font-display); color: var(--faint); }
-@media (max-width: 480px) { .fields li { grid-template-columns: 1fr; gap: var(--space-1); } }
-@media (prefers-reduced-motion: reduce) { .button { transition: none; } }
-</style>
+<style>${THEME_CSS}</style>
 </head>
 <body>
-<div class="wrap">
-<header class="bar">
-<span class="mark">snapback</span>
-<nav><a href="${escapeHtml(hrefs.disclosureHref)}">what is captured</a><a href="${escapeHtml(hrefs.revokeHref)}">revoke</a></nav>
-</header>
+<div class="shell">
+<header class="bar"><span class="mark">${MARK_SVG}snapback</span></header>
 <main>
 ${input.body}
 </main>
-<footer class="foot">no third-party requests, no trackers. the browser details listed above are read on this page and stored only on the server that sent you here.</footer>
+<footer class="foot"><span>no trackers, no third-party scripts.</span></footer>
 </div>
 </body>
 </html>`;
 }
 
-/** the landing page. with a guild it says whose server this is; without one it
- *  says nothing about a server at all. */
+/** the seal: two rings, the server inside, and the state on the badge.
+ *  `draw` makes the badge mark stroke itself on instead of appearing. */
+function seal(input: {
+  readonly name: string | null;
+  readonly iconUrl: string | null;
+  readonly state: "pending" | "ok" | "failed" | "empty";
+  readonly draw?: boolean;
+}): string {
+  const classes = ["seal"];
+  if (input.state === "ok") classes.push("is-done");
+  if (input.state === "failed") classes.push("is-failed");
+  if (input.state === "empty") classes.push("is-empty");
+
+  const face =
+    input.iconUrl !== null
+      ? `<img src="${escapeHtml(input.iconUrl)}" alt="" width="160" height="160">`
+      : input.name === null
+        ? SERVER_GLYPH
+        : `<span class="initial">${escapeHtml(initialOf(input.name))}</span>`;
+
+  const mark = stateMark(input.state, input.draw === true);
+
+  return `<div class="${classes.join(" ")}">
+<svg class="rings" viewBox="0 0 100 100" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1" vector-effect="non-scaling-stroke">
+<circle cx="50" cy="50" r="49.4" opacity="0.55"${input.state === "empty" ? ' stroke-dasharray="0.6 3.4" stroke-linecap="round"' : ""}/>
+<circle cx="50" cy="50" r="45" stroke-dasharray="0.6 3.4" stroke-linecap="round" opacity="0.9"/>
+</svg>
+<div class="face">${face}</div>
+${mark === "" ? "" : `<div class="badge">${mark}</div>`}
+</div>`;
+}
+
+/** the mark on the badge. pending and empty draw nothing, ok and failed stroke
+ *  themselves on when the page asks for it. */
+function stateMark(state: "pending" | "ok" | "failed" | "empty", draw: boolean): string {
+  if (state === "empty") return "";
+  const glyph = state === "failed" ? CROSS : CHECK;
+  const className = draw && state !== "pending" ? ' class="draw"' : "";
+  return `<svg viewBox="0 0 24 24" aria-hidden="true"${className}>${glyph}</svg>`;
+}
+
+/** the one letter a seal falls back to when it has no icon. */
+function initialOf(name: string): string {
+  return name.trim().charAt(0).toUpperCase();
+}
+
+/** the landing page. with a server it names it and offers the button; without
+ *  one it says nothing about a server at all. the page does not describe what
+ *  happens behind the flow: the consent screen speaks for itself. */
 export interface HomePageInput {
   readonly guildId: string | null;
   readonly guildName: string | null;
   readonly guildIconUrl: string | null;
   readonly verifyUrl: string | null;
-  readonly disclosureUrl: string;
-  readonly revokeUrl: string;
 }
 
 export function homePage(input: HomePageInput): string {
-  const shell = {
-    disclosureHref: input.disclosureUrl,
-    revokeHref: input.revokeUrl,
-  };
-
   if (input.guildId === null || input.guildId === "") {
     return page({
-      ...shell,
       title: "snapback verification",
-      body: `<p class="eyebrow">verification</p>
-<h1>this link has no server</h1>
-<div class="panel"><p class="lede" style="margin:0">a verification link carries its server with it, and this one does not. ask the server's bot to generate a fresh one.</p></div>`,
+      body: `<div class="single">
+${seal({ name: null, iconUrl: null, state: "empty" })}
+<h1>This link has no server</h1>
+<p class="lede">A verification link carries its server with it, and this one does not. Ask the server's bot for a fresh one.</p>
+</div>`,
     });
   }
 
   const name = input.guildName ?? input.guildId;
-  const icon =
-    input.guildIconUrl === null
-      ? ""
-      : `<img class="icon" src="${escapeHtml(input.guildIconUrl)}" alt="" width="48" height="48">`;
   const button =
     input.verifyUrl === null
       ? ""
-      : `<p style="margin:0 0 var(--space-5)"><a class="button" href="${escapeHtml(input.verifyUrl)}">verify with discord</a></p>`;
+      : `<a class="button" href="${escapeHtml(input.verifyUrl)}">Continue with Discord${ARROW_SVG}</a>
+<p class="fine">Opens discord.com. Close the tab when it is finished.</p>`;
 
   return page({
-    ...shell,
-    title: `verify with ${name} · snapback`,
-    body: `<p class="eyebrow">verification</p>
-<h1 class="pad">verify with ${escapeHtml(name)}</h1>
-${icon}
-<p class="lede">verification records you, on <strong>${escapeHtml(name)}</strong>, and only on that server. it is optional, it asks for nothing you have to pay for, and you can revoke it whenever you want.</p>
-<div class="panel">
-<ul class="fields">
-<li><b>discord</b><span>the profile you approve. pressing verify opens discord's own consent screen first, which lists every permission the server asks for. nothing is written before it says yes.</span></li>
-<li><b>connection</b><span>the address your browser connects from, hashed, and the country it resolves to.</span></li>
-<li><b>browser</b><span>a fixed list of the browser's own details, read the moment this page opens, before you press anything. the list is on the disclosure page. it never reaches the server unless you finish.</span></li>
-</ul>
+    title: `verify for ${name} · snapback`,
+    body: `<div class="split">
+<div class="column">
+<h1 class="rise" style="--i:0"><span class="quiet">Verify for</span> ${escapeHtml(name)}</h1>
+<p class="lede rise" style="--i:1">Approve it on Discord's own screen and you are done. There is nothing to install.</p>
+<div class="rise" style="--i:2">${button}</div>
 </div>
-${button}`,
+<div class="column">
+${seal({ name: input.guildName, iconUrl: input.guildIconUrl, state: "pending" })}
+</div>
+</div>`,
   });
 }
 
-/** the result page after a verification or a revoke. */
+/** the result page after a verification. */
 export interface ResultPageInput {
   readonly ok: boolean;
   readonly guildName: string | null;
   readonly detail: string;
-  /** the word the status line carries. defaults to verified / did not finish. */
+  /** the word the status line carries. defaults to verified / not verified. */
   readonly statusWord?: string;
-  readonly disclosureUrl: string;
-  readonly revokeUrl: string;
 }
 
 export function resultPage(input: ResultPageInput): string {
-  const word = input.statusWord ?? (input.ok ? "verified" : "did not finish");
-  const title = input.guildName === null ? word : `${word} · ${input.guildName}`;
-  const guild =
-    input.guildName === null
-      ? ""
-      : `<p class="lede" style="margin-bottom:0"><strong>${escapeHtml(input.guildName)}</strong></p>`;
-  return page({
-    disclosureHref: input.disclosureUrl,
-    revokeHref: input.revokeUrl,
-    title,
-    body: `<div class="slate ${input.ok ? "ok" : "err"}">
-<p class="status ${input.ok ? "ok" : "err"}">${escapeHtml(word)}</p>
-${guild}
-<p>${escapeHtml(input.detail)}</p>
-</div>
-<div class="links"><a href="${escapeHtml(input.disclosureUrl)}">what is captured, and why</a> · <a href="${escapeHtml(input.revokeUrl)}">revoke your access</a></div>`,
-  });
-}
+  const word = input.statusWord ?? (input.ok ? "verified" : "not verified");
+  const heading = input.ok
+    ? (input.guildName ?? "You are verified")
+    : "Verification did not finish";
+  const title = input.ok && input.guildName !== null ? `${word} · ${input.guildName}` : word;
 
-/** the disclosure page. the same text the wizard's privacy step writes, so the
- *  two cannot drift apart, plus the fixed fingerprint list so neither page can
- *  claim less than the build collects. */
-export function legalPage(input: {
-  readonly disclosure: string;
-  readonly disclosureUrl: string;
-  readonly revokeUrl: string;
-  readonly fingerprintFields: readonly string[];
-}): string {
-  const list = input.fingerprintFields.map((f) => `<code>${escapeHtml(f)}</code>`).join(" ");
   return page({
-    disclosureHref: input.disclosureUrl,
-    revokeHref: input.revokeUrl,
-    title: "what is captured, and why",
-    body: `<p class="eyebrow">disclosure</p>
-<h1>what is captured, and why</h1>
-<div class="prose">
-${input.disclosure
-  .split("\n")
-  .map((line) => `<p>${escapeHtml(line)}</p>`)
-  .join("\n")}
-</div>
-<div class="panel" style="margin-top:var(--space-6)">
-<p class="eyebrow" style="margin-bottom:var(--space-3)">the fixed browser list</p>
-<div style="line-height:2.4">${list}</div>
+    title,
+    body: `<div class="single">
+${seal({
+  name: input.guildName,
+  iconUrl: null,
+  state: input.ok ? "ok" : "failed",
+  draw: true,
+})}
+<p class="status ${input.ok ? "ok" : "err"}">${escapeHtml(word)}</p>
+<h1>${escapeHtml(heading)}</h1>
+<p class="lede">${escapeHtml(input.detail)}</p>
 </div>`,
   });
 }

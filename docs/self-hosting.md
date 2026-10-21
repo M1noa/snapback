@@ -48,7 +48,7 @@ Geolocation runs locally from two files. No API keys, no per-request cost, no th
 
 The MMDB reader is `maxmind` (the `node-maxmind` package), which is MIT. The reader licence is the permissive part; the **data** is the licensed part.
 
-**db-ip attribution.** The db-ip lite data is licensed CC-BY, which requires attribution. The copyright line that ships with the db-ip download must be reproduced verbatim on your `/legal` page and kept in this file. `D4PLAN.md` does not reproduce that exact string, so copy it from the db-ip lite download page when you install the data file; do not paraphrase it.
+**db-ip attribution.** The db-ip lite data is licensed CC-BY, which requires attribution. The copyright line that ships with the db-ip download must be reproduced verbatim in `docs/privacy.md` and kept in this file. `D4PLAN.md` does not reproduce that exact string, so copy it from the db-ip lite download page when you install the data file; do not paraphrase it.
 
 **ipverse** `as-metadata` is published under CC0-1.0 and needs no attribution.
 

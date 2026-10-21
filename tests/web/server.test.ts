@@ -14,9 +14,8 @@ const ROUTES: ServerDeps["routes"] = {
     body: "home",
   }),
   callback: () => ({ status: 200, headers: {}, body: "callback" }),
-  revoke: () => ({ status: 200, headers: {}, body: "revoke" }),
   health: () => ({ status: 200, headers: { "x-worker": "one" }, body: "{}" }),
-  legal: () => ({ status: 200, headers: {}, body: "legal" }),
+  assets: () => ({ status: 404, headers: {}, body: "missing" }),
 };
 
 function deps(): ServerDeps {
@@ -65,6 +64,7 @@ describe("the web server", () => {
     expect(WEB_CSP).toContain("script-src 'sha256-");
     expect(WEB_CSP).toContain("form-action 'none'");
     expect(WEB_CSP).toContain("frame-ancestors 'none'");
+    expect(WEB_CSP).toContain("font-src 'self'");
     expect(WEB_CSP).not.toContain("script-src 'unsafe-inline'");
   });
 

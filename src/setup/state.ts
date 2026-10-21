@@ -9,7 +9,7 @@ import type { GuildSettings, WizardState, WizardStepState } from "../config/defa
 import { DEFAULT_WIZARD } from "../config/defaults.ts";
 
 export interface WizardStep {
-  /** the 0-11 index from D4PLAN 10.1. */
+  /** the 0-10 index from D4PLAN 10.1. */
   readonly index: number;
   /** stable key: it is the customID action and the settings_json key. */
   readonly key: string;
@@ -104,14 +104,6 @@ export const WIZARD_STEPS: readonly WizardStep[] = Object.freeze([
   },
   {
     index: 10,
-    key: "privacy",
-    title: "privacy",
-    required: true,
-    verifyOnly: false,
-    summary: "ip storage mode, retention, and the site disclosure",
-  },
-  {
-    index: 11,
     key: "finish",
     title: "finish",
     required: true,

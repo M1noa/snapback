@@ -182,7 +182,7 @@ describe("the verify panel", () => {
     expect(parsed?.action).toBe("open");
   });
 
-  test("the copy says what the verification asks for", () => {
+  test("the copy only points at the consent screen", () => {
     const panel = {
       panel_id: "p",
       guild_id: GUILD,
@@ -206,11 +206,13 @@ describe("the verify panel", () => {
 
     const body = texts.join("\n");
     expect(body).toContain("verify to join");
-    expect(body).toContain("email address");
-    // no lure, no reward, no gift: the panel says what it collects.
+    expect(body).toContain("consent screen");
+    // no lure, no reward, no list of what is kept: the panel defers to discord's
+    // own consent screen for what it asks for.
     expect(body).not.toContain("nitro");
     expect(body).not.toContain("free");
     expect(body).not.toContain("gift");
+    expect(body).not.toContain("revoke");
   });
 
   test("editing the panel edits the message it posted, and posts no second one", async () => {

@@ -144,8 +144,7 @@ The steps, in order:
 | 7 | restore defaults | no | clear-before and timestamp suffix, both off by default |
 | 8 | verification panel | only if verification is on | the panel, its colour, and its buttons |
 | 9 | scopes | only if verification is on | the default three; the restricted scope needs an acknowledgement |
-| 10 | privacy | yes | IP storage mode, retention, and the site disclosure text |
-| 11 | finish | yes | writes `wizard.done`, prints the invite, the command list, and this doc |
+| 10 | finish | yes | writes `wizard.done`, prints the invite, the command list, and this doc |
 
 Every step has a subcommand that jumps straight to it:
 
@@ -161,7 +160,6 @@ Every step has a subcommand that jumps straight to it:
 | `/setup verify` | steps 8 and 9, the panel builder and its scopes |
 | `/setup branding` | step 3 |
 | `/setup logs` | step 5 |
-| `/setup privacy` | step 10 |
 | `/setup data` | database status and size, back up the database, export everything to JSON |
 | `/setup guide` | renders this document, paginated |
 

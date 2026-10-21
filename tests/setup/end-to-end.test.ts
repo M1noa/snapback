@@ -493,9 +493,6 @@ const VERIFY_VALUES: Readonly<Record<string, SubmittedValue>> = {
 const SCOPES_VALUES: Readonly<Record<string, SubmittedValue>> = {
   [panelFieldId(GUILD, "scopes")]: [...WANT_SCOPES],
 };
-const PRIVACY_VALUES: Readonly<Record<string, SubmittedValue>> = {
-  [modalId("privacy")]: "a disclosure we wrote",
-};
 
 // ---- the pass -------------------------------------------------------------
 
@@ -514,11 +511,10 @@ async function fullPass(h: Harness): Promise<void> {
   await press(h, stepId("restore"), new FakeSurface(RESTORE_VALUES));
   await press(h, modalId("verify"), new FakeSurface(VERIFY_VALUES, "modal"));
   await press(h, modalId("scopes"), new FakeSurface(SCOPES_VALUES, "modal"));
-  await press(h, modalId("privacy"), new FakeSurface(PRIVACY_VALUES, "modal"));
   await press(h, stepId("finish"), new FakeSurface()); // completes the wizard
 }
 
-const PASS_SAVES = 13; // setup.open + eleven step saves + finish
+const PASS_SAVES = 12; // setup.open + ten step saves + finish
 
 async function auditRows(db: Database): Promise<AuditLogRow[]> {
   return auditDb.listAuditByGuild(db, GUILD, { limit: 100 });
@@ -543,7 +539,6 @@ const VALUE_FIELDS = [
   "notify_on_join",
   "verify_panel",
   "acknowledged_restricted_scopes",
-  "privacy_disclosure_text",
   "branding",
 ] as const;
 
@@ -583,9 +578,6 @@ describe("the setup wizard, end to end", () => {
       expect(saved.verify_panel?.colour).toBe("#57f287");
       expect(saved.verify_panel?.scopes).toEqual(WANT_SCOPES);
 
-      // the privacy disclosure
-      expect(saved.privacy_disclosure_text).toBe("a disclosure we wrote");
-
       // the app step writes no setting of its own (it is an info page); what it
       // records is that it was handled. this is the app page's persisted effect.
       expect(saved.wizard.steps.app?.done).toBe(true);
@@ -612,12 +604,6 @@ describe("the setup wizard, end to end", () => {
       const h = harness(temp.handle.db);
       await fullPass(h);
       const before = (await auditRows(temp.handle.db)).length;
-
-      // privacy: the modal's text input carries the stored disclosure
-      const privacy = await press(h, stepId("privacy"));
-      expect(findById(privacy.modals[0]?.components, modalId("privacy")).value).toBe(
-        "a disclosure we wrote",
-      );
 
       // logs: the family checkboxes default to the stored selection, and the page
       // names the stored channel. nav "prev" never writes, so this is a pure render.
@@ -710,7 +696,6 @@ describe("the setup wizard, end to end", () => {
           "setup.restore",
           "setup.verify",
           "setup.scopes",
-          "setup.privacy",
           "setup.finish",
         ].sort(),
       );
@@ -723,7 +708,6 @@ describe("the setup wizard, end to end", () => {
       expect(changedFields(byAction.get("setup.restore"))).toContain("restore_clear_before");
       expect(changedFields(byAction.get("setup.verify"))).toContain("verify_panel");
       expect(changedFields(byAction.get("setup.scopes"))).toContain("verify_panel");
-      expect(changedFields(byAction.get("setup.privacy"))).toContain("privacy_disclosure_text");
 
       // the cursor-only saves moved nothing but the wizard
       expect(changedFields(byAction.get("setup.branding"))).toEqual(["wizard"]);
@@ -741,7 +725,7 @@ describe("the setup wizard, end to end", () => {
       await openSetup({ deps: h1.deps, guildId: GUILD, userId: OPENER });
 
       // save one real value out of order, then walk partway and stop before logs
-      await press(h1, modalId("privacy"), new FakeSurface(PRIVACY_VALUES, "modal"));
+      await press(h1, modalId("verify"), new FakeSurface(VERIFY_VALUES, "modal"));
       await press(h1, navId(SETUP_ACTION.next, "welcome"));
       await press(h1, navId(SETUP_ACTION.next, "app"));
       await press(h1, navId(SETUP_ACTION.next, "web"));
@@ -772,7 +756,7 @@ describe("the setup wizard, end to end", () => {
 
         // the earlier answers survived the restart
         const saved = await guildsDb.getGuildSettings(second.db, GUILD);
-        expect(saved?.privacy_disclosure_text).toBe("a disclosure we wrote");
+        expect(saved?.verify_panel?.title).toBe("verify to enter");
         expect(saved?.wizard.current).toBe("logs");
         for (const key of ["welcome", "app", "web", "branding", "admins"]) {
           expect(saved?.wizard.steps[key]?.done).toBe(true);
@@ -809,12 +793,12 @@ describe("the setup wizard, end to end", () => {
         expect(JSON.stringify(after[field])).toBe(JSON.stringify(snapshot[field]));
       }
 
-      // the second pass wrote 11 rows, not 13. two saves moved nothing so wrote
+      // the second pass wrote 10 rows, not 12. two saves moved nothing so wrote
       // no audit row: setup.open (the opener is already this user) and
       // setup.finish (the wizard is already complete, so completing it again is a
       // no-op). every other save advanced the wizard cursor and nothing else.
       const added = (await auditRows(temp.handle.db)).filter((row) => !firstIds.has(row.id));
-      expect(added).toHaveLength(11);
+      expect(added).toHaveLength(10);
       const addedActions = new Set(added.map((row) => row.action));
       expect(addedActions.has("setup.open")).toBe(false);
       expect(addedActions.has("setup.finish")).toBe(false);

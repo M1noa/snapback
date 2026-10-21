@@ -26,7 +26,6 @@ The wizard. Stateful and resumable; the subcommands jump straight to a step.
 | `/setup backup` | include set, message limits, auto-backup schedule |
 | `/setup restore` | clear-before, timestamp suffix, default selections |
 | `/setup verify` | the panel, its colour, and its buttons |
-| `/setup privacy` | ip storage mode, retention, and the site disclosure |
 | `/setup guide` | reads the operator docs. Options: `doc` (the guide, or the index of them all) and `page` |
 
 ## /backup

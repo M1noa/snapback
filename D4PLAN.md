@@ -48,7 +48,7 @@ One owner and a per-guild admin list run everything from Discord. The only thing
 | Language | TypeScript, `strict`, ESM | matches the library's own types |
 | Runtime | Bun `[v]` | Oceanic ships a `bun` export condition, so Bun is a supported target `[v]`. Single-runtime (bot + web server + scheduler in one process) is the whole point. No Node fallback in v1: two runtimes means two sets of DuckDB, fetch, and worker bugs |
 | DB | DuckDB file by default, Postgres via `DATABASE_URL` `[v]` | one-file deploy for the common case, Postgres for anyone who wants concurrency. The Bun + DuckDB binding is the one thing milestone 0 has to prove (`23.1`); the query layer is written portable so swapping to Postgres, or to `bun:sqlite`, is a config change |
-| Web | `node:http` + a tiny router, no framework | the site is five routes and one OAuth callback. A framework buys nothing |
+| Web | `Bun.serve` + a tiny router, no framework, server-rendered HTML | the site is three routes and one OAuth callback. A framework would add a build step and a bundled runtime to pages that ship one inline script |
 | Docs | `docs/` markdown, rendered into `/snapback help` and `/setup guide` and the site | single source for all three |
 
 **The Bun risk, resolved early.** DuckDB has no official Bun build; `@duckdb/node-api` is a Node-API addon, and Bun's NAPI support is good but not certified for every addon. Milestone 0 is a half-day spike: open a DuckDB file from Bun, write a row, read it back. If it fails, the first fallback is `bun:sqlite` behind the same `Database` interface (`5.1`), which keeps the single-runtime design intact and costs one file. Dropping to Node is the last resort, only if Bun itself is unworkable for a reason SQLite does not fix, because two runtimes means two sets of addon, fetch, and worker bugs.
@@ -529,9 +529,10 @@ The wizard. Stateful, resumable, subcommands to jump straight to a step.
 | `/setup verify` | build and manage panels, choose scopes, choose redirect target |
 | `/setup branding` | bot avatar and banner upload (GIF accepted), bot display name |
 | `/setup logs` | log channel, event families, test-fire a log entry |
-| `/setup privacy` | IP storage mode, retention policy, website disclosure text |
 | `/setup data` | DB status and size, back up the DB, export everything to JSON |
 | `/setup guide` | renders `docs/setup.md` in paginated Components V2 pages |
+
+The `privacy` step and the `/setup privacy` subcommand are removed by operator decision: the site no longer carries a disclosure page. The wizard's steps renumber from 0-11 to 0-10 (`10.1`). IP storage mode and retention are still settings; where they surface once the step is gone is `[?]`.
 
 ### `/backup`
 
@@ -565,6 +566,7 @@ The wizard. Stateful, resumable, subcommands to jump straight to a step.
 | `/verify records` | `page`, `filter` | paginated record browser, per-user detail view |
 | `/verify user` | `user` | full record for one user, all captured fields |
 | `/verify refresh` | `all` (bool) or `records` | re-checks every token against Discord, live-edits the message per user, reports who revoked |
+| `/verify revoke` | `user` | clears one record's stored token, keeps the record. The only revoke path now that the web route is gone (`13.1`) |
 | `/verify delete` | `user`, `scope` (`record`\|`ip`\|`token`\|`all`), `confirm` | the only path that erases captured data |
 | `/verify export` | `format`, `filter` | JSON or CSV of records |
 | `/verify stats` | | verified count, revoked count, scopes in use, intel breakdown |
@@ -706,8 +708,9 @@ A resumable state machine, persisted in `guilds.settings_json` under `wizard`. E
 | 7 | Restore defaults | no | clear-before off by default, timestamp suffix off by default |
 | 8 | Verification panel | only if verification is enabled | `10.3` |
 | 9 | Scopes | only if verification is enabled | default three, restricted scope needs an acknowledgement |
-| 10 | Privacy | yes | IP storage mode, retention, disclosure text |
-| 11 | Finish | yes | writes `wizard.done`, prints the invite, the command list, and the docs pointer |
+| 10 | Finish | yes | writes `wizard.done`, prints the invite, the command list, and the docs pointer |
+
+Step 10 (Privacy) is removed by operator decision: no disclosure page means the site has nothing to write text for. Steps after 9 shift down by one.
 
 ### 10.2 Branding upload
 
@@ -992,19 +995,20 @@ The end report lists per category: created, edited, skipped, failed, with the fi
 
 ### 13.1 Routes
 
-Five routes, one process, no framework.
+Three routes, one process, no framework, plus the static files those pages need (two font files, served from an allowlist under `/assets/fonts/`).
 
 | Route | Method | Purpose |
 |---|---|---|
-| `/` | GET | landing page. If `?guild=<id>` is present, shows that guild's name and icon and a Verify button. Otherwise a neutral page. |
+| `/` | GET | landing page. If `?guild=<id>` is present, shows that guild's name and a Verify button. Otherwise a neutral page. The page does not describe what is captured (operator decision). |
 | `/callback` | GET | OAuth redirect target. Exchanges the code, captures the client IP and fingerprint, writes the record, shows a result page. |
-| `/revoke` | GET | lets a verified user revoke their token and optionally delete their record. Required for a defensible consent model, and it is what `/verify refresh` reports against. |
 | `/health` | GET | JSON: version, uptime, DB reachable, gateway state, job queue depth. Also the `?probe=1` mode used by the wizard's tunnel check. |
-| `/legal` | GET | the disclosure page: what is captured, why, retention, how to revoke. Rendered from the same text the wizard's privacy step writes. |
+| `/assets/fonts/*` | GET | the two self-hosted woff2 files the stylesheet names. Paths are an allowlist (`src/web/assets.ts`), never a join, and a miss is the same 404 as any other path. Cached `immutable` for a year because the filenames carry no query and the bytes never change. |
+
+The `/revoke` and `/legal` pages are removed by operator decision: the site no longer discloses what is captured, and revocation runs through the bot's own `/verify revoke` instead of a web route. The capture itself is unchanged (`14`); only the member-facing surfaces are.
 
 Everything else 404s with a plain page. No directory listing, no error page that leaks a path.
 
-Every response, including the 404 and the 500, carries the same security headers: a content security policy that allows exactly one inline script (the landing page's, allowed by a hash of it), inline CSS, and guild icons from `cdn.discordapp.com`; `X-Frame-Options: DENY` with `frame-ancestors 'none'`; `Referrer-Policy: no-referrer`; `X-Content-Type-Options: nosniff`; `COOP: same-origin`; and a `Permissions-Policy` that denies camera, microphone, geolocation, and FLoC. HSTS is left to the proxy that terminates TLS (`docs/privacy.md` says why). The landing page with no `?guild=` runs no inline script at all.
+Every response, including the 404 and the 500, carries the same security headers: a content security policy that allows exactly one inline script (the landing page's, allowed by a hash of it), inline CSS, the two fonts from this origin (`font-src 'self'`), and guild icons from `cdn.discordapp.com`; `X-Frame-Options: DENY` with `frame-ancestors 'none'`; `Referrer-Policy: no-referrer`; `X-Content-Type-Options: nosniff`; `COOP: same-origin`; and a `Permissions-Policy` that denies camera, microphone, geolocation, and FLoC. HSTS is left to the proxy that terminates TLS (`docs/privacy.md` says why). The landing page with no `?guild=` runs no inline script at all.
 
 ### 13.2 The panel
 
@@ -1023,10 +1027,10 @@ Standard authorization code, no PKCE (public client is the browser, confidential
 7. If `email` was granted, `email` and `verified` are on the `/users/@me` response.
 8. If `connections` was granted, `GET /users/@me/connections`.
 9. If `guilds` was granted, `GET /users/@me/guilds`.
-10. `relationships.read` `[v]`: Discord documents this scope as "part of our Social SDK — submit for access", not a plain OAuth scope, and exposes no public REST route for reading the list. So there is nothing to call with a normal OAuth token. The capture path stays disabled with a "requires Social SDK access" state, the scope is requested and acknowledged in the consent text, and `relationships_json` stays nullable (`23`).
+10. `relationships.read` `[v]`: Discord documents this scope as "part of our Social SDK — submit for access", not a plain OAuth scope, and exposes no public REST route for reading the list. So there is nothing to call with a normal OAuth token. The capture path stays disabled with a "requires Social SDK access" state, the scope is requested and acknowledged in the wizard (`7.2`), and `relationships_json` stays nullable (`23`).
 11. Capture IP and fingerprint (`14`).
 12. Upsert the record. Write a `verify_record_events` row with `kind: oauth`.
-13. Show the result page: success, the guild name, what was captured, the revocation link, and the disclosure link.
+13. Show the result page: succeeded or did not finish, and the guild name. the site does not disclose what is captured (operator decision); the fixed field list stays here in `14.2`.
 14. Fire the log-channel entry.
 
 Any step failing gives the user a specific, non-technical message ("we could not complete verification, the link may have expired, try clicking Verify again") and logs a `DiscordApiError` with the parsed body for the operator.
@@ -1035,7 +1039,7 @@ Any step failing gives the user a specific, non-technical message ("we could not
 
 Access and refresh tokens are stored **encrypted** with AES-256-GCM using `ENCRYPTION_KEY`, with the IV stored alongside. `IP_STORAGE=plaintext` is a separate choice from token encryption; tokens are never stored in the clear, because a leaked refresh token is persistent account access and that is categorically worse than a leaked IP.
 
-`token_status` tracks: `valid`, `unauthorized` (Discord returned `invalid_grant` on refresh), `revoked` (user hit `/revoke` or the record's token was cleared by an admin), `missing`.
+`token_status` tracks: `valid`, `unauthorized` (Discord returned `invalid_grant` on refresh), `revoked` (the grant was taken back on Discord's side or `/verify revoke` cleared the token), `missing`.
 
 ### 13.5 Refresh
 
@@ -1125,7 +1129,7 @@ The reference `[r]` posts a base64 JSON `x-track` header with `os`, `browser`, `
 | `referrer`, `referring_domain` | `document.referrer` | |
 | `captured_at` | client clock | stored alongside the server clock so a skew is visible |
 
-Nothing here is a canvas, WebGL, or font probe. Those are what a fingerprinting library does, they are the part that makes a collection legally and ethically indefensible, and they add nothing the bot needs. `[+]` the user asked for "fingerprinting items"; this is the defensible subset and the doc says why the rest is excluded. The list is fixed: a new field means an edit to this table, to the parser's typed reader, and to the `/legal` page, or it does not exist (`src/web/capture/fingerprint.ts`).
+Nothing here is a canvas, WebGL, or font probe. Those are what a fingerprinting library does, they are the part that makes a collection legally and ethically indefensible, and they add nothing the bot needs. `[+]` the user asked for "fingerprinting items"; this is the defensible subset and the doc says why the rest is excluded. The list is fixed and documented here and in `docs/privacy.md`; it is not shown on the website (operator decision). A new field means an edit to this table, to the parser's typed reader, and to `docs/privacy.md`, or it does not exist (`src/web/capture/fingerprint.ts`).
 
 The payload travels as a base64 JSON header on the `/callback` request, so it is captured even if the page's JS fails before an XHR would have fired. The callback also accepts it as a query parameter for the no-JS path, with a length cap.
 
@@ -1142,7 +1146,7 @@ Two local data files, no API keys, no per-request cost, no third party seeing th
 | Country, city, region, ASN | db-ip lite (Country and City/ASN editions) | MMDB | monthly; the file name carries `YYYY-MM` `[v]` |
 | ASN to org name, ASN type (hosting, ISP, business, education, government) | ipverse `as-metadata` | CSV/JSON, CC0-1.0 `[v]` | weekly |
 
-Reading MMDB needs a reader. Use `maxmind` (the `node-maxmind` package): pure JS, MIT, sync and async readers, handles both the country and city editions. `mmdb-lib` is the lower-level alternative but its API is thinner. The reader licence is MIT; the *data* is the licensed part, and db-ip lite is CC-BY, so the attribution goes in `docs/self-hosting.md` and on `/legal`, with the copyright line reproduced verbatim on the page. The reader is lazy-loaded on first verify so a deploy without the `.mmdb` files still boots.
+Reading MMDB needs a reader. Use `maxmind` (the `node-maxmind` package): pure JS, MIT, sync and async readers, handles both the country and city editions. `mmdb-lib` is the lower-level alternative but its API is thinner. The reader licence is MIT; the *data* is the licensed part, and db-ip lite is CC-BY, so the attribution goes in `docs/self-hosting.md` and `docs/privacy.md`, with the copyright line reproduced verbatim in the docs. The reader is lazy-loaded on first verify so a deploy without the `.mmdb` files still boots.
 
 `services/intel/classify.ts` produces a verdict from those two sources:
 
@@ -1399,17 +1403,17 @@ Who might attack this, and what stops them:
 - Nothing is captured that a scope did not grant and an owner did not select.
 - `email` is off unless the owner selects it.
 - `relationships.read` is off unless the owner acknowledges the Social SDK terms (`7.2`).
-- Fingerprint fields are a fixed, documented list (`14.2`), not an extensible grab bag, and the list is shown to the user on the verify page before they consent.
-- Revocation is real: `/revoke` clears the tokens, records the event, and offers full deletion.
+- Fingerprint fields are a fixed, documented list (`14.2`), not an extensible grab bag. The list is documented in this plan and in `docs/privacy.md`; it is not shown on the website (operator decision).
+- Revocation is real: `/verify revoke` clears the tokens and records the event, and `/verify delete` is the full-deletion path.
 - Retention applies to records too, not only backups. A guild that sets `keep_days: 90` has records older than 90 days deleted by the same sweep, with the count reported.
 
-### 19.3 Disclosure
+### 19.3 What the verify panel says
 
-The verify page, before the OAuth button, shows a plain list:
+The landing page is one short line and the verify button. The verify panel's copy line is fixed:
 
-> This server uses Snapback to verify you. When you continue it will ask Discord for your username, avatar, email address, the servers you are in, and your linked accounts. This server will also record the IP address your browser connects from, your browser and operating system, and your timezone, and use them to check for VPNs and alternate accounts. It will keep this until you revoke access at /revoke, or until the server's retention period ends. Pressing Continue asks Discord for permission; nothing is captured before you approve.
+> pressing the button opens discord's own consent screen, which lists every permission this server asks for.
 
-Exact scopes are listed from the panel's configuration, so the text cannot drift from what is actually requested. That is the whole point: the disclosure is generated from `verify_panels.scopes_json`, not typed by hand into a template.
+The site does not describe the capture and has no disclosure or revoke page (operator decision, `13.1`). Discord's consent screen names the permissions the panel actually requests, and the panel's scope list comes from `verify_panels.scopes_json`, so what discord shows is already tied to the configuration. `docs/privacy.md` is the honest record of what a verification stores.
 
 ### 19.4 What we do not build
 
@@ -1455,7 +1459,7 @@ Each milestone ends with something runnable and a verify check.
 | 4 | Messages | message capture with pagination, filtering, attachment download, both ceilings | a 1000-message channel backs up in under a minute and the counts match |
 | 5 | Restore | plan/dry-run, roles, channels, overwrites, members, bans, assets, per-step reports | the round-trip test passes with only the known-lossy differences |
 | 6 | Message restore | webhook replay, checkpoints, resume, orphan sweep, report | 1000 messages land in the right order and a kill mid-job resumes without a full duplicate |
-| 7 | Web + OAuth | server, routes, `/callback`, IP capture, fingerprint, token encryption, disclosure page, `/revoke` | a real account verifies, the record shows the right fields, `/revoke` clears the tokens and keeps the record |
+| 7 | Web + OAuth | server, routes, `/callback`, IP capture, fingerprint, token encryption | a real account verifies, the record shows the right fields, `/verify revoke` clears the tokens and keeps the record |
 | 8 | Records UI | browser, detail page, `/verify refresh` with live edit and coalescing, `/verify delete`, export | refresh over 200 records reports the revoked ones and edits the message without tripping a 429 |
 | 9 | Intel + pull | db-ip and as-metadata loading, classification, `/pull` with counters and cooldowns | a pull of 20 accounts respects the daily cap and trips a cooldown at the boundary |
 | 10 | Automation | scheduler, auto-backup, auto-restore, retention, exports, full dump | an auto-backup fires on schedule; pruning never deletes the last backup |

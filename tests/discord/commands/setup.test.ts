@@ -35,7 +35,6 @@ const STEP_SUBCOMMANDS = [
   "backup",
   "restore",
   "verify",
-  "privacy",
 ];
 
 // ---- fixtures (the shape tests/setup/handlers.test.ts uses) ----------------

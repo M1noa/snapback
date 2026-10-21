@@ -44,15 +44,15 @@ You are responsible for how you handle this data under the Social SDK terms. Do 
 - **Network:** the first and last IP, stored as a hash, ciphertext, or plaintext per your `IP_STORAGE` mode, plus the IP history. From the local intel files: country, city, region, ISP, ASN and its org, the IP type, and the VPN, proxy, and Tor flags. These are shown as a classification with the ASN and org as the evidence, not as a verdict.
 - **Presence:** the `guilds` scope list, filterable to the servers where the user is not in yours.
 - **Connections:** linked accounts with their type and verified flag.
-- **Fingerprint:** OS, browser, version, locale, timezone, screen, referrer, user agent, and the audio-device count. This is a fixed, documented list, not an extensible grab bag, and it is shown to the user before they consent.
+- **Fingerprint:** OS, browser, version, locale, timezone, screen, referrer, user agent, and the audio-device count. This is a fixed, documented list, not an extensible grab bag, and it is not shown on the website (operator decision). The list lives in `docs/privacy.md`.
 - **Events:** a timeline of OAuth, refresh, revocation, and note events.
 
 Every field that is empty shows "not captured" rather than being absent, so you can tell "not captured" from "captured as empty".
 
-## The disclosure paragraph
+## What the verify panel says
 
-The verify page shows this before the OAuth button, generated from the panel's actual scope list rather than typed by hand, so the text cannot drift from what is requested. Paste the equivalent into your own privacy page:
+The panel's copy line is fixed:
 
-> This server uses Snapback to verify you. When you continue it will ask Discord for your username, avatar, email address, the servers you are in, and your linked accounts. This server will also record the IP address your browser connects from, your browser and operating system, and your timezone, and use them to check for VPNs and alternate accounts. It will keep this until you revoke access at /revoke, or until the server's retention period ends. Pressing Continue asks Discord for permission; nothing is captured before you approve.
+> pressing the button opens discord's own consent screen, which lists every permission this server asks for.
 
-On your own site, list the exact scopes your panel requests, not this generic set. `identify` and `guilds` appear above only because the panel is configured with them; a panel without `connections` should not claim linked accounts are captured.
+The site itself says nothing else about the capture, and it has no disclosure or revoke page (operator decision). Discord's consent screen names the permissions your panel asks for, and `docs/privacy.md` is the record of what the verification stores. If you keep a privacy page of your own, list the exact scopes your panel requests: a panel without `connections` should not claim linked accounts are captured.

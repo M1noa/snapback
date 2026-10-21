@@ -19,7 +19,6 @@ import { section, textDisplay, thumbnail } from "../../discord/components/fields
 import { actionRow, button, customID } from "../../discord/components/row.ts";
 import type { Logger } from "../../lib/log.ts";
 import { boundedText, hexToInt, snowflake } from "../../lib/validate.ts";
-import { lookupScope } from "../../setup/scopes.ts";
 
 // every discord call gets a deadline. nothing here awaits unbounded.
 const PANEL_TIMEOUT_MS = 10_000;
@@ -89,14 +88,10 @@ export function verifyOpenId(guildId: string, panelId: string): string {
   });
 }
 
-/** what the panel asks discord for, in the words of the scope catalogue. the
- *  panel and the wizard checkbox read the same table, so they cannot drift. */
-export function disclosureLine(scopes: readonly string[]): string {
-  const asked = scopes
-    .map((id) => lookupScope(id)?.consequence)
-    .filter((line): line is string => line !== undefined);
-  const what = asked.length === 0 ? "your discord account id" : asked.join("; ");
-  return `this asks discord for: ${what}. the server's owner can read what this collects, and you can revoke it at any time.`;
+/** the line the panel shows under its copy. it names the consent screen and
+ *  nothing else: what is asked for is discord's screen to say, not the panel's. */
+export function disclosureLine(): string {
+  return "pressing the button opens discord's own consent screen, which lists every permission this server asks for.";
 }
 
 // the panel button is interactive, so the link and premium styles do not apply.
@@ -132,7 +127,7 @@ export function panelComponents(panel: VerifyPanelRow): ContainerComponent {
       children.push(body);
     }
   }
-  children.push(textDisplay(disclosureLine(panel.scopes_json)));
+  children.push(textDisplay(disclosureLine()));
   children.push(
     actionRow([
       button({

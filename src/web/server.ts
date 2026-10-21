@@ -1,4 +1,4 @@
-// the web server (D4PLAN 13.1). one process, bun.serve, five routes.
+// the web server (D4PLAN 13.1). one process, bun.serve, three routes.
 //
 // the server holds no state of its own: the state and the tokens live in the
 // stores the services own, so a second worker behaves the same.
@@ -15,13 +15,12 @@ export interface ServerDeps {
   readonly log: Logger;
   /** the ip capture's configuration: the mode, the pepper and the key. */
   readonly ip: IpCaptureOptions;
-  /** the five routes, built by the caller. */
+  /** the three routes, built by the caller. */
   readonly routes: {
     readonly home: Route;
     readonly callback: Route;
-    readonly revoke: Route;
     readonly health: Route;
-    readonly legal: Route;
+    readonly assets: Route;
   };
   readonly port: number;
   readonly hostname?: string;
@@ -49,9 +48,8 @@ export function createServer(deps: ServerDeps): WebServer {
   const router = createRouter({
     home: deps.routes.home,
     callback: deps.routes.callback,
-    revoke: deps.routes.revoke,
     health: deps.routes.health,
-    legal: deps.routes.legal,
+    assets: deps.routes.assets,
   });
 
   const server = Bun.serve({
@@ -84,7 +82,7 @@ export function createServer(deps: ServerDeps): WebServer {
           headers: { "content-type": "text/html; charset=utf-8" },
           body: page({
             title: "something went wrong",
-            body: `<p class="eyebrow">error</p><h1>something went wrong</h1><p class="lede">try again in a moment. if it keeps happening, tell the person who sent you here.</p>`,
+            body: `<div class="single"><h1>Something went wrong</h1><p class="lede">Try again in a moment. If it keeps happening, tell the person who sent you here.</p></div>`,
           }),
         };
       }

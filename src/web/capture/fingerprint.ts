@@ -1,10 +1,11 @@
 // the browser fingerprint the web page posts (D4PLAN 14.2). one json blob, one
 // column, so a new field is a new key and not a migration.
 //
-// the fixed list is documented in D4PLAN 14.2 and on the /legal page: nothing
+// the fixed list is documented in D4PLAN 14.2 and in docs/privacy.md: nothing
 // outside it is asked for, and no canvas, webgl or font probe exists in this
 // build (the plan bans them, and a count of media devices is the honest limit
-// of what a page may look at without permission).
+// of what a page may look at without permission). the site itself does not
+// display the list; the docs are the record.
 //
 // the payload is whatever the browser sent, so nothing in it is trusted. every
 // field is checked for its own type, a field of the wrong type is dropped
@@ -41,8 +42,8 @@ export interface Fingerprint {
  *  fits well inside it. */
 const MAX_STRING = 256;
 
-/** the fixed list in plain words, in the order the interface reads. the /legal
- *  page shows exactly this, so the page, the plan and the code cannot drift. */
+/** the fixed list in plain words, in the order the interface reads. docs and the
+ *  plan repeat exactly this, so the code and the writing cannot drift. */
 export const FINGERPRINT_FIELD_LABELS = [
   "user agent",
   "platform",

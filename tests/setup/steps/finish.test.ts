@@ -128,7 +128,7 @@ const COMMANDS_DOC = [
 describe("finishSummary", () => {
   test("lists what a fresh install still owes", () => {
     const lines = finishSummary(settings());
-    expect(lines.length).toBe(9);
+    expect(lines.length).toBe(8);
     expect(lines[0]).toContain("welcome");
   });
 

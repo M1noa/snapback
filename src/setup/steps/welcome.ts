@@ -43,7 +43,7 @@ export const welcomeStep: StepModule = {
             "verification is off until you build a panel, so this only applies if you turn it on. when a user verifies, they share:",
             "- their discord id and username",
             "- their email address, only if the `email` scope is on",
-            "- their ip address, stored the way the privacy step lists (hash, encrypted, or plaintext)",
+            "- their ip address, stored one of three ways (hash, encrypted, or plaintext)",
             "- their browser user agent",
             "nothing else is needed, and verifying grants nothing extra inside the server.",
           ].join("\n"),

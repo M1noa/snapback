@@ -43,10 +43,10 @@ function everythingHandled(base: GuildSettings): GuildSettings {
 }
 
 describe("the step table", () => {
-  test("twelve steps, in order, with unique keys and indices", () => {
-    expect(WIZARD_STEPS.length).toBe(12);
-    expect(WIZARD_STEP_KEYS.length).toBe(12);
-    expect(new Set(WIZARD_STEP_KEYS).size).toBe(12);
+  test("eleven steps, in order, with unique keys and indices", () => {
+    expect(WIZARD_STEPS.length).toBe(11);
+    expect(WIZARD_STEP_KEYS.length).toBe(11);
+    expect(new Set(WIZARD_STEP_KEYS).size).toBe(11);
     for (const [index, step] of WIZARD_STEPS.entries()) {
       expect(step.index).toBe(index);
     }
@@ -59,9 +59,9 @@ describe("the step table", () => {
     }
   });
 
-  test("the four required steps are the ones D4PLAN 10.1 marks required", () => {
+  test("the three required steps are the ones D4PLAN 10.1 marks required", () => {
     const required = WIZARD_STEPS.filter((step) => step.required).map((step) => step.key);
-    expect(required).toEqual(["welcome", "app", "privacy", "finish"]);
+    expect(required).toEqual(["welcome", "app", "finish"]);
   });
 
   test("only the verify steps are verify-only", () => {
@@ -82,7 +82,7 @@ describe("pending steps", () => {
     expect(pending.includes("web")).toBe(false);
     expect(pending.includes("verify")).toBe(false);
     expect(pending.includes("scopes")).toBe(false);
-    expect(pending.length).toBe(9);
+    expect(pending.length).toBe(8);
   });
 
   test("turning verification on adds the three it needs", () => {
@@ -90,7 +90,7 @@ describe("pending steps", () => {
     expect(pending).toContain("web");
     expect(pending).toContain("verify");
     expect(pending).toContain("scopes");
-    expect(pending.length).toBe(12);
+    expect(pending.length).toBe(11);
   });
 
   test("the panel is what turns verification on", () => {
@@ -167,7 +167,7 @@ describe("markStep", () => {
   test("it is pure: the input state is untouched", () => {
     const before = settings().wizard;
     const snapshot = JSON.stringify(before);
-    markStep(before, "privacy", "done", { now: NOW });
+    markStep(before, "scopes", "done", { now: NOW });
     expect(JSON.stringify(before)).toBe(snapshot);
   });
 });
@@ -193,7 +193,7 @@ describe("completeWizard", () => {
 describe("step order helpers", () => {
   test("next and previous clamp at the ends instead of wrapping", () => {
     expect(nextStep("welcome").key).toBe("app");
-    expect(previousStep("finish").key).toBe("privacy");
+    expect(previousStep("finish").key).toBe("scopes");
     expect(nextStep("finish").key).toBe("finish");
     expect(previousStep("welcome").key).toBe("welcome");
   });

@@ -303,7 +303,6 @@ function entries(): Entry[] {
   const filter = guideFilterId(GUILD, GUIDE_DOC); // the guide's own builder, not ours
 
   const logToggle = idOf(SETUP_OBJECT.log, SETUP_ACTION.toggle, "channel");
-  const privacyModal = idOf(SETUP_OBJECT.modal, "privacy");
   const channel = panelChannelId(GUILD);
 
   return [
@@ -317,12 +316,6 @@ function entries(): Entry[] {
       label: `step ${key}`,
       id: idOf(SETUP_OBJECT.step, key),
     })),
-    {
-      label: "privacy modal",
-      id: privacyModal,
-      source: "modal",
-      values: { [privacyModal]: "a disclosure we wrote" },
-    },
     { label: "log channel", id: logToggle, values: { [logToggle]: CHANNEL } },
     { label: "log test fire", id: idOf(SETUP_OBJECT.log, SETUP_ACTION.testfire) },
     { label: "app test", id: idOf(SETUP_OBJECT.app, SETUP_ACTION.test) },
@@ -403,29 +396,26 @@ describe("the surface's own pages", () => {
 describe("one handler per step, two shapes of interaction", () => {
   test("a control with no cursor and no values opens the step's modal", async () => {
     const h = harness();
-    const surface = await press(h, idOf(SETUP_OBJECT.step, "privacy"));
+    const surface = await press(h, idOf(SETUP_OBJECT.step, "branding"));
 
     expect(surface.modals).toHaveLength(1);
-    expect(surface.modals[0]?.customID).toBe(idOf(SETUP_OBJECT.modal, "privacy"));
+    expect(surface.modals[0]?.customID).toBe(idOf(SETUP_OBJECT.modal, "branding"));
     expect(h.store.saves).toHaveLength(0);
   });
 
   test("the modal it opens then saves, under the same customID", async () => {
     const h = harness();
-    const modal = idOf(SETUP_OBJECT.modal, "privacy");
-    const surface = await press(
-      h,
-      modal,
-      new FakeSurface({ [modal]: "a disclosure we wrote" }, "modal"),
-    );
+    const name = idOf(SETUP_OBJECT.step, "branding", "name");
+    const modal = idOf(SETUP_OBJECT.modal, "branding");
+    const surface = await press(h, modal, new FakeSurface({ [name]: "a name we wrote" }, "modal"));
 
     expect(h.store.saves).toHaveLength(1);
-    expect(h.store.saves[0]?.action).toBe("setup.privacy");
+    expect(h.store.saves[0]?.action).toBe("setup.branding");
     expect(h.store.saves[0]?.actorUserId).toBe(OPENER);
-    expect(h.store.saves[0]?.patch.privacy_disclosure_text).toBe("a disclosure we wrote");
-    expect(h.store.saves[0]?.patch.wizard?.steps.privacy?.done).toBe(true);
+    expect(h.store.saves[0]?.patch.branding?.display_name).toBe("a name we wrote");
+    expect(h.store.saves[0]?.patch.wizard?.steps.branding?.done).toBe(true);
     // and the answer is the step again, now done
-    expect(text(surface.message)).toContain("privacy");
+    expect(text(surface.message)).toContain("branding");
   });
 
   test("a control carrying a cursor submits without opening anything", async () => {

@@ -2,7 +2,7 @@
 
 What a verification captures, why, how it is stored, how long it is kept, and how to take it back.
 
-This is a disclosure. The text in the last section is the one the bot shows, and it is generated from the panel's scope list, so it cannot drift from what is actually requested.
+The member-facing website does not display a disclosure (operator decision). This document is the honest record of what is collected, and it does not follow the site's silence: if it is captured, it is listed here.
 
 ## What a verification captures
 
@@ -27,7 +27,7 @@ The bot's own settings, the panel, and the record are separate things. `guilds.s
 
 The landing page runs one inline script. It reads the browser's own properties, writes them into a cookie, and makes no request to anyone. The callback reads the cookie back. A page with no server attached runs no script at all.
 
-The fields are the fixed list in `D4PLAN.md` 14.2: the user agent, the platform, the screen size and how much of it the browser can use, the viewport size, the colour depth and the device pixel ratio, the language and the languages, the timezone and its offset, the device memory, the thread count, the touch state and the touch points, whether cookies and do-not-track are on, the reduced-motion preference, the colour scheme, the connection type, the number of media devices the browser already permits the page to count, the page that sent you here, and the moment it was read. The full list, in the same words, is on `/legal`.
+The fields are the fixed list in `D4PLAN.md` 14.2: the user agent, the platform, the screen size and how much of it the browser can use, the viewport size, the colour depth and the device pixel ratio, the language and the languages, the timezone and its offset, the device memory, the thread count, the touch state and the touch points, whether cookies and do-not-track are on, the reduced-motion preference, the colour scheme, the connection type, the number of media devices the browser already permits the page to count, the page that sent you here, and the moment it was read. This document and that table are the record of the list; the site does not show it.
 
 There is no canvas probe, no WebGL probe, and no font probe. The plan bans all three: they are what a fingerprinting library does, they are the part that makes a collection indefensible, and they add nothing the bot needs.
 
@@ -37,7 +37,7 @@ The fingerprint goes into the verification's entry on the record's timeline rath
 
 ## The site's own defences
 
-Every page the server answers, including the 404 and the 500, carries the same security headers (`src/web/server.ts`): a content security policy that allows exactly one inline script (the landing page's, allowed by a hash of it in `src/web/capture/fingerprint-script.ts`), inline CSS, and guild icons from `cdn.discordapp.com`; `X-Frame-Options: DENY` with `frame-ancestors 'none'` so no other site can frame a verification page; `Referrer-Policy: no-referrer`; `X-Content-Type-Options: nosniff`; `COOP: same-origin`; and a `Permissions-Policy` that denies camera, microphone, geolocation, and FLoC outright. `Strict-Transport-Security` is deliberately absent: the server may sit behind plain HTTP while an operator sets TLS up, and a cached HSTS header on such a deployment is unrecoverable from the client side. Set it at the proxy that terminates TLS.
+Every page the server answers, including the 404 and the 500, carries the same security headers (`src/web/server.ts`): a content security policy that allows exactly one inline script (the landing page's, allowed by a hash of it in `src/web/capture/fingerprint-script.ts`), inline CSS, the fonts served from this origin, and guild icons from `cdn.discordapp.com`; `X-Frame-Options: DENY` with `frame-ancestors 'none'` so no other site can frame a verification page; `Referrer-Policy: no-referrer`; `X-Content-Type-Options: nosniff`; `COOP: same-origin`; and a `Permissions-Policy` that denies camera, microphone, geolocation, and FLoC outright. `Strict-Transport-Security` is deliberately absent: the server may sit behind plain HTTP while an operator sets TLS up, and a cached HSTS header on such a deployment is unrecoverable from the client side. Set it at the proxy that terminates TLS.
 
 ## The address you connected from
 
@@ -115,21 +115,20 @@ There are two ways to take a verification back.
 
 **Discord.** Removing the app from the server, or from the account's connections page, revokes the grant on Discord's side. The bot's next token check finds the grant gone and clears the stored token.
 
-**The bot.** The `revoke` web route takes the user id and the guild id, clears the stored token, and, when the link carries `delete=1`, asks for the record to be removed as well. The token goes either way; the record stays unless the link asked for it to go.
-
-In this build the route's record removal is a stub, so the row stays after a revoke. An operator with the database removes it directly, and the record's own `revoked_at` column is the marker that the grant was taken back.
+**The bot.** The operator's `/verify revoke` command takes the user id and the guild id and clears the stored token. Only `/verify delete` (instance owner only) erases captured data.
 
 The token status and its expiry are on the record, and the record page never shows the token itself. No export carries it either.
 
-## The disclosure paragraph
+## The site's surfaces
 
-Before the OAuth button, the verify page shows this, and the `legal` page shows the same words:
+The website serves three routes and its own font files (`D4PLAN.md` 13.1):
 
-> verification is optional. what is captured is the account id, the username, the email address if you allowed it, the servers you are in if you allowed it, and the address you connected from. it is used to keep a server's member list honest. you can revoke it at any time.
+- `/`, the landing page: the guild's name and a verify button, nothing else
+- `/callback`, the OAuth result: "verified" or "did not finish"
+- `/health`, the operator's probe
+- `/assets/fonts/`, the two typefaces the pages are set in. Read from disk on this origin, no third-party font CDN, and the request carries no cookie and no query.
 
-The wizard's privacy step carries a longer default, which an operator can replace with their own text in `guilds.settings_json` under `privacy_disclosure_text`. The text is shown above the verify panel and on the `legal` page, and it is the operator's to write.
-
-A panel without the `email` scope should not claim an email address is captured. List the exact scopes the panel requests.
+None of them displays what is captured. There is no revoke page and no disclosure page; both were removed by operator decision. The capture (the IP and the fingerprint, and the rest of the table above) is unchanged and happens on these routes in the background.
 
 ## The current state of the build
 

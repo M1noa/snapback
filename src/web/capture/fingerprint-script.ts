@@ -69,4 +69,4 @@ const SCRIPT_HASH: string = new Bun.CryptoHasher("sha256").update(RAW_SCRIPT).di
 /** the policy every page gets. the only script allowed in is ours, by hash,
  *  the only image host is discord's cdn for guild icons, and the forms field
  *  is none because no page has one. */
-export const WEB_CSP = `default-src 'none'; img-src https://cdn.discordapp.com; style-src 'unsafe-inline'; script-src 'sha256-${SCRIPT_HASH}'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'`;
+export const WEB_CSP = `default-src 'none'; img-src https://cdn.discordapp.com; font-src 'self'; style-src 'unsafe-inline'; script-src 'sha256-${SCRIPT_HASH}'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'`;
