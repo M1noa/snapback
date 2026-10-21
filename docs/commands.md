@@ -19,7 +19,7 @@ The wizard. Stateful and resumable; the subcommands jump straight to a step.
 | `/setup open` | opens the wizard at the first incomplete step |
 | `/setup status` | one page: every step with a green, amber, or red dot, and for amber or red a button that jumps to the fix |
 | `/setup app` | token, owner id, gateway, and the privileged intent |
-| `/setup web` | public base url, port, and the live ip probe |
+| `/setup web` | public base url, port, the live ip probe, and the page name |
 | `/setup branding` | bot avatar, banner, and display name |
 | `/setup admins` | who else may change settings |
 | `/setup logs` | log channel and event families |

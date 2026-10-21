@@ -90,6 +90,7 @@ interface Node {
   customID?: string;
   label?: string;
   content?: string;
+  value?: string;
   components?: Node[];
   accessory?: Node;
   component?: Node;
@@ -112,10 +113,23 @@ function text(tree: unknown): string {
   return out.join("\n");
 }
 
+// the one labeled text input of the step's modal, found by its custom id.
+function labeledInput(modal: { components: unknown[] }): Node {
+  let input: Node | undefined;
+  for (const child of modal.components) {
+    walk(child, (n) => {
+      if (typeof n.customID === "string" && input === undefined) input = n;
+    });
+  }
+  if (input === undefined) throw new Error("the modal carries no labeled input");
+  return input;
+}
+
 describe("webStep", () => {
-  test("is the web key with nothing to submit", () => {
+  test("is the web key, and the page name is its one edit", () => {
     expect(webStep.key).toBe("web");
-    expect(webStep.apply).toBeUndefined();
+    expect(webStep.modal).toBeDefined();
+    expect(webStep.apply).toBeDefined();
   });
 
   test("renders a components-v2 container carrying the status word", async () => {
@@ -157,18 +171,73 @@ describe("webStep", () => {
     walk(tree, (n) => {
       if (n.type === ComponentTypes.BUTTON) buttons.push(n);
     });
-    expect(buttons).toHaveLength(1);
-    expect(buttons[0]!.label).toBe("probe");
+    expect(buttons[0]!.label).toBe("edit the page name");
+    const probe = buttons.find((n) => n.label === "probe")!;
     const expected = setupCustomId({
       guildId: GUILD,
       object: SETUP_OBJECT.nav,
       action: SETUP_ACTION.probe,
     });
-    expect(buttons[0]!.customID).toBe(expected);
-    const parsed = parseCustomId(buttons[0]!.customID!);
+    const edit = buttons.find((n) => n.label === "edit the page name")!;
+    expect(probe.customID).toBe(expected);
+    const parsed = parseCustomId(probe.customID!);
     expect(parsed.surface).toBe("setup");
     expect(parsed.action).toBe(SETUP_ACTION.probe);
     expect(parsed.guild).toBe(GUILD);
+    // the edit button carries the step's own action, no cursor: stepAction opens
+    // the modal for a control with neither values nor cursor.
+    expect(edit.customID).toBe(
+      setupCustomId({ guildId: GUILD, object: SETUP_OBJECT.step, action: "web" }),
+    );
+  });
+
+  test("says what the pages will name the server", async () => {
+    const unset = (await webStep.render(stepCtx(fakeDeps()))) as ContainerComponent;
+    expect(text(unset).toLowerCase()).toContain("not stored, the server's own name");
+
+    const ctx = stepCtx(fakeDeps());
+    const stored = { ...DEFAULT_GUILD_SETTINGS, web_display_name: "the old one" };
+    const set = (await webStep.render({ ...ctx, settings: stored })) as ContainerComponent;
+    const body = text(set);
+    expect(body).toContain("`the old one`");
+    expect(body).not.toContain("not stored");
+  });
+
+  test("the modal has one optional text field with the step's own id shape", () => {
+    const built = webStep.modal!(stepCtx(fakeDeps()))!;
+    expect(built.title).toBe("the page name");
+    expect(built.components).toHaveLength(1);
+    const input = labeledInput(built);
+    expect(input.customID).toBe(
+      setupCustomId({ guildId: GUILD, object: SETUP_OBJECT.step, action: "web", cursor: "name" }),
+    );
+    expect(input.label ?? null).toBeDefined();
+  });
+
+  test("the modal prefills the stored name and blank stores none", () => {
+    const ctx = stepCtx(fakeDeps());
+    const stored = { ...ctx, settings: { ...DEFAULT_GUILD_SETTINGS, web_display_name: "kept" } };
+
+    expect(labeledInput(webStep.modal!(stored)!).value).toBe("kept");
+    expect(labeledInput(webStep.modal!(ctx)!).value).toBeUndefined();
+    // the field is spoken for: a label, and the fix a blank page cannot give.
+    expect(JSON.stringify(webStep.modal!(stored))).toContain("display name");
+  });
+
+  test("apply stores what the field carried, rejecting a wrong shape", async () => {
+    const ctx = stepCtx(fakeDeps());
+    const name = setupCustomId({
+      guildId: GUILD,
+      object: SETUP_OBJECT.step,
+      action: "web",
+      cursor: "name",
+    });
+
+    const set = await webStep.apply!(ctx, { [name]: "  nightly  " });
+    expect(set.web_display_name).toBe("nightly");
+
+    expect((await webStep.apply!(ctx, {})).web_display_name).toBeNull();
+    expect((await webStep.apply!(ctx, { [name]: "" })).web_display_name).toBeNull();
   });
 
   test("a socket that is not accepting is warning and says what to do", async () => {

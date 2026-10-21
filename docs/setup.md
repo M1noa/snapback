@@ -136,7 +136,7 @@ The steps, in order:
 |---|---|---|---|
 | 0 | welcome and scope disclosure | yes | says what the bot will do and what verification captures |
 | 1 | app check | yes | blocks on the token, owner id, gateway, and `GUILD_MEMBERS` |
-| 2 | web and tunnel | only if verification is on | `PUBLIC_BASE_URL`, port, tunnel checkbox, live loopback probe |
+| 2 | web and tunnel | only if verification is on | `PUBLIC_BASE_URL`, port, tunnel checkbox, live loopback probe, and the name the pages show |
 | 3 | branding | no | bot avatar and banner upload, GIF accepted, and display name |
 | 4 | admins | no | offers the invoking user first, per-flag toggles |
 | 5 | logging | no | log channel and event families, plus a test-fire so you see one entry |
@@ -153,7 +153,7 @@ Every step has a subcommand that jumps straight to it:
 | `/setup` | opens at the first incomplete step |
 | `/setup status` | every subsystem with a green, amber, or red dot, and a button to the fix |
 | `/setup app` | step 1, the Developer Panel checklist and the self-test |
-| `/setup web` | step 2, `PUBLIC_BASE_URL`, port, tunnel checkbox, live IP probe |
+| `/setup web` | step 2, `PUBLIC_BASE_URL`, port, tunnel checkbox, live IP probe, the page name |
 | `/setup admins` | step 4 |
 | `/setup backup` | step 6 |
 | `/setup restore` | step 7 |

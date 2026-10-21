@@ -44,7 +44,7 @@ export const WIZARD_STEPS: readonly WizardStep[] = Object.freeze([
     title: "web and tunnel",
     required: false,
     verifyOnly: true,
-    summary: "public base url, port, and the live ip probe",
+    summary: "public base url, port, the live ip probe, and the page name",
   },
   {
     index: 3,

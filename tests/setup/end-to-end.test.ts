@@ -503,7 +503,7 @@ async function fullPass(h: Harness): Promise<void> {
   await openSetup({ deps: h.deps, guildId: GUILD, userId: OPENER });
   await press(h, navId(SETUP_ACTION.next, "welcome")); // welcome done, renders app
   await press(h, navId(SETUP_ACTION.next, "app")); // app done, renders web
-  await press(h, navId(SETUP_ACTION.next, "web")); // web done, renders branding
+  await press(h, modalId("web"), new FakeSurface({}, "modal")); // page name left at the default
   await press(h, modalId("branding"), new FakeSurface({}, "modal")); // branding left unset
   await press(h, navId(SETUP_ACTION.next, "admins")); // admins done, renders logs
   await press(h, stepId("logs"), new FakeSurface(LOG_VALUES));
@@ -540,6 +540,7 @@ const VALUE_FIELDS = [
   "verify_panel",
   "acknowledged_restricted_scopes",
   "branding",
+  "web_display_name",
 ] as const;
 
 // ---- the checks -----------------------------------------------------------
@@ -688,7 +689,7 @@ describe("the setup wizard, end to end", () => {
           "setup.open",
           "setup.welcome.done",
           "setup.app.done",
-          "setup.web.done",
+          "setup.web",
           "setup.branding",
           "setup.admins.done",
           "setup.logs",
@@ -709,7 +710,9 @@ describe("the setup wizard, end to end", () => {
       expect(changedFields(byAction.get("setup.verify"))).toContain("verify_panel");
       expect(changedFields(byAction.get("setup.scopes"))).toContain("verify_panel");
 
-      // the cursor-only saves moved nothing but the wizard
+      // the cursor-only saves moved nothing but the wizard. the web step now
+      // submits its own modal: the page name was left at the default.
+      expect(changedFields(byAction.get("setup.web"))).toEqual(["wizard"]);
       expect(changedFields(byAction.get("setup.branding"))).toEqual(["wizard"]);
 
       expect(h.net.calls).toEqual([]);
@@ -728,7 +731,7 @@ describe("the setup wizard, end to end", () => {
       await press(h1, modalId("verify"), new FakeSurface(VERIFY_VALUES, "modal"));
       await press(h1, navId(SETUP_ACTION.next, "welcome"));
       await press(h1, navId(SETUP_ACTION.next, "app"));
-      await press(h1, navId(SETUP_ACTION.next, "web"));
+      await press(h1, modalId("web"), new FakeSurface({}, "modal"));
       await press(h1, modalId("branding"), new FakeSurface({}, "modal"));
       await press(h1, navId(SETUP_ACTION.next, "admins")); // current is now "logs"
 

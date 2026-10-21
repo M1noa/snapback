@@ -393,6 +393,9 @@ backup_include: { roles: true, channels: true, messages: true, members: true,
 backup_message_types: [0, 19, 20]
 auto_restore_enabled: false
 restore_clear_before: false
+# the name the verification pages show. null = the server's own name, kept
+# fresh from guildCreate/guildUpdate on the gateway (`5.0` upsert route).
+web_display_name: null
 restore_message_timestamp_suffix: false
 notify_on_join: false
 # retention is not duplicated here: it lives in the `retention_policies` table (`5.1`)
@@ -522,7 +525,7 @@ The wizard. Stateful, resumable, subcommands to jump straight to a step.
 | `/setup` | opens the wizard at the first incomplete step |
 | `/setup status` | one page: every subsystem with a green/amber/red dot, and for amber/red a button that jumps to the fix |
 | `/setup app` | Developer Panel checklist (`7.3`) and `/setup app test` self-test (`7.6`) |
-| `/setup web` | `PUBLIC_BASE_URL`, port, tunnel checkbox, live IP probe (`7.4`) |
+| `/setup web` | `PUBLIC_BASE_URL`, port, tunnel checkbox, live IP probe (`7.4`), and a modal to set the name the pages show (`web_display_name`, blank = the server's own name) |
 | `/setup admins` | add/remove/list admins, per-flag toggles |
 | `/setup backup` | default include set, message counts, auto-backup schedule |
 | `/setup restore` | restore defaults: clear-before, timestamp suffix, default selections |
@@ -700,7 +703,7 @@ A resumable state machine, persisted in `guilds.settings_json` under `wizard`. E
 |---|---|---|---|
 | 0 | Welcome and scope disclosure | yes | says what the bot will do, and what the verification feature captures |
 | 1 | App check (`7.3`, `7.6`) | yes | blocks on token, owner id, gateway, `GUILD_MEMBERS` |
-| 2 | Web and tunnel (`7.4`) | only if verification is enabled | includes the loopback-IP probe |
+| 2 | Web and tunnel (`7.4`) | only if verification is enabled | includes the loopback-IP probe, and a modal to set the name the pages show (`web_display_name`, blank = the server's own name, `6.0`) |
 | 3 | Branding | no | avatar and banner upload, GIF accepted (`10.2`) |
 | 4 | Admins | no | wizard offers the invoking user first |
 | 5 | Logging | no | pick channel, test-fire one entry so the operator sees it work |
@@ -999,7 +1002,7 @@ Three routes, one process, no framework, plus the static files those pages need 
 
 | Route | Method | Purpose |
 |---|---|---|
-| `/` | GET | landing page. If `?guild=<id>` is present, shows that guild's name and a Verify button. Otherwise a neutral page. The page does not describe what is captured (operator decision). |
+| `/` | GET | landing page. If `?guild=<id>` is present, shows that guild's name and a Verify button. Otherwise a neutral page. The name resolves `web_display_name` first, then the server's own name from `guilds` (kept fresh on the gateway); neither stored means no name is shown. The page does not describe what is captured (operator decision). |
 | `/callback` | GET | OAuth redirect target. Exchanges the code, captures the client IP and fingerprint, writes the record, shows a result page. |
 | `/health` | GET | JSON: version, uptime, DB reachable, gateway state, job queue depth. Also the `?probe=1` mode used by the wizard's tunnel check. |
 | `/assets/*` | GET | the three self-hosted woff2 files and the noise tile the stylesheet names. Paths are an allowlist (`src/web/assets.ts`), never a join, and a miss is the same 404 as any other path. Cached `immutable` for a year because the filenames carry no query and the bytes never change. |
