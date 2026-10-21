@@ -1,4 +1,6 @@
 import { describe, expect, test } from "bun:test";
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
 import {
   createDiagnosticsProbes,
   createStatusProbe,
@@ -31,9 +33,13 @@ async function boot(
   env: Record<string, string>,
   args: readonly string[] = [],
 ): Promise<{ code: number; out: string; err: string }> {
+  // cwd off in a temp dir so a developer's real .env beside the checkout is
+  // never loaded by the child: the fixture env alone is what this tests
+  const cwd = mkdtempSync(`${tmpdir()}/snapback-boot-`);
   const child = Bun.spawn({
     cmd: [process.execPath, ENTRY, ...args],
     env,
+    cwd,
     stdout: "pipe",
     stderr: "pipe",
   });
@@ -47,7 +53,9 @@ async function boot(
 const MINIMAL = {
   DISCORD_TOKEN: "test-token",
   DISCORD_OWNER_ID: "100000000000000001",
+  DISCORD_CLIENT_ID: "100000000000000002",
   PUBLIC_BASE_URL: "https://snapback.example",
+  OAUTH_CLIENT_SECRET: "test-secret",
   IP_STORAGE: "hash",
   IP_HASH_PEPPER: "pepper",
 };
@@ -77,6 +85,8 @@ describe("boot", () => {
     expect(err).toContain("cannot start");
     expect(err).toContain("1. DISCORD_TOKEN is not set");
     expect(err).toContain("2. DISCORD_OWNER_ID is not set");
+    expect(err).toContain("3. DISCORD_CLIENT_ID is not set");
+    expect(err).toContain("4. OAUTH_CLIENT_SECRET is not set");
   });
 
   test("reports a warning on stderr without failing", async () => {

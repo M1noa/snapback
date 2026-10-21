@@ -10,7 +10,9 @@ function source(values: Record<string, string | undefined>): EnvSource {
 const MINIMAL = {
   DISCORD_TOKEN: "token",
   DISCORD_OWNER_ID: "100000000000000001",
+  DISCORD_CLIENT_ID: "100000000000000002",
   PUBLIC_BASE_URL: "https://snapback.example",
+  OAUTH_CLIENT_SECRET: "secret",
 };
 
 function ok(values: Record<string, string | undefined>) {
@@ -41,10 +43,12 @@ describe("parseEnv", () => {
   test("names every missing key at once", () => {
     const problems = fail({});
 
-    expect(problems).toHaveLength(3);
+    expect(problems).toHaveLength(5);
     expect(problems.join("\n")).toContain("DISCORD_TOKEN");
     expect(problems.join("\n")).toContain("DISCORD_OWNER_ID");
+    expect(problems.join("\n")).toContain("DISCORD_CLIENT_ID");
     expect(problems.join("\n")).toContain("PUBLIC_BASE_URL");
+    expect(problems.join("\n")).toContain("OAUTH_CLIENT_SECRET");
   });
 
   test("trims a trailing slash off the base url", () => {
@@ -61,6 +65,12 @@ describe("parseEnv", () => {
   test("blank optional keys stay unset", () => {
     const { env } = ok({ ...MINIMAL, DISCORD_DEV_GUILD_ID: "" });
     expect(env.discord.devGuildId).toBe("");
+  });
+
+  test("the client id and secret land in env", () => {
+    const { env } = ok(MINIMAL);
+    expect(env.discord.clientId).toBe("100000000000000002");
+    expect(env.oauth.clientSecret).toBe("secret");
   });
 
   describe("privacy", () => {

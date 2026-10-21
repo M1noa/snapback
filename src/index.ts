@@ -26,6 +26,7 @@ const banner = [
   `  intel     ${env.intel.enabled ? "on" : "off"}`,
   `  pull      ${env.limits.pullDailyLimitPerAccount}/account/day`,
   `  owner     ${env.discord.ownerId}`,
+  `  client    ${env.discord.clientId}`,
 ].join("\n");
 
 process.stdout.write(`${banner}\n`);

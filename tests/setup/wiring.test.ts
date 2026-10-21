@@ -26,10 +26,44 @@ const GUILD_B = "333333333333333333";
 const GUILD_C = "444444444444444444";
 const CHANNEL = "555555555555555555";
 
-// createSetupDeps validates env in-process and throws instead of exiting, so the
-// three required keys are set here. nothing on disk is touched.
+// createSetupDeps validates env in-process and throws instead of exiting. bun
+// auto-loads the developer's real .env into process.env, so every snapback key
+// is cleared first: the test's env is exactly these values, and nothing on disk
+// is touched.
+const ENV_KEYS = [
+  "DISCORD_TOKEN",
+  "DISCORD_OWNER_ID",
+  "DISCORD_CLIENT_ID",
+  "OAUTH_CLIENT_SECRET",
+  "DATABASE_URL",
+  "PUBLIC_BASE_URL",
+  "PORT",
+  "IP_STORAGE",
+  "IP_HASH_PEPPER",
+  "ENCRYPTION_KEY",
+  "BEHIND_CLOUDFLARE_TUNNEL",
+  "TRUSTED_PROXY_DEPTH",
+  "DBIP_COUNTRY_MMDB",
+  "AS_METADATA_CSV",
+  "INTEL_ENABLED",
+  "MAX_MESSAGES_PER_CHANNEL",
+  "MAX_MESSAGES_TOTAL",
+  "MAX_CONCURRENT_JOBS",
+  "PULL_DAILY_LIMIT_PER_ACCOUNT",
+  "PULL_COOLDOWN_HOURS",
+  "PULL_FAILURE_COOLDOWN_MINUTES",
+  "BACKUP_DIR",
+  "EXPORT_DIR",
+  "MAX_ASSET_BYTES",
+  "LOG_LEVEL",
+  "AUTOMATION_ENABLED",
+  "DISCORD_DEV_GUILD_ID",
+] as const;
+for (const key of ENV_KEYS) delete process.env[key];
 process.env.DISCORD_TOKEN = "test-token";
 process.env.DISCORD_OWNER_ID = OWNER;
+process.env.DISCORD_CLIENT_ID = "100000000000000003";
+process.env.OAUTH_CLIENT_SECRET = "test-secret";
 process.env.PUBLIC_BASE_URL = "https://verify.example";
 
 let dir: string;

@@ -404,7 +404,6 @@ export async function boot(): Promise<Boot> {
       return { deleted: true, what: input.scope === "all" ? "everything" : "the record" };
     },
     authorizeUrl: async (guildId, panelId) => {
-      if (env.oauth.clientSecret === "") return null;
       const panels = await listPanelsForGuild(db, guildId);
       const panel = panels.find((row) => row.panel_id === panelId);
       if (panel === undefined) return null;
@@ -604,8 +603,8 @@ export async function boot(): Promise<Boot> {
     );
   }
 
-  // the web layer. four routes, one process. the verify flow needs the oauth
-  // client secret, and without it the routes still answer and the flow refuses.
+  // the web layer. four routes, one process. the oauth secret is required at
+  // boot, so the verify flow is either whole or the process is not up at all.
   const tokenStore = createTokenStore({
     db,
     log,
@@ -616,8 +615,7 @@ export async function boot(): Promise<Boot> {
     db,
     log,
     publicBaseUrl: env.web.publicBaseUrl,
-    // the client id is the application id: the bot's own application.
-    clientId: gateway.client.application?.id ?? env.discord.ownerId,
+    clientId: env.discord.clientId,
     clientSecret: env.oauth.clientSecret,
     tokens: tokenStore,
     clientIp: null,
@@ -636,7 +634,6 @@ export async function boot(): Promise<Boot> {
       home: homeRoute({
         db,
         authorizeUrl: async (guildId) => {
-          if (env.oauth.clientSecret === "") return null;
           const built = await buildAuthorizeUrl(oauthDeps, {
             guildId,
             userId: "web",

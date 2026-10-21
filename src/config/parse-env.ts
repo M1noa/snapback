@@ -17,6 +17,8 @@ export interface Env {
   readonly discord: {
     readonly token: string;
     readonly ownerId: string;
+    /** the application id: the oauth client_id and the invite url both come from it. */
+    readonly clientId: string;
     readonly devGuildId: string | undefined;
   };
   readonly db: {
@@ -50,8 +52,8 @@ export interface Env {
     readonly pullFailureCooldownMinutes: number;
   };
   readonly oauth: {
-    /** the client secret from the developer portal. empty means the verify flow
-     *  is off: the web routes still answer, and the flow refuses. */
+    /** the client secret from the developer portal. required: the verify
+     *  callback is a core feature, not an option. */
     readonly clientSecret: string;
   };
   readonly storage: {
@@ -131,6 +133,10 @@ export function parseEnv(read: EnvSource): EnvResult {
     "DISCORD_OWNER_ID",
     "your own user id, the account that always has owner powers.",
   );
+  const clientId = required(
+    "DISCORD_CLIENT_ID",
+    "the application id from the developer portal, General Information tab. the oauth client_id and the invite url both come from it.",
+  );
   const publicBaseUrl = required(
     "PUBLIC_BASE_URL",
     "the https origin the verify button points at, no trailing slash.",
@@ -139,6 +145,10 @@ export function parseEnv(read: EnvSource): EnvResult {
   const ipStorage = pick<IpStorage>("IP_STORAGE", ["hash", "encrypted", "plaintext"], "plaintext");
   const ipHashPepper = optional("IP_HASH_PEPPER", "");
   const encryptionKey = optional("ENCRYPTION_KEY", "");
+  const oauthSecret = required(
+    "OAUTH_CLIENT_SECRET",
+    "the client secret from the developer portal, OAuth2 tab. the verification callback is a core feature and does not work without it.",
+  );
 
   if (ipStorage === "hash" && ipHashPepper === "") {
     problems.push(
@@ -190,6 +200,7 @@ export function parseEnv(read: EnvSource): EnvResult {
       discord: Object.freeze({
         token,
         ownerId,
+        clientId,
         devGuildId: read("DISCORD_DEV_GUILD_ID"),
       }),
 
@@ -226,7 +237,7 @@ export function parseEnv(read: EnvSource): EnvResult {
       }),
 
       oauth: Object.freeze({
-        clientSecret: optional("OAUTH_CLIENT_SECRET", ""),
+        clientSecret: oauthSecret,
       }),
 
       storage: Object.freeze({
