@@ -3,9 +3,10 @@
 // renders the app icon and the profile banner in the site's own language, as
 // png and as animated gif. the frames are chrome screenshots of
 // scripts/brand/render.html — real fonts, the grain tile, the house pastel at
-// one fixed hue on a black page. what moves is what is periodic in the frame
-// count: the grain steps its ten offsets, the badge breathes, the word rides a
-// low wave. frame frame_count lands back on frame 0's values, so the gif
+// one fixed hue on a black page. both surfaces are the wordmark: "sb" on the
+// icon, "snapback" on the banner. what moves is what is periodic in the frame
+// count: the grain steps its ten offsets, the glow breathes, the letters ride
+// a low wave. frame frame_count lands back on frame 0's values, so the gif
 // wraps clean.
 //
 //   bun run scripts/brand/index.ts

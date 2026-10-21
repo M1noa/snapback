@@ -2,8 +2,8 @@
 <!-- renders the icon and banner frames. the surface and frame index come in as
   the url query (?surface=icon|banner&frame=0..N-1). one pastel hue, fixed: no
   sweep. every animated value is periodic in FRAMES, so the gif wraps on
-  itself: the grain steps its ten offsets, the letters ride a sine and the
-  badge breathes. frame N (one past the loop) is the poster, bit-identical
+  itself: the grain steps its ten offsets, the letters ride their wave and the
+  glow breathes. frame N (one past the loop) is the poster, bit-identical
   logic to frame 0. -->
 <html lang="en">
 <head>
@@ -35,17 +35,10 @@
     --accent-hi: oklch(0.875 0.080 calc(var(--h) + 22));
     --ink:   oklch(0.920 0.028 var(--h));
     --ink-3: oklch(0.630 0.045 var(--h));
-    --plate:    oklch(0.215 0.032 var(--h));
-    --plate-hi: oklch(0.330 0.048 calc(var(--h) + 22));
-    --check: oklch(0.170 0.022 var(--h));
 
     /* per-surface sizing, set by the script from the query */
-    --plate-size: 320px;
-    --plate-radius: 31%;
     --word-size: 104px;
     --word-stroke: 2px;
-    --stack-gap: 0px;
-    --row-gap: 0px;
   }
 
   * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -77,50 +70,9 @@
   .stack {
     position: relative;
     display: flex;
-    flex-direction: column;
     align-items: center;
-    gap: var(--stack-gap);
+    justify-content: center;
   }
-
-  .plate {
-    position: relative;
-    width: var(--plate-size);
-    height: var(--plate-size);
-    border-radius: var(--plate-radius);
-    background: linear-gradient(180deg, var(--plate-hi), var(--plate));
-    box-shadow:
-      inset 0 1px 0 oklch(1 0 0 / 0.20),
-      0 24px 60px oklch(0 0 0 / 0.55),
-      0 8px 24px oklch(0.55 0.10 var(--h) / 0.22);
-    display: grid;
-    place-items: center;
-  }
-
-  .badge {
-    width: 63%;
-    aspect-ratio: 1;
-    border-radius: 28%;
-    background: linear-gradient(180deg, var(--accent-hi), var(--accent));
-    box-shadow:
-      inset 0 2px 0 oklch(1 0 0 / 0.6),
-      inset 0 -10px 20px oklch(0.50 0.11 var(--h) / 0.35),
-      0 14px 30px oklch(0.45 0.10 var(--h) / 0.45);
-    display: grid;
-    place-items: center;
-    transform-origin: 50% 55%;
-  }
-
-  .check {
-    width: 52%;
-    height: 52%;
-    fill: none;
-    stroke: var(--check);
-    stroke-width: 2.6;
-    stroke-linecap: round;
-    stroke-linejoin: round;
-  }
-
-  .row { display: flex; align-items: center; gap: var(--row-gap); }
 
   .word { display: flex; align-items: baseline; }
   .word span {
@@ -166,30 +118,14 @@
 <div class="art art-icon" id="surface-icon">
   <div class="glow"></div>
   <div class="stack">
-    <div class="plate">
-      <div class="badge">
-        <svg class="check" viewBox="0 0 24 24" aria-hidden="true">
-          <path d="M3.5 12.6 9.6 18.8 20.5 6.7"></path>
-        </svg>
-      </div>
-    </div>
+    <div class="word"><span>s</span><span>b</span></div>
   </div>
 </div>
 
 <div class="art art-banner" id="surface-banner">
   <div class="glow"></div>
   <div class="stack">
-    <div class="eyebrow">verification</div>
-    <div class="row">
-      <div class="plate">
-        <div class="badge">
-          <svg class="check" viewBox="0 0 24 24" aria-hidden="true">
-            <path d="M3.5 12.6 9.6 18.8 20.5 6.7"></path>
-          </svg>
-        </div>
-      </div>
-      <div class="word"><span>s</span><span>n</span><span>a</span><span>p</span><span>b</span><span>a</span><span>c</span><span>k</span></div>
-    </div>
+    <div class="word"><span>s</span><span>n</span><span>a</span><span>p</span><span>b</span><span>a</span><span>c</span><span>k</span></div>
   </div>
 </div>
 
@@ -203,22 +139,16 @@
 
   document.body.id = surface;
 
-  // per-surface sizing: one declaration each, no selector overrides
+  // per-surface sizing: the icon is the pair, the banner is the eight
   if (surface === "icon") {
-    document.documentElement.style.setProperty("--plate-size", "320px");
-    document.documentElement.style.setProperty("--plate-radius", "31%");
-    document.documentElement.style.setProperty("--word-size", "104px");
+    document.documentElement.style.setProperty("--word-size", "250px");
+    document.documentElement.style.setProperty("--word-stroke", "3px");
   } else {
-    document.documentElement.style.setProperty("--plate-size", "112px");
-    document.documentElement.style.setProperty("--plate-radius", "30%");
-    document.documentElement.style.setProperty("--word-size", "92px");
+    document.documentElement.style.setProperty("--word-size", "120px");
     document.documentElement.style.setProperty("--word-stroke", "2.5px");
-    document.documentElement.style.setProperty("--stack-gap", "26px");
-    document.documentElement.style.setProperty("--row-gap", "30px");
   }
 
   const art = document.getElementById(`surface-${surface}`);
-  const badgeBox = art.querySelector(".badge");
   const letters = art.querySelectorAll(".word span");
   const glow = art.querySelector(".glow");
   const grain = document.getElementById("grain");
@@ -238,13 +168,10 @@
 
   // the word rides a low wave, one letter after the other
   letters.forEach((l, i) => {
-    l.style.transform = `translateY(${(Math.sin(phase - i * 0.5) * 4).toFixed(2)}px)`;
+    l.style.transform = `translateY(${(Math.sin(phase - i * 0.5) * 6).toFixed(2)}px)`;
   });
 
-  // a breath, not a pop: the badge swells two percent and settles
-  badgeBox.style.transform = `scale(${(1 + 0.012 * Math.sin(phase)).toFixed(4)})`;
-
-  // the pastel halo behind the plate breathes half a stop
+  // the pastel halo behind the word breathes half a stop
   glow.style.opacity = (0.62 + 0.2 * Math.sin(phase + 1.2)).toFixed(3);
 </script>
 </body>
