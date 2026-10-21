@@ -390,6 +390,8 @@ describe("captureMessages", () => {
     const skips = refused.ctx.skips.all();
     expect(skips).toHaveLength(1);
     expect(skips[0]?.why).toBe("over the size ceiling or the url had already expired");
+    // its own category, so the preservation rate is countable from the skips.
+    expect(skips[0]?.category).toBe("attachments");
   });
 
   test("author_nickname comes from the captured member row, null when there is none", async () => {

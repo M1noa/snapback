@@ -101,9 +101,11 @@ async function storeAttachment(ctx: BackupContext, raw: RawAttachment): Promise<
   if (stored === null) {
     // over the ceiling, gone, or never fetchable. recorded as a skip so a restore
     // says "this attachment could not be preserved" instead of dropping it in
-    // silence (11.1). this is a limitation, not an error.
+    // silence (11.1). this is a limitation, not an error. its own category, so the
+    // preservation rate is countable from the stored skips rather than by hand
+    // (docs/measurements.md).
     ctx.skips.add({
-      category: "messages",
+      category: "attachments",
       what: `${filename} (${size} bytes)`,
       why:
         url === null
