@@ -1,6 +1,6 @@
 // tests/web/assets.test.ts
 //
-// the font files. an allowlist, so a path that is not one of the two is a 404
+// the font files. an allowlist, so a path that is not one of the three is a 404
 // and never a read from disk.
 
 import { describe, expect, test } from "bun:test";
@@ -20,7 +20,11 @@ function ctx(path: string): RequestContext {
 describe("the font assets", () => {
   test("each allowed font is served as woff2 and cached hard", async () => {
     const serve = assetRoute();
-    for (const path of ["/assets/fonts/sora-latin.woff2", "/assets/fonts/geist-mono-latin.woff2"]) {
+    for (const path of [
+      "/assets/fonts/manrope-latin.woff2",
+      "/assets/fonts/syne-latin.woff2",
+      "/assets/fonts/syne-mono-latin.woff2",
+    ]) {
       const response = await serve(ctx(path));
       expect(response.status).toBe(200);
       expect(response.headers["content-type"]).toBe("font/woff2");

@@ -31,20 +31,28 @@ export function themeColor(hue: number): string {
   return `hsl(${Math.round(Math.abs(hue)) % 360} 46% 82%)`;
 }
 
-/** the two faces. sora sets everything that is read; geist mono carries the
- *  small tracked labels. */
+/** the three faces. manrope sets everything that is read, syne carries the
+ *  headings and the seal letter, syne mono the small tracked labels. syne's
+ *  wide round forms only pay off large; manrope stays quiet at text size. */
 const FONT_FACES = `
 @font-face {
-  font-family: "Sora";
-  src: url(/assets/fonts/sora-latin.woff2) format("woff2");
-  font-weight: 300 800;
+  font-family: "Manrope";
+  src: url(/assets/fonts/manrope-latin.woff2) format("woff2");
+  font-weight: 200 800;
   font-style: normal;
   font-display: swap;
 }
 @font-face {
-  font-family: "Geist Mono";
-  src: url(/assets/fonts/geist-mono-latin.woff2) format("woff2");
-  font-weight: 400 600;
+  font-family: "Syne";
+  src: url(/assets/fonts/syne-latin.woff2) format("woff2");
+  font-weight: 400 800;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Syne Mono";
+  src: url(/assets/fonts/syne-mono-latin.woff2) format("woff2");
+  font-weight: 400;
   font-style: normal;
   font-display: swap;
 }
@@ -77,8 +85,9 @@ const TOKENS = `
   --ok: oklch(0.840 0.150 158);
   --err: oklch(0.760 0.160 22);
 
-  --font-sans: "Sora", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
-  --font-mono: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  --font-sans: "Manrope", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-display: "Syne", ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-mono: "Syne Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
 
   --text-xs: 0.75rem;
   --text-sm: 0.875rem;
@@ -240,7 +249,7 @@ const TEXT = `
 }
 h1 {
   margin: 0 0 var(--sp-4);
-  font-family: var(--font-sans);
+  font-family: var(--font-display);
   font-weight: 600;
   font-size: var(--display);
   line-height: 1.12;
@@ -369,7 +378,7 @@ const SEAL = `
 }
 .seal .face img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .seal .initial {
-  font: 500 32cqmin/1 var(--font-sans);
+  font: 500 32cqmin/1 var(--font-display);
   color: var(--ink);
   letter-spacing: -0.02em;
 }

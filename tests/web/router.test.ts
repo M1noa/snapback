@@ -37,7 +37,7 @@ describe("the web router", () => {
 
   test("the fonts are served under /assets", async () => {
     const serve = router();
-    const response = await serve(ctx("/assets/fonts/geist-mono-latin.woff2"));
+    const response = await serve(ctx("/assets/fonts/syne-latin.woff2"));
     expect(response.status).toBe(200);
   });
 
