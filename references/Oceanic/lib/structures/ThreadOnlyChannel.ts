@@ -1,0 +1,267 @@
+/** @module ThreadOnlyChannel */
+import {
+    AllPermissions,
+    Permissions,
+    type SortOrderTypes,
+    type ForumLayoutTypes,
+    type ThreadAutoArchiveDuration,
+} from "../Constants";
+import Collection from "../util/Collection";
+import { UncachedError } from "../util/Errors";
+import TypedCollection from "../util/TypedCollection";
+
+import GuildChannel from "./GuildChannel";
+import Permission from "./Permission";
+import PermissionOverwrite from "./PermissionOverwrite";
+
+import type { InviteWithMetadata } from "./Invite";
+import type Member from "./Member";
+import type PublicThreadChannel from "./PublicThreadChannel";
+import type Webhook from "./Webhook";
+import type Client from "../Client";
+import type * as Types from "../types/namespaced";
+
+/** Represents a thread only channel. */
+export default class ThreadOnlyChannel extends GuildChannel {
+    /** The usable tags for threads. */
+    availableTags: Array<Types.Channels.ForumTag>;
+    /** The default auto archive duration for threads. */
+    defaultAutoArchiveDuration: ThreadAutoArchiveDuration;
+    /** The default forum layout used to display threads. */
+    defaultForumLayout: ForumLayoutTypes;
+    /** The default reaction emoji for threads. */
+    defaultReactionEmoji: Types.Channels.ForumEmoji | null;
+    /** The default sort order mode used to sort threads. */
+    defaultSortOrder: SortOrderTypes | null;
+    /** The default amount of seconds between non-moderators sending messages in threads. */
+    defaultThreadRateLimitPerUser: number;
+    /** The ID of most recently created thread. */
+    lastThreadID: string | null;
+    /** If this channel is age gated. */
+    nsfw: boolean;
+    /** The permission overwrites of this channel. */
+    permissionOverwrites: TypedCollection<Types.Channels.RawOverwrite, PermissionOverwrite>;
+    /** The position of this channel on the sidebar. */
+    position: number;
+    /** The amount of seconds between non-moderators creating threads. */
+    rateLimitPerUser: number;
+    /** The `guidelines` of this forum channel. */
+    topic: string | null;
+    declare type: Types.Channels.ThreadOnlyChannels;
+    constructor(data: Types.Channels.RawThreadOnlyChannel, client: Client) {
+        super(data, client);
+        this.availableTags = [];
+        this.defaultAutoArchiveDuration = data.default_auto_archive_duration;
+        this.defaultForumLayout = data.default_forum_layout;
+        this.defaultReactionEmoji = null;
+        this.defaultSortOrder = null;
+        this.defaultThreadRateLimitPerUser = data.default_thread_rate_limit_per_user;
+        this.flags = data.flags;
+        this.lastThreadID = data.last_message_id;
+        this.nsfw = data.nsfw;
+        this.permissionOverwrites = new TypedCollection(PermissionOverwrite, client);
+        this.position = data.position;
+        this.rateLimitPerUser = data.rate_limit_per_user;
+        this.topic = data.topic;
+        this.update(data);
+    }
+
+    /** The most recently created thread. */
+    get lastThread(): PublicThreadChannel | null {
+        return this.lastThreadID === null ? null : this.guild.threads.get(this.lastThreadID) as PublicThreadChannel;
+    }
+
+    /** The threads in this channel. The returned collection is disposable. */
+    get threads(): Collection<string, PublicThreadChannel> {
+        return new Collection(this.guild.threads.filter(thread => thread.parentID === this.id).map(thread => [thread.id, thread as PublicThreadChannel]));
+    }
+
+    protected override update(data: Partial<Types.Channels.RawThreadOnlyChannel>): void {
+        super.update(data);
+        if (data.available_tags !== undefined) {
+            this.availableTags = data.available_tags.map(tag => ({
+                emoji: tag.emoji_id === null && tag.emoji_name === null ? null : { id: tag.emoji_id, name: tag.emoji_name },
+                id: tag.id,
+                moderated: tag.moderated,
+                name: tag.name,
+            }));
+        }
+        if (data.default_auto_archive_duration !== undefined) {
+            this.defaultAutoArchiveDuration = data.default_auto_archive_duration;
+        }
+        if (data.default_forum_layout !== undefined) {
+            this.defaultForumLayout = data.default_forum_layout;
+        }
+        if (data.default_reaction_emoji !== undefined) {
+            this.defaultReactionEmoji = data.default_reaction_emoji === null || (data.default_reaction_emoji.emoji_id === null && data.default_reaction_emoji.emoji_name === null) ? null : { id: data.default_reaction_emoji.emoji_id, name: data.default_reaction_emoji.emoji_name };
+        }
+        if (data.default_sort_order !== undefined) {
+            this.defaultSortOrder = data.default_sort_order;
+        }
+        if (data.default_thread_rate_limit_per_user !== undefined) {
+            this.defaultThreadRateLimitPerUser = data.default_thread_rate_limit_per_user;
+        }
+        if (data.flags !== undefined) {
+            this.flags = data.flags;
+        }
+        if (data.last_message_id !== undefined) {
+            this.lastThreadID = data.last_message_id;
+        }
+
+        if (data.nsfw !== undefined) {
+            this.nsfw = data.nsfw;
+        }
+        if (data.permission_overwrites !== undefined) {
+            for (const id of this.permissionOverwrites.keys()) {
+                if (!data.permission_overwrites.some(overwrite => overwrite.id === id)) {
+                    this.permissionOverwrites.delete(id);
+                }
+            }
+
+            for (const overwrite of data.permission_overwrites) {
+                this.permissionOverwrites.update(overwrite);
+            }
+        }
+        if (data.position !== undefined) {
+            this.position = data.position;
+        }
+        if (data.rate_limit_per_user !== undefined) {
+            this.rateLimitPerUser = data.rate_limit_per_user;
+        }
+        if (data.topic !== undefined && data.topic !== null) {
+            this.topic = data.topic;
+        }
+    }
+
+    /**
+     * Create an invite for this channel. If the guild is not a `COMMUNITY` server, invites can only be made to last 30 days.
+     * @param options The options for the invite.
+     */
+    async createInvite(options: Types.Invites.CreateInviteOptions): Promise<InviteWithMetadata<this>> {
+        return this.client.rest.channels.createInvite<this>(this.id, options);
+    }
+
+    /**
+     * Create a webhook in this channel.
+     * @param options The options to create the webhook with.
+     */
+    async createWebhook(options: Types.Webhooks.CreateWebhookOptions): Promise<Webhook> {
+        return this.client.rest.webhooks.create(this.id, options);
+    }
+
+    /**
+     * Delete a permission overwrite on this channel.
+     * @param overwriteID The ID of the permission overwrite to delete.
+     * @param reason The reason for deleting the permission overwrite.
+     */
+    async deletePermission(overwriteID: string, reason?: string): Promise<void> {
+        return this.client.rest.channels.deletePermission(this.id, overwriteID, reason);
+    }
+
+    /**
+     * Edit a permission overwrite on this channel.
+     * @param overwriteID The ID of the permission overwrite to edit.
+     * @param options The options for editing the permission overwrite.
+     */
+    async editPermission(overwriteID: string, options: Types.Channels.EditPermissionOptions): Promise<void> {
+        return this.client.rest.channels.editPermission(this.id, overwriteID, options);
+    }
+
+    /**
+     * Get the invites of this channel.
+     */
+    async getInvites(): Promise<Array<InviteWithMetadata<this>>> {
+        return this.client.rest.channels.getInvites<this>(this.id);
+    }
+
+    /**
+     * Get the public archived threads in this channel.
+     * @param options The options for getting the public archived threads.
+     */
+    async getPublicArchivedThreads(options?: Types.Channels.GetArchivedThreadsOptions): Promise<Types.Channels.ArchivedThreads<PublicThreadChannel>> {
+        return this.client.rest.channels.getPublicArchivedThreads<PublicThreadChannel>(this.id, options);
+    }
+
+    /**
+     * Get the webhooks in this channel.
+     */
+    async getWebhooks(): Promise<Array<Webhook>> {
+        return this.client.rest.webhooks.getForChannel(this.id);
+    }
+
+    /**
+     * Get the permissions of a member.  If providing an id, the member must be cached.
+     * @param member The member to get the permissions of.
+     */
+    permissionsOf(member: string | Member): Permission {
+        if (typeof member === "string") {
+            member = this.guild.members.get(member)!;
+        }
+        // the `!` above lies to the type checker to defer the real null check to here, which throws a
+        // more useful error than a bare TypeError - `.get()` can genuinely return undefined at runtime
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+        if (!member) {
+            throw new UncachedError(`Cannot use ${this.constructor.name}#permissionsOf with an ID when the member is not cached.`);
+        }
+        let permission = this.guild.permissionsOf(member).allow;
+        if (permission & Permissions.ADMINISTRATOR) {
+            return new Permission(AllPermissions);
+        }
+        let overwrite = this.permissionOverwrites.get(this.guildID);
+        if (overwrite) {
+            permission = (permission & ~overwrite.deny) | overwrite.allow;
+        }
+        let deny = 0n;
+        let allow = 0n;
+        for (const id of member.roles) {
+            if ((overwrite = this.permissionOverwrites.get(id))) {
+                deny |= overwrite.deny;
+                allow |= overwrite.allow;
+            }
+        }
+
+        permission = (permission & ~deny) | allow;
+        overwrite = this.permissionOverwrites.get(member.id);
+        if (overwrite) {
+            permission = (permission & ~overwrite.deny) | overwrite.allow;
+        }
+        return new Permission(permission);
+    }
+
+    /**
+     * Search threads in this channel.
+     * @param options The options to search with.
+     * @param retryOnIndexNotAvailable If the search should be retried if Discord replies with an index unavailable response. This will retry at most one time, waiting for `retry_after` or 15-45 seconds.
+     */
+    async searchThreads(options?: Types.Channels.SearchThreadsOptions, retryOnIndexNotAvailable = true): Promise<Types.Channels.ThreadSearchResults<PublicThreadChannel>> {
+        return this.client.rest.channels.searchThreads<PublicThreadChannel>(this.id, options, retryOnIndexNotAvailable);
+    }
+
+    /**
+     * Create a thread in this forum channel.
+     * @param options The options for starting the thread.
+     */
+    async startThread(options: Types.Channels.StartThreadInThreadOnlyChannelOptions): Promise<PublicThreadChannel> {
+        return this.client.rest.channels.startThreadInThreadOnlyChannel(this.id, options);
+    }
+
+    override toJSON(): Types.JSON.JSONThreadOnlyChannel {
+        return {
+            ...super.toJSON(),
+            availableTags: this.availableTags,
+            defaultAutoArchiveDuration: this.defaultAutoArchiveDuration,
+            defaultForumLayout: this.defaultForumLayout,
+            defaultReactionEmoji: this.defaultReactionEmoji,
+            defaultSortOrder: this.defaultSortOrder,
+            defaultThreadRateLimitPerUser: this.defaultThreadRateLimitPerUser,
+            flags: this.flags,
+            lastThreadID: this.lastThreadID,
+            permissionOverwrites: this.permissionOverwrites.map(overwrite => overwrite.toJSON()),
+            position: this.position,
+            rateLimitPerUser: this.rateLimitPerUser,
+            threads: this.threads.map(thread => thread.id),
+            topic: this.topic,
+            type: this.type,
+        };
+    }
+}

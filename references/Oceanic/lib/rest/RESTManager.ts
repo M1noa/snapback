@@ -1,0 +1,91 @@
+/** @module RESTManager */
+import Applications from "../routes/Applications";
+import Channels from "../routes/Channels";
+import Guilds from "../routes/Guilds";
+import Interactions from "../routes/Interactions";
+import Lobbies from "../routes/Lobbies";
+import Miscellaneous from "../routes/Miscellaneous";
+import OAuth from "../routes/OAuth";
+import Users from "../routes/Users";
+import Webhooks from "../routes/Webhooks";
+import * as Routes from "../util/Routes";
+
+import RequestHandler from "./RequestHandler";
+
+import type Client from "../Client";
+import type * as Types from "../types/namespaced";
+
+/** A manager for all rest actions. */
+export default class RESTManager {
+    private _client: Client;
+    applications: Applications;
+    channels: Channels;
+    guilds: Guilds;
+    handler: RequestHandler;
+    interactions: Interactions;
+    lobbies: Lobbies;
+    misc: Miscellaneous;
+    oauth: OAuth;
+    users: Users;
+    webhooks: Webhooks;
+    constructor(client: Client, options?: Types.Client.RESTOptions) {
+        this.applications = new Applications(this);
+        this.channels = new Channels(this);
+        this._client = client;
+        this.guilds = new Guilds(this);
+        this.handler = new RequestHandler(this, options);
+        this.interactions = new Interactions(this);
+        this.lobbies = new Lobbies(this);
+        this.misc = new Miscellaneous(this);
+        this.oauth = new OAuth(this);
+        this.users = new Users(this);
+        this.webhooks = new Webhooks(this);
+    }
+
+    get client(): Client {
+        return this._client;
+    }
+
+    get options(): Types.Client.RESTOptions {
+        return this.handler.options;
+    }
+
+    /** Alias for {@link RequestHandler#authRequest | RequestHandler#authRequest} */
+    async authRequest<T = unknown>(options: Omit<Types.RequestHandler.RequestOptions, "auth">): Promise<T> {
+        return this.handler.authRequest<T>(options);
+    }
+
+    /**
+     * Get the gateway information related to your bot client.
+     */
+    async getBotGateway(): Promise<Types.Gateway.GetBotGatewayResponse> {
+        return this.authRequest<Types.Gateway.RawGetBotGatewayResponse>({
+            method: "GET",
+            path: Routes.GATEWAY_BOT,
+        }).then(data => ({
+            url: data.url,
+            shards: data.shards,
+            sessionStartLimit: {
+                total: data.session_start_limit.total,
+                remaining: data.session_start_limit.remaining,
+                resetAfter: data.session_start_limit.reset_after,
+                maxConcurrency: data.session_start_limit.max_concurrency,
+            },
+        }));
+    }
+
+    /**
+     * Get the gateway information.
+     */
+    async getGateway(): Promise<Types.Gateway.GetGatewayResponse> {
+        return this.request<Types.Gateway.GetGatewayResponse>({
+            method: "GET",
+            path: Routes.GATEWAY,
+        });
+    }
+
+    /** Alias for {@link RequestHandler#request | RequestHandler#request} */
+    async request<T = unknown>(options: Types.RequestHandler.RequestOptions): Promise<T> {
+        return this.handler.request<T>(options);
+    }
+}

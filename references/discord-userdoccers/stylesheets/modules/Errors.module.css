@@ -1,0 +1,69 @@
+@reference "../tailwind.css";
+
+.statusText {
+  @apply mt-5 italic;
+}
+
+/* Error code groups */
+
+.groupButton {
+  @apply flex cursor-pointer items-center justify-start gap-2 focus:outline-none;
+}
+
+.groupIcon {
+  @apply h-5 w-4 text-black transition-transform duration-200 ease-in-out dark:text-white;
+}
+
+/* Submit dialog */
+
+.dialogLabel {
+  @apply mb-2 block text-sm font-medium text-gray-700 dark:text-gray-200;
+}
+
+.dialogInput {
+  @apply block w-full rounded-md border-gray-300 bg-gray-100 shadow-xs focus:border-indigo-500 focus:ring-indigo-500 dark:border-gray-600 dark:bg-table-row-background-secondary-dark dark:text-white;
+}
+
+.dialogText {
+  @apply text-text-light/80 dark:text-text-dark/80;
+}
+
+.dialogPanel {
+  @apply w-full max-w-md transform overflow-hidden rounded-md bg-white px-5 py-3 pb-6 text-left align-middle shadow-xl transition-all dark:bg-background-dark;
+}
+
+/* searchbar */
+.controls {
+  @apply sticky top-0 z-10 mb-8 flex flex-col gap-4 rounded-xl border border-gray-200 bg-white/80 p-4 backdrop-blur-md dark:border-gray-800 dark:bg-[#0b0c0f]/80 amoled:bg-black/80 md:flex-row md:items-center md:justify-between;
+}
+
+.controlsIcon {
+  @apply absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400;
+}
+
+.searchbar {
+  @apply w-full rounded-lg border border-gray-200 bg-transparent py-2 pl-9 pr-4 outline-none transition-colors text-gray-900 dark:border-gray-700 dark:text-white;
+}
+.searchbar:focus {
+  @apply border-gray-200 dark:border-gray-700;
+}
+
+.submitButton {
+  @apply rounded-lg bg-brand-blurple px-4 py-2 text-sm text-white transition-colors hover:bg-brand-blurple/90;
+}
+
+.filterLabel {
+  @apply flex cursor-pointer select-none items-center gap-3;
+}
+
+.filterLabel > span {
+  @apply text-sm font-medium text-gray-700 dark:text-gray-300;
+}
+
+.filterToggle1 {
+  @apply h-6 w-11 rounded-full bg-gray-200 transition-colors dark:bg-gray-700;
+}
+
+.filterToggle2 {
+  @apply absolute left-1 top-1 h-4 w-4 rounded-full bg-white transition-transform;
+}

@@ -1,0 +1,157 @@
+@reference "./tailwind.css";
+
+html {
+  scrollbar-gutter: stable;
+}
+
+* {
+  --text-base: "Helvetica Neue", Helvetica, Arial, sans-serif;
+}
+
+:root {
+  --background-dark: #36373e;
+  --sidebar-secondary-dark: #323339;
+  --sidebar-tertiary-dark: #36373e;
+  --table-head-background-dark: #27272a;
+  --table-row-background-secondary-dark: #232428;
+  --theme-dark-sidebar: #36373e;
+  --theme-dark-sidebar-hover: #393C43;
+  --theme-dark-collapsible: #27292d;
+}
+
+html.amoled {
+  --background-dark: #000000;
+  --sidebar-secondary-dark: #121212;
+  --sidebar-tertiary-dark: #000000;
+  --table-head-background-dark: #0a0a0a;
+  --table-row-background-secondary-dark: #050505;
+  --theme-dark-sidebar: #000000;
+  --theme-dark-sidebar-hover: #1a1a1a;
+  --theme-dark-collapsible: #111111;
+}
+
+abbr[title].no-underline {
+  text-decoration: none;
+}
+
+body {
+  font-family: "Whitney Medium", var(--text-base);
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6,
+th {
+  font-family: "Whitney Semibold Regular", var(--text-base);
+}
+
+code * {
+  @apply text-sm;
+}
+
+i,
+em {
+  font-family: "Whitney Medium Italic", var(--text-base);
+  font-style: normal;
+}
+
+[type="search"] {
+  background-color: initial;
+}
+
+[type="search"]:focus {
+  outline: none;
+  border-color: transparent;
+  box-shadow: none;
+}
+
+[data-headlessui-portal] > div > div {
+  z-index: 9999;
+}
+
+[data-headlessui-portal] h2 {
+  @apply mt-2;
+}
+
+datalist {
+  display: none;
+}
+
+input::-webkit-calendar-picker-indicator {
+  display: none !important;
+}
+
+/* Left sidebar positioning */
+@media (min-width: 1280px) {
+  .desktop-left-nav {
+    left: max(8px, calc((100vw - min(100vw, 72rem)) / 2 - 25rem));
+  }
+
+  .desktop-content-left-pad {
+    padding-left: clamp(0px, calc(25rem + 8px - max(0px, (100vw - 72rem) / 2)), 100vw);
+  }
+}
+
+/* Base max width for main content */
+.desktop-content-max {
+  max-width: 72rem;
+}
+
+/* Right ToC positioning */
+@media (min-width: 1600px) {
+  .desktop-right-toc {
+    display: block !important;
+    left: min(calc((100vw + min(100vw, 72rem)) / 2), calc(100vw - 8px - 17rem));
+  }
+
+  .desktop-right-toc-fallback {
+    display: none !important;
+  }
+
+  /* If there is no right ToC, expand content to occupy its space */
+  body:not(:has(.desktop-right-toc)) .desktop-content-max {
+    max-width: 90rem;
+    /* Keep the content's left edge fixed: shift right by half of added width */
+    margin-left: 17rem;
+  }
+
+  /* Also adjust left padding calculation to use the wider content width (89rem)
+     so the reserved left gutter remains consistent and the content's left edge
+     does not drift when ToC is absent. */
+  body:not(:has(.desktop-right-toc)) .desktop-content-left-pad {
+    padding-left: clamp(0px, calc(25rem + 8px - max(0px, (100vw - 89rem) / 2)), 100vw);
+  }
+}
+
+/* When the desktop sidebar is hidden: cancel the left-pad offset */
+@media (min-width: 1280px) {
+  /* Higher specificity (two classes) overrides the single-class desktop-content-left-pad rule */
+  .desktop-sidebar-hidden.desktop-content-left-pad {
+    padding-left: 0;
+  }
+
+  /* Override the margin-left: 17rem applied on no-right-toc pages at 1600px+ */
+  body .desktop-sidebar-hidden.desktop-content-max {
+    margin-left: 0;
+  }
+}
+
+/* Layout wrappers */
+.app-wrapper {
+  @apply dark:bg-background-dark flex min-h-dvh overflow-hidden bg-white;
+}
+
+.sidebar-fade {
+  @apply fixed z-30 inset-0 bg-black duration-300 xl:opacity-0 xl:pointer-events-none;
+}
+
+.sidebar-fade.open {
+  @apply opacity-50;
+}
+
+.sidebar-fade.closed {
+  @apply opacity-0 pointer-events-none;
+}

@@ -6,7 +6,6 @@ coverage/
 !.env.example
 
 data/
-/references/
 
 *.duckdb
 *.duckdb.wal

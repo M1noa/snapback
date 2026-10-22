@@ -1,0 +1,155 @@
+/** @module GroupChannel */
+import * as Routes from "../util/Routes";
+import TypedCollection from "../util/TypedCollection";
+
+import Channel from "./Channel";
+import User from "./User";
+
+import type ClientApplication from "./ClientApplication";
+import type Client from "../Client";
+import type { ChannelTypes, ImageFormat } from "../Constants";
+import type * as Types from "../types/namespaced";
+
+/** Represents a group direct message. */
+export default class GroupChannel extends Channel {
+    /** The application that made this group channel. */
+    application?: ClientApplication;
+    /** The ID of the application that made this group channel. */
+    applicationID: string;
+    /** The icon hash of this group, if any. */
+    icon: string | null;
+    /** The ID of last message sent in this channel. */
+    lastMessageID: string | null;
+    /** The timestamp of the last pinned message in this channel. */
+    lastPinTimestamp: string | null;
+    /** If this group channel is managed by an application. */
+    managed: boolean;
+    /** The name of this group channel. */
+    name: string | null;
+    /** The nicknames used when creating this group channel. */
+    nicks: Array<Record<"id" | "nick", string>>;
+    /** The owner of this group channel. */
+    owner?: User;
+    /** The ID of the owner of this group channel. */
+    ownerID: string;
+    /** The other recipients in this group channel. */
+    recipients: TypedCollection<Types.Users.RawUser, User>;
+    declare type: ChannelTypes.GROUP_DM;
+    constructor(data: Types.Channels.RawGroupChannel, client: Client) {
+        super(data, client);
+        this.applicationID = data.application_id;
+        this.icon = null;
+        this.lastMessageID = data.last_message_id;
+        this.lastPinTimestamp = data.last_pin_timestamp ?? null;
+        this.managed = false;
+        this.name = data.name;
+        this.nicks = [];
+        this.owner = this.client.users.get(data.owner_id);
+        this.ownerID = data.owner_id;
+        this.recipients = new TypedCollection(User, client, Infinity, {
+            construct: (user): User => client.users.update(user),
+        });
+        for (const r of data.recipients) this.recipients.update(r);
+        this.update(data);
+    }
+
+    protected override update(data: Partial<Types.Channels.RawGroupChannel>): void {
+        super.update(data);
+        if (data.application_id !== undefined) {
+            this.application = this.client["_application"] && this.client.application.id === data.application_id ? this.client.application : undefined;
+            this.applicationID = data.application_id;
+        }
+        if (data.icon !== undefined) {
+            this.icon = data.icon;
+        }
+        if (data.last_message_id !== undefined) {
+            this.lastMessageID = data.last_message_id;
+        }
+        if (data.last_pin_timestamp !== undefined) {
+            this.lastPinTimestamp = data.last_pin_timestamp;
+        }
+        if (data.managed !== undefined) {
+            this.managed = data.managed;
+        }
+        if (data.name !== undefined) {
+            this.name = data.name;
+        }
+        if (data.nicks !== undefined) {
+            /**
+             * Forward this message.
+             * @param channelID The ID of the channel to forward the message to.
+             * @param options The options for the message.
+             */
+            this.nicks = data.nicks;
+        }
+        if (data.owner_id !== undefined) {
+            this.owner = this.client.users.get(data.owner_id);
+            this.ownerID = data.owner_id;
+        }
+        if (data.type !== undefined) {
+            this.type = data.type;
+        }
+        if (data.recipients !== undefined) {
+            this.recipients.clear();
+            for (const r of data.recipients) {
+                this.recipients.update(r);
+            }
+        }
+    }
+
+    /**
+     * Add a user to this channel.
+     * @param options The options for adding the user.
+     */
+    async addRecipient(options: Types.Channels.AddGroupRecipientOptions): Promise<void> {
+        return this.client.rest.channels.addGroupRecipient(this.id, options);
+    }
+
+    /**
+     * Edit this channel.
+     * @param options The options for editing the channel.
+     */
+    async edit(options: Types.Channels.EditGroupDMOptions): Promise<this> {
+        return this.client.rest.channels.edit<this>(this.id, options);
+    }
+
+    /**
+     * The url of this application's icon.
+     * @param format The format the url should be.
+     * @param size The dimensions of the image.
+     */
+    iconURL(format?: ImageFormat, size?: number): string | null {
+        return this.icon === null ? null : this.client.util.formatImage(Routes.APPLICATION_ICON(this.applicationID, this.icon), format, size);
+    }
+
+    /**
+     * Remove a user from this channel.
+     * @param userID The ID of the user to remove.
+     */
+    async removeRecipient(userID: string): Promise<void> {
+        return this.client.rest.channels.removeGroupRecipient(this.id, userID);
+    }
+
+    /**
+     * Show a typing indicator in this channel.
+     */
+    async sendTyping(): Promise<void> {
+        return this.client.rest.channels.sendTyping(this.id);
+    }
+
+    override toJSON(): Types.JSON.JSONGroupChannel {
+        return {
+            ...super.toJSON(),
+            applicationID: this.applicationID,
+            icon: this.icon,
+            lastMessageID: this.lastMessageID,
+            lastPinTimestamp: this.lastPinTimestamp,
+            managed: this.managed,
+            name: this.name,
+            nicks: this.nicks,
+            ownerID: this.ownerID,
+            recipients: this.recipients.map(user => user.toJSON()),
+            type: this.type,
+        };
+    }
+}

@@ -1,0 +1,245 @@
+/** @module OAuthHelper */
+import { BASE_URL } from "../Constants";
+import ExtendedUser from "../structures/ExtendedUser";
+import Integration from "../structures/Integration";
+import Member from "../structures/Member";
+import OAuthApplication from "../structures/OAuthApplication";
+import OAuthGuild from "../structures/OAuthGuild";
+import PartialApplication from "../structures/PartialApplication";
+import * as Routes from "../util/Routes";
+
+import type RESTManager from "./RESTManager";
+import type Entitlement from "../structures/Entitlement";
+import type TestEntitlement from "../structures/TestEntitlement";
+import type * as Types from "../types/namespaced";
+
+/** A helper to make using authenticated oauth requests without needing a new client instance. */
+export default class OAuthHelper {
+    private _manager: RESTManager;
+    private _token: string;
+    constructor(manager: RESTManager, token: string) {
+        this._token = token;
+        this._manager = manager;
+    }
+
+    /**
+     * Construct an oauth authorization url.
+     * @param options The options to construct the url with.
+     */
+    static constructURL(options: Types.OAuth.OAuthURLOptions): string {
+        const params: Array<string> = [
+            `client_id=${options.clientID}`,
+            `response_type=${options.responseType ?? "code"}`,
+            `scope=${options.scopes.join("%20")}`,
+        ];
+        if (options.redirectURI) {
+            params.push(`redirect_uri=${options.redirectURI}`);
+        }
+        if (options.disableGuildSelect !== undefined) {
+            params.push(`disable_guild_select=${String(options.disableGuildSelect)}`);
+        }
+        if (options.prompt) {
+            params.push(`prompt=${options.prompt}`);
+        }
+        if (options.permissions) {
+            params.push(`permissions=${options.permissions}`);
+        }
+        if (options.guildID) {
+            params.push(`guild_id=${options.guildID}`);
+        }
+        if (options.state) {
+            params.push(`state=${options.state}`);
+        }
+        if (options.integrationType) {
+            params.push(`integration_type=${options.integrationType}`);
+        }
+        return `${BASE_URL}${Routes.OAUTH_AUTHORIZE}?${params.join("&")}`;
+    }
+
+    async addGuildMember(guildID: string, userID: string, options?: Omit<Types.Guilds.AddMemberOptions, "accessToken">): Promise<Member | undefined> {
+        return this._manager.guilds.addMember(guildID, userID, { accessToken: this._token.split(" ").slice(1).join(" "), ...options });
+    }
+
+    /**
+     * Delete the authenticated user's role connection object for an application. This requires the `role_connections.write` scope.
+     * @param applicationID The ID of the application.
+     * @caching This method **does not** cache its result.
+     */
+    async deleteRoleConnection(applicationID: string): Promise<void> {
+        await this._manager.request<null>({
+            method: "DELETE",
+            path: Routes.OAUTH_ROLE_CONNECTION(applicationID),
+            auth: this._token,
+        });
+    }
+
+    /**
+     * Get the current OAuth2 application's information.
+     */
+    async getApplication(): Promise<OAuthApplication> {
+        return this._manager.request<Types.Applications.RESTOAuthApplication>({
+            method: "GET",
+            path: Routes.OAUTH_APPLICATION,
+            auth: this._token,
+        }).then(data => new OAuthApplication(data, this._manager.client));
+    }
+
+    /**
+     * Get information about the current authorization.
+     */
+    async getCurrentAuthorizationInformation(): Promise<Types.OAuth.AuthorizationInformation> {
+        return this._manager.request<Types.OAuth.RawAuthorizationInformation>({
+            method: "GET",
+            path: Routes.OAUTH_INFO,
+            auth: this._token,
+        }).then(data => ({
+            application: new PartialApplication(data.application, this._manager.client),
+            expires: new Date(data.expires),
+            scopes: data.scopes,
+            user: this._manager.client.users.update(data.user),
+        }));
+    }
+
+    /**
+     * Get the connections of the currently authenticated user.
+     *
+     * Note: Requires the `connections` scope.
+     */
+    async getCurrentConnections(): Promise<Array<Types.OAuth.Connection>> {
+        return this._manager.request<Array<Types.OAuth.RawConnection>>({
+            method: "GET",
+            path: Routes.OAUTH_CONNECTIONS,
+            auth: this._token,
+        }).then(data => data.map(connection => ({
+            friendSync: connection.friend_sync,
+            id: connection.id,
+            integrations: connection.integrations?.map(integration => new Integration(integration, this._manager.client)),
+            name: connection.name,
+            revoked: connection.revoked,
+            showActivity: connection.show_activity,
+            twoWayLink: connection.two_way_link,
+            type: connection.type,
+            verified: connection.verified,
+            visibility: connection.visibility,
+        })));
+    }
+
+    /**
+     * Get the guild member information about the currently authenticated user.
+     *
+     * Note: Requires the `guilds.members.read` scope.
+     * @param guild the ID of the guild
+     */
+    async getCurrentGuildMember(guild: string): Promise<Member> {
+        return this._manager.request<Types.Guilds.RESTMember>({
+            method: "GET",
+            path: Routes.OAUTH_GUILD_MEMBER(guild),
+            auth: this._token,
+        }).then(data => new Member(data, this._manager.client, guild));
+    }
+
+    /**
+     * Get the currently authenticated user's guilds. Note these are missing several properties gateway guilds have.
+     */
+    async getCurrentGuilds(): Promise<Array<OAuthGuild>> {
+        return this._manager.request<Array<Types.Guilds.RawOAuthGuild>>({
+            method: "GET",
+            path: Routes.OAUTH_GUILDS,
+            auth: this._token,
+        }).then(data => data.map(d => new OAuthGuild(d, this._manager.client)));
+    }
+
+    /**
+     * Get the currently authenticated user's information.
+     *
+     * Note: This does not touch the client's cache in any way.
+     */
+    async getCurrentUser(): Promise<ExtendedUser> {
+        return this._manager.request<Types.Users.RawOAuthUser>({
+            method: "GET",
+            path: Routes.OAUTH_CURRENT_USER,
+            auth: this._token,
+        }).then(data => new ExtendedUser(data, this._manager.client));
+    }
+
+    /**
+     * Get the currently authenticated user's entitlements for an application.
+     * @caching This method **does not** cache its result. If an entitlement's application id is the client's application id.
+     * @caches {@link ClientApplication#entitlements | ClientApplication#entitlements}
+     */
+    async getEntitlements(applicationID: string): Promise<Array<Entitlement | TestEntitlement>> {
+        return this._manager.request<Array<Types.Applications.RawEntitlement | Types.Applications.RawTestEntitlement>>({
+            method: "GET",
+            path: Routes.OAUTH_ENTITLEMENTS(applicationID),
+            auth: this._token,
+        }).then(data => data.map(d => this._manager.client.util.updateEntitlement(d)));
+    }
+
+    /**
+     * Get the OIDC userinfo.
+     *
+     * Note: requires the `openid` scope.
+     */
+    async getOIDCUserInfo(): Promise<Types.OAuth.OIDCUserInfo> {
+        return this._manager.request<Types.OAuth.RawOIDCUserInfo>({
+            method: "GET",
+            path: Routes.OAUTH_OIDC_USERINFO,
+            auth: this._token,
+        }).then(data => ({
+            email: data.email,
+            emailVerified: data.email_verified,
+            locale: data.locale,
+            nickname: data.nickname,
+            picture: data.picture,
+            preferredUsername: data.preferred_username,
+            sub: data.sub,
+        }));
+    }
+
+    /**
+     * Revoke the used access token.
+     * @param options The options for revoking the token.
+     */
+    async revokeToken(options: Omit<Types.OAuth.RevokeTokenOptions, "token">): Promise<void> {
+        const form = new FormData();
+        form.append("client_id", options.clientID);
+        form.append("client_secret", options.clientSecret);
+        form.append("token", this._token);
+        await this._manager.authRequest<null>({
+            method: "POST",
+            path: Routes.OAUTH_TOKEN_REVOKE,
+            form,
+        });
+    }
+
+    /**
+     * Update the authenticated user's role connection object for an application. This requires the `role_connections.write` scope.
+     * @param applicationID The ID of the application.
+     * @param data The metadata to update.
+     */
+    async updateRoleConnection(applicationID: string, data: Types.OAuth.UpdateUserApplicationRoleConnectionOptions): Promise<Types.OAuth.RoleConnection> {
+        return this._manager.request<Types.OAuth.RawRoleConnection>({
+            method: "PUT",
+            path: Routes.OAUTH_ROLE_CONNECTION(applicationID),
+            json: {
+                metadata: data.metadata,
+                platform_name: data.platformName,
+                platform_username: data.platformUsername,
+            },
+            auth: this._token,
+        }).then(d => ({
+            metadata: Object.entries(d.metadata).map(([key, value]) => ({
+                [key]: {
+                    description: value.description,
+                    descriptionLocalizations: value.description_localizations,
+                    key: value.key,
+                    name: value.name,
+                    nameLocalizations: value.name_localizations,
+                    type: value.type,
+                },
+            })).reduce((a, b) => ({ ...a, ...b })),
+            platformName: d.platform_name,
+            platformUsername: d.platform_username,
+        }));
+    }
+}

@@ -1,0 +1,103 @@
+/** @module REST/Miscellaneous */
+import Soundboard from "../structures/Soundboard";
+import * as Routes from "../util/Routes";
+
+import type RESTManager from "../rest/RESTManager";
+import type * as Types from "../types/namespaced";
+
+/** Methods that don't fit anywhere else. Located at {@link Client#rest | Client#rest}{@link RESTManager#misc | .misc}. */
+export default class Miscellaneous {
+    private _manager: RESTManager;
+    constructor(manager: RESTManager) {
+        this._manager = manager;
+    }
+
+    /**
+     * Get the default soundboard sounds.
+     * @caching This method **does not** cache its result.
+     */
+    async getDefaultSoundboardSounds(): Promise<Array<Soundboard>> {
+        return this._manager.authRequest<Array<Types.Channels.RawSoundboard>>({
+            method: "GET",
+            path: Routes.SOUNDBOARD_DEFAULT_SOUNDS,
+        }).then(data => data.map(d => new Soundboard(d, this._manager.client)));
+    }
+
+    /**
+     * Get a sticker.
+     * @param stickerID The ID of the sticker to get.
+     * @caching This method **may** cache its result. The result will not be cached if the guild is not cached, or if the sticker is not a guild sticker.
+     * @caches {@link Guild#stickers | Guild#stickers}
+     */
+    async getSticker(stickerID: string): Promise<Types.Guilds.Sticker> {
+        return this._manager.authRequest<Types.Guilds.RawSticker>({
+            method: "GET",
+            path: Routes.STICKER(stickerID),
+        }).then(data => data.guild_id === undefined ? this._manager.client.util.convertSticker(data) : this._manager.client.guilds.get(data.guild_id)?.stickers.update(data) ?? this._manager.client.util.convertSticker(data));
+    }
+
+    /**
+     * Get a default sticker pack.
+     * @caching This method **does not** cache its result.
+     */
+    async getStickerPack(stickerPackID: string): Promise<Types.Guilds.StickerPack> {
+        return this._manager.authRequest<Types.Guilds.RawStickerPack>({
+            method: "GET",
+            path: Routes.STICKER_PACK(stickerPackID),
+        }).then(data => ({
+            bannerAssetID: data.banner_asset_id,
+            coverStickerID: data.cover_sticker_id,
+            description: data.description,
+            id: data.id,
+            name: data.name,
+            skuID: data.sku_id,
+            stickers: data.stickers.map(sticker => this._manager.client.util.convertSticker(sticker)),
+        }));
+    }
+
+    /**
+     * Get the default sticker packs.
+     * @caching This method **does not** cache its result.
+     */
+    async getStickerPacks(): Promise<Array<Types.Guilds.StickerPack>> {
+        return this._manager.authRequest<{ sticker_packs: Array<Types.Guilds.RawStickerPack> }>({
+            method: "GET",
+            path: Routes.STICKER_PACKS,
+        }).then(data => data.sticker_packs.map(pack => ({
+            bannerAssetID: pack.banner_asset_id,
+            coverStickerID: pack.cover_sticker_id,
+            description: pack.description,
+            id: pack.id,
+            name: pack.name,
+            skuID: pack.sku_id,
+            stickers: pack.stickers.map(sticker => this._manager.client.util.convertSticker(sticker)),
+        })));
+    }
+
+    /**
+     * Get the list of usable voice regions.
+     * @caching This method **does not** cache its result.
+     */
+    async getVoiceRegions(): Promise<Array<Types.Voice.VoiceRegion>> {
+        return this._manager.authRequest<Array<Types.Voice.VoiceRegion>>({
+            method: "GET",
+            path: Routes.VOICE_REGIONS,
+        });
+    }
+
+    /**
+     * Refresh expired attachment URLs.
+     * @param urls The CDN urls to refresh.
+     */
+    async refreshAttachmentURLs(urls: Array<string>): Promise<Types.Misc.RefreshAttachmentURLsResponse> {
+        return this._manager.authRequest<Types.Misc.RawRefreshAttachmentURLsResponse>({
+            method: "POST",
+            path: Routes.REFRESH_ATTACHMENT_URLS,
+            json: {
+                attachment_urls: urls,
+            },
+        }).then(data => ({
+            refreshedURLs: data.refreshed_urls,
+        }));
+    }
+}

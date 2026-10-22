@@ -1,0 +1,1740 @@
+# Application Commands
+
+Application commands are commands that an application can register to Discord. They provide users a first-class way of interacting directly with your application that feels deeply integrated into Discord.
+
+###### Application Command Naming
+
+`CHAT_INPUT` and `PRIMARY_ENTRY_POINT` command names and command option names must match the regex `^[-_'\p{L}\p{N}\p{sc=Deva}\p{sc=Thai}]{1,32}$` with the unicode flag set. If there is a lowercase variant of any letters used, you must use those.
+Characters with no lowercase variants and uncased letters are still allowed. `USER` and `MESSAGE` commands may be mixed case and can include spaces.
+
+### Application Command Object
+
+###### Application Command Structure
+
+| Field                               | Type                                                                                             | Description                                                                                                                                                     | Valid Types           |
+| ----------------------------------- | ------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------- |
+| id? ^1^                             | snowflake                                                                                        | The ID of the command                                                                                                                                           | All                   |
+| type?                               | integer                                                                                          | The type of command (default `CHAT_INPUT`)                                                                                                                      | All                   |
+| application_id ^2^                  | snowflake                                                                                        | The ID of the application that the command belongs to                                                                                                           | All                   |
+| guild_id? ^2^                       | snowflake                                                                                        | The ID of the guild the command is for                                                                                                                          | All                   |
+| name ^5^                            | string                                                                                           | The name of the command (1-32 characters)                                                                                                                       | All                   |
+| name_localizations?                 | ?map[string, string]                                                                             | The localized name for each [locale](/reference#locales) (values follow same restrictions as `name`)                                                            | All                   |
+| name_localized? ^2^ ^5^             | ?string                                                                                          | The localized name of the command                                                                                                                               | All                   |
+| name_default? ^2^ ^4^ ^5^           | string                                                                                           | The name of the command                                                                                                                                         | All                   |
+| description ^5^                     | string                                                                                           | The description of the command (1-100 characters)                                                                                                               | All                   |
+| description_localizations?          | ?map[string, string]                                                                             | The localized description for each [locale](/reference#locales) (values follow same restrictions as `description`)                                              | All                   |
+| description_localized? ^2^ ^5^      | ?string                                                                                          | The localized description of the command                                                                                                                        | All                   |
+| description_default? ^2^ ^4^ ^5^    | string                                                                                           | The description of the command                                                                                                                                  | All                   |
+| options?                            | array[[application command option](#application-command-option-structure) object]                | The options for the command (max 25)                                                                                                                            | `CHAT_INPUT`          |
+| default_member_permissions          | ?string                                                                                          | The default required permissions to call the command                                                                                                            | All                   |
+| dm_permission? ^3^ **(deprecated)** | boolean                                                                                          | Whether the command is available in DMs with the application (default true)                                                                                     | All                   |
+| permissions? ^4^                    | [application command index permissions](#application-command-index-permissions-structure) object | The command's permissions for the user in the guild                                                                                                             | All                   |
+| nsfw?                               | boolean                                                                                          | Whether the command is age-restricted (default false)                                                                                                           | All                   |
+| integration_types? ^3^              | array[integer]                                                                                   | The [installation contexts](/resources/application#application-integration-type) where the command is available (defaults to application's configured contexts) | All                   |
+| global_popularity_rank? ^2^ ^3^ ^4^ | integer                                                                                          | The popularity rank of the application command                                                                                                                  | All                   |
+| contexts? ^3^                       | ?array[integer]                                                                                  | The [interaction context](/interactions/receiving-and-responding#interaction-context-type) where the command can be used                                        | All                   |
+| version ^2^                         | snowflake                                                                                        | An autoincrementing version identifier updated during substantial record changes                                                                                | All                   |
+| handler? ^3^                        | integer                                                                                          | [How the command should be handled when called](#application-command-handler-type)                                                                              | `PRIMARY_ENTRY_POINT` |
+
+^1^ This field is always present when received.
+
+^2^ This field is received only and cannot be set.
+
+^3^ Only applicable for globally-scoped commands.
+
+^4^ Only available within [application command index](#application-command-index-object) objects.
+
+^5^ Within [application command index](#application-command-index-object) objects, if a `name_localized` is determined, it will be serialized as `name`, with the original `name` being serialized as `name_default`. The same applies to `description_localized` and `description_default`.
+
+###### Application Command Type
+
+| Value | Name                | Description                                                                     |
+| ----- | ------------------- | ------------------------------------------------------------------------------- |
+| 1     | CHAT_INPUT          | Slash commands; a text-based command that shows up when a user types `/`        |
+| 2     | USER                | An UI-based command that shows up when you right click or tap on an user        |
+| 3     | MESSAGE             | An UI-based command that shows up when you right click or tap on a message      |
+| 4     | PRIMARY_ENTRY_POINT | An UI-based command that represents the primary way to invoke an app's activity |
+
+###### Application Command Option Structure
+
+<Alert type="warn">
+
+Required options must be listed before optional ones.
+
+</Alert>
+
+| Field                      | Type                                                                                            | Description                                                                                                                                                 |
+| -------------------------- | ----------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| type                       | integer                                                                                         | The [type of the option](#application-command-option-type)                                                                                                  |
+| name                       | string                                                                                          | The name of the option (1-100 characters)                                                                                                                   |
+| name_localizations?        | ?map[string, string]                                                                            | The localized name for each [locale](/reference#locales) (values follow same restrictions as `name`)                                                        |
+| name_localized? ^1^        | ?string                                                                                         | The localized name of the option (1-100 characters)                                                                                                         |
+| description                | string                                                                                          | The description of the option (1-100 characters)                                                                                                            |
+| description_localizations? | ?map[string, string]                                                                            | The localized description for each [locale](/reference#locales) (values follow same restrictions as `description`)                                          |
+| description_localized? ^1^ | ?string                                                                                         | The localized description of the option (1-100 characters)                                                                                                  |
+| required?                  | boolean                                                                                         | Whether the option is required (default false, only applicable when `type` is not [`SUB_COMMAND` or `SUB_COMMAND_GROUP`](#application-command-option-type)) |
+| choices?                   | array[[application command option choice](#application-command-option-choice-structure) object] | The choices for the user to pick from (max 25, only applicable for [`STRING`, `INTEGER`, and `NUMBER`](#application-command-option-type) options)           |
+| options?                   | array[[application command option](#application-command-option-structure) object]               | The nested options (only applicable if the option is a subcommand or subcommand group)                                                                      |
+| channel_types?             | array[integer]                                                                                  | The allowed [channel types](/resources/channel#channel-type) (only applicable for [`CHANNEL`](#application-command-option-type) options)                    |
+| min_value?                 | float \| integer                                                                                | The minimum value permitted (only applicable for [`INTEGER` and `NUMBER`](#application-command-option-type) options)                                        |
+| max_value?                 | float \| integer                                                                                | The maximum value permitted (only applicable for [`INTEGER` and `NUMBER`](#application-command-option-type) options)                                        |
+| min_length?                | integer                                                                                         | The minimum length (0-6000, only applicable for [`STRING`](#application-command-option-type) options)                                                       |
+| max_length?                | integer                                                                                         | The maximum length (0-6000, only applicable for [`STRING`](#application-command-option-type) options)                                                       |
+| autocomplete?              | boolean                                                                                         | Whether the option can be autocompleted (only applicable for [`STRING`, `INTEGER`, and `NUMBER`](#application-command-option-type) options)                 |
+| file_types? ^2^            | array[[file type](/reference#file-types)]                                                       | The file types permitted to be uploaded (max 10, only applicable for [`ATTACHMENT`](#application-command-option-type) options)                              |
+
+^1^ This field is received only and cannot be set.
+
+^2^ This field can only be set and is not received.
+
+###### Application Command Option Type
+
+| Value | Name              | Description                                           |
+| ----- | ----------------- | ----------------------------------------------------- |
+| 1     | SUB_COMMAND       | A subcommand                                          |
+| 2     | SUB_COMMAND_GROUP | A group of subcommands                                |
+| 3     | STRING            | A string                                              |
+| 4     | INTEGER           | An integer between -2^53^ and 2^53^                   |
+| 5     | BOOLEAN           | A boolean                                             |
+| 6     | USER              | An user                                               |
+| 7     | CHANNEL           | A channel (includes all channel types by default)     |
+| 8     | ROLE              | A role                                                |
+| 9     | MENTIONABLE       | A mentionable entity (currently only users and roles) |
+| 10    | NUMBER            | A float/integer between -2^53^ and 2^53^              |
+| 11    | ATTACHMENT        | An [attachment](/resources/message#attachment-object) |
+
+###### Application Command Option Choice Structure
+
+If you specify `choices` for an option, they are the **only** valid values for an user to pick.
+
+| Field               | Type                       | Description                                                                                          |
+| ------------------- | -------------------------- | ---------------------------------------------------------------------------------------------------- |
+| name                | string                     | The name of the choice (1-100 characters)                                                            |
+| name_localizations? | ?map[string, string]       | The localized name for each [locale](/reference#locales) (values follow same restrictions as `name`) |
+| name_localized? ^1^ | ?string                    | The localized name of the choice (1-100 characters)                                                  |
+| value               | float \| integer \| string | The value of the choice (max 100 characters if string)                                               |
+
+^1^ This field is received only and cannot be set.
+
+###### Application Command Handler Type
+
+| Value | Name                        | Description                                                                                                                                                                              |
+| ----- | --------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1     | APP_HANDLER                 | The application handles the interaction using an interaction token                                                                                                                       |
+| 2     | DISCORD_LAUNCH_ACTIVITY     | Discord handles the interaction by launching an embedded activity and sending a follow-up message without coordinating with the app                                                      |
+| 3     | APP_HANDLER_LAUNCH_ACTIVITY | The application handles the interaction using an interaction token and can only use [`LAUNCH_ACTIVITY`](/interactions/receiving-and-responding#interaction-callback-type) for responding |
+
+## Application Command Index Object
+
+Multiple different resources have application command indexes, including guilds, users, and applications themselves.
+
+###### Application Command Index Structure
+
+| Field                | Type                                                                            | Description                                              |
+| -------------------- | ------------------------------------------------------------------------------- | -------------------------------------------------------- |
+| applications         | array[[command index application](#command-index-application-structure) object] | The applications relevant to the requested resource      |
+| application_commands | array[[application command](#application-command-object) object]                | The application commands                                 |
+| version              | snowflake                                                                       | A snowflake representing when commands were last updated |
+
+###### Application Command Index Permissions Structure
+
+| Field     | Type                    | Description                                                                                     |
+| --------- | ----------------------- | ----------------------------------------------------------------------------------------------- |
+| user?     | boolean                 | Whether the user can use application commands unless overridden by command permissions          |
+| roles?    | map[snowflake, boolean] | Whether specific roles can use application commands unless overridden by command permissions    |
+| channels? | map[snowflake, boolean] | Whether specific channels can use application commands unless overridden by command permissions |
+
+###### Command Index Application Structure
+
+| Field                         | Type                                                                                              | Description                                                         |
+| ----------------------------- | ------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------- |
+| id                            | snowflake                                                                                         | The ID of the application                                           |
+| name                          | string                                                                                            | The name of the application                                         |
+| description                   | string                                                                                            | The description of the application                                  |
+| icon                          | ?string                                                                                           | The application's [icon hash](/reference#cdn-formatting)            |
+| permissions?                  | [application command index permissions](#application-command-index-permissions-structure) object  | The application-wide command permissions for the user               |
+| bot? ^1^                      | partial [user](/resources/user#user-object) object                                                | The bot attached to this application                                |
+| bot_id?                       | snowflake                                                                                         | The ID of the bot user attached to this application                 |
+| flags                         | string                                                                                            | The [application's flags](/resources/application#application-flags) |
+| embedded_activity_config? ^2^ | partial [embedded activity config](/resources/application#embedded-activity-config-object) object | The embedded activity configuration for the application             |
+
+^1^ Only included when fetched from the [Get Application Command Index](#get-application-command-index) endpoint.
+
+^2^ Embedded activity config objects will only contain the `supported_platforms` field.
+
+###### Example Command Index Application
+
+```json
+{
+  "id": "891436233903964161",
+  "name": "Lightbulb",
+  "description": "💡 Let there be light",
+  "icon": "546242649e3b09a97af7e8f29983837b",
+  "permissions": {
+    "roles": {
+      "1029330445336313927": false
+    },
+    "channels": {
+      "1029316811088478299": false
+    }
+  },
+  "bot_id": "891436233903964161",
+  "flags": "0",
+  "embedded_activity_config": {
+    "supported_platforms": ["web"]
+  }
+}
+```
+
+## Authorizing Your Application
+
+Application commands do not depend on a bot user in the guild; they use the [interactions](/interactions/receiving-and-responding) model. To create commands in a guild, your application must be authorized with the `applications.commands` scope.
+
+<Alert type="info">
+
+Requesting the `bot` scope will implicitly direct the client to request the `applications.commands` scope as well.
+
+</Alert>
+
+When requesting this scope, Discord "shortcuts" the OAuth2 flow similar to adding a bot. You don't need to complete the flow, exchange for a token, or any of that.
+
+If your application does not require a bot user within the guild for its commands to work, **you no longer need to add for the bot scope or specific permissions**.
+
+## Registering a Command
+
+Commands can be scoped either globally or to a specific guild. Global commands are available for every guild that adds your app. An individual app's global commands are also available in DMs if that app has a bot that shares a mutual guild with the user.
+
+Guild commands are specific to the guild you specify when making them. Guild commands are not available in DMs. Command names are unique per application, per type, within each scope (global and guild). That means:
+
+- Your app **cannot** have two global `CHAT_INPUT` commands with the same name
+- Your app **cannot** have two guild `CHAT_INPUT` commands within the same name **on the same guild**
+- Your app **cannot** have two global `USER` commands with the same name
+- Your app **can** have a global and guild `CHAT_INPUT` command with the same name
+- Your app **can** have a global `CHAT_INPUT` and `USER` command with the same name
+- Multiple apps **can** have commands with the same names
+
+This list is non-exhaustive. In general, remember that command names must be unique per application, per type, and within each scope (global and guild).
+
+An app can have the following number of commands:
+
+- 100 global `CHAT_INPUT` commands
+- 15 global `USER` commands
+- 15 global `MESSAGE` commands
+- 1 global `PRIMARY_ENTRY_POINT` command
+
+For all command types except `PRIMARY_ENTRY_POINT`, you can have the same amount of guild-specific commands per guild.
+
+<Alert type="danger">
+
+There is a global rate limit of 200 application command creates per day, per guild.
+
+</Alert>
+
+<Collapsible title="Making a Global Command" description="Simple example of making a global command" icon="code">
+
+Global commands are available on _all_ your app's guilds.
+
+Global commands have inherent read-repair functionality. That means that if you make an update to a global command, and an user tries to use that command before it has updated for them, Discord will do an internal version check and reject the command, and trigger a reload for that command.
+
+To make a **global** command, make an HTTP POST call like this:
+
+```py
+import requests
+
+url = "https://discord.com/api/v10/applications/<my_application_id>/commands"
+
+# This is an example CHAT_INPUT or Slash Command, with a type of 1
+json = {
+    "name": "blep",
+    "type": 1,
+    "description": "Send a random adorable animal photo",
+    "options": [
+        {
+            "name": "animal",
+            "description": "The type of animal",
+            "type": 3,
+            "required": True,
+            "choices": [
+                {
+                    "name": "Dog",
+                    "value": "animal_dog"
+                },
+                {
+                    "name": "Cat",
+                    "value": "animal_cat"
+                },
+                {
+                    "name": "Penguin",
+                    "value": "animal_penguin"
+                }
+            ]
+        },
+        {
+            "name": "only_smol",
+            "description": "Whether to show only baby animals",
+            "type": 5,
+            "required": False
+        }
+    ]
+}
+
+# For authorization, you can use either your bot token
+headers = {
+    "Authorization": "Bot <my_bot_token>"
+}
+
+# or a client credentials token for your app with the applications.commands.update scope
+headers = {
+    "Authorization": "Bearer <my_credentials_token>"
+}
+
+r = requests.post(url, headers=headers, json=json)
+```
+
+</Collapsible>
+
+<Collapsible title="Making a Guild Command" description="Simple example of making a guild command" icon="code">
+
+Guild commands are available only within the guild specified on creation.
+
+To make a **guild** command, make a similar HTTP POST call, but scope it to a specific `guild_id`:
+
+```py
+import requests
+
+url = "https://discord.com/api/v10/applications/<my_application_id>/guilds/<guild_id>/commands"
+
+# This is an example USER command, with a type of 2
+json = {
+    "name": "High Five",
+    "type": 2
+}
+
+# For authorization, you can use either your bot token
+headers = {
+    "Authorization": "Bot <my_bot_token>"
+}
+
+# or a client credentials token for your app with the applications.commands.update scope
+headers = {
+    "Authorization": "Bearer <my_credentials_token>"
+}
+
+r = requests.post(url, headers=headers, json=json)
+```
+
+</Collapsible>
+
+## Updating and Deleting a Command
+
+Commands can be deleted and updated by making `DELETE` and `PATCH` calls to the command endpoint. Those endpoints are
+
+- `/applications/{application.id}/commands/{command.id}` for global commands, or
+- `/applications/{application.id}/guilds/{guild.id}/commands/{command.id}` for guild commands
+
+Because commands have unique names within a type and scope, Discord treats `POST` requests for new commands as upserts. That means **making a new command with an already-used name for your application will update the existing command**.
+
+Full documentation of endpoints can be found [here](#endpoints).
+
+## Contexts
+
+Commands have two sets of contexts on the [application command object](#application-command-object) that let you to configure when and where it can be used:
+
+- `integration_types` defines the **[installation contexts](#installation-context)** that a command supports
+- `contexts` defines the **[interaction contexts](#interaction-context)** where a command can be used
+
+Details for both types of command contexts are in the sections below.
+
+<Alert type="info">
+
+Contexts are distinct from, and do not affect, any [command permissions](#permissions) for applications in a guild.
+
+</Alert>
+
+### Installation Context
+
+The [installation context](/resources/application#application-integration-type) is where your app was installed—to a guild, a user, or both. If your app supports both installation contexts, there may be cases where you want some of your app's commands to only be available for one or the other.
+For example, maybe your app has a `/profile` command that is only relevant when it's installed to a user.
+
+A command's supported installation context(s) can be set using the [`integration_types` field](#application-command-object) when creating or updating a command as long as any included contexts are already [supported by the application's `integration_types`](/resources/application#application-object).
+
+### Interaction Context
+
+The interaction contexts for a command determines where it can be used, and can be configured by setting the [`contexts` field](#application-command-object) when creating or updating a command.
+
+There are three [interaction context types](/interactions/receiving-and-responding#interaction-context-type) that correspond to different surfaces: `GUILD`, `BOT_DM`, and `PRIVATE_CHANNEL`. However, the `PRIVATE_CHANNEL` interaction context is only meaningful for commands installed to a user (when the command's `integration_types` includes `USER_INSTALL`).
+
+## Permissions
+
+Application command permissions allow commands to be configured on an individual basis for up to 100 users, roles, and channels within a guild.
+
+<Alert type="warn">
+
+Command permissions cannot be updated using a bot.
+
+</Alert>
+
+A command's current permissions can be retrieved using the [`GET /applications/{application.id}/guilds/{guild.id}/commands/{command.id}/permissions`](#get-application-command-permissions) endpoint. The response will include a `permissions` arrau with associated IDs and permission types.
+
+Command permissions can be updated with the [`PUT /applications/{application.id}/guilds/{guild.id}/commands/{command.id}/permissions`](#modify-application-command-permissions) endpoint by a user with sufficient permissions.
+For their permissions to be considered sufficient, all of the following must be true:
+
+- Has [permission to `MANAGE_GUILD` and `MANAGE_ROLES`](/topics/permissions) in the guild where the command is being edited
+- Has the ability to run the command being edited
+- Has permission to manage the resources that will be affected (roles, users, and/or channels depending on the [permission types](#application-command-permission-type))
+
+### Application Command Permissions Object
+
+###### Guild Application Command Permissions Structure
+
+Returned when fetching the permissions for a command in a guild.
+
+| Field          | Type                                                                                        | Description                                            |
+| -------------- | ------------------------------------------------------------------------------------------- | ------------------------------------------------------ |
+| id ^1^         | snowflake                                                                                   | The ID of the command                                  |
+| application_id | snowflake                                                                                   | The ID of the application the command belongs to       |
+| guild_id       | snowflake                                                                                   | The ID of the guild                                    |
+| permissions    | array[[application command permissions](#application-command-permissions-structure) object] | The permissions for the command in the guild (max 100) |
+
+^1^ When the `id` field is the application ID instead of a command ID, the permissions apply to all commands the application provides that do not otherwise have explicit overwrites.
+
+###### Application Command Permissions Structure
+
+Application command permissions allow you to enable or disable commands for specific users or roles within a guild.
+
+| Field      | Type      | Description                                                                                      |
+| ---------- | --------- | ------------------------------------------------------------------------------------------------ |
+| id         | snowflake | The ID of the role or user                                                                       |
+| type       | integer   | The type of the [application command permission overwrite](#application-command-permission-type) |
+| permission | boolean   | Whether the command is allowed to be invoked by the entity                                       |
+
+###### Application Command Permissions Constants
+
+The following constants can be used in the `id` field for command permissions payloads.
+
+| Permission   | Value          | Type      | Description             |
+| ------------ | -------------- | --------- | ----------------------- |
+| `@everyone`  | `guild_id`     | snowflake | All members in a guild  |
+| All Channels | `guild_id - 1` | snowflake | All channels in a guild |
+
+###### Application Command Permission Type
+
+| Value | Name    | Description              |
+| ----- | ------- | ------------------------ |
+| 1     | ROLE    | A role within a guild    |
+| 2     | USER    | A guild member           |
+| 3     | CHANNEL | A channel within a guild |
+
+To allow for fine-tuned access to commands, application command permissions are supported for guild and global commands of all types. Guild members and apps with the [necessary permissions](#permissions) can allow or deny specific users and roles from using a command, or toggle commands for entire channels.
+
+Similar to how threads [inherit user and role permissions from the parent channel](/topics/threads#permissions), any command permissions for a channel will apply to the threads it contains.
+
+<Alert type="info">
+
+If you don't have permission to use a command, it will not show up in the command index. Members with the `ADMINISTRATOR` permission can use all commands.
+
+</Alert>
+
+###### Using Default Permissions
+
+Default permissions can be added to a command during creation using the `default_member_permissions` and `context` fields. This is the only opportunity for bots to configure permissions on commands, as per-guild command permissions must be configured by a user account or through OAuth2.
+
+The `default_member_permissions` field can be used when creating a command to set the permissions a user must have to use it.
+The value for `default_member_permissions` is a bitwise OR-ed set of [permissions](/topics/permissions#bitwise-permission-flags), serialized as a string.
+Setting it to `0` will prohibit anyone in a guild from using the command unless a specific overwrite is configured or the user has admin permissions.
+
+You can also include `BOT_DM` in `contexts` when setting a global command's [interaction contexts](#interaction-context) to control whether it can be run in DMs with your bot. Guild commands don't support the `BOT_DM` interaction context.
+
+###### Example of Editing Permissions
+
+<Collapsible title="Example of Editing Permissions" description="Simple example of editing command permissions" icon="code">
+
+As an example, the following command would not be usable by anyone except admins in any guilds by default:
+
+```json
+{
+  "name": "permissions_test",
+  "description": "A test of default permissions",
+  "type": 1,
+  "default_member_permissions": "0"
+}
+```
+
+Or this would enable it just for users that have the `MANAGE_GUILD` permission:
+
+```py
+permissions = str(1 << 5)
+
+command = {
+    "name": "permissions_test",
+    "description": "A test of default permissions",
+    "type": 1,
+    "default_member_permissions": permissions
+}
+```
+
+And the following would disable a command for a specific channel:
+
+```py
+A_SPECIFIC_CHANNEL = "<channel_id>"
+url = "https://discord.com/api/v10/applications/<application_id>/guilds/<my_guild_id>/commands/<my_command_id>/permissions"
+
+json = {
+    "permissions": [
+        {
+            "id": A_SPECIFIC_CHANNEL,
+            "type": 3,
+            "permission": False
+        }
+    ]
+}
+
+headers = {
+    "Authorization": "Bearer <my_bearer_token>"
+}
+
+r = requests.put(url, headers=headers, json=json)
+```
+
+</Collapsible>
+
+## Slash Commands
+
+Slash commands—the `CHAT_INPUT` type—are a type of application command. They're made up of a name, description, and a block of `options`, which you can think of like arguments to a function.
+The name and description help users find your command among many others, and the `options` validate user input as they fill out your command.
+
+Slash commands can also have groups and subcommands to further organize commands. More on those later.
+
+<Alert type="warn">
+
+Slash commands can have a maximum of 8000 characters for combined name, description, and value properties for each command, its options (including subcommands and groups), and choices.
+When [localization fields](#localization) are present, only the longest localization for each field (including the default value) is counted towards the size limit.
+
+</Alert>
+
+###### Example Slash Command
+
+```json
+{
+  "id": "1267261558183034922",
+  "application_id": "891436233903964161",
+  "version": "1267644402063507572",
+  "default_member_permissions": null,
+  "type": 1,
+  "name": "blep",
+  "description": "Send a random adorable animal photo",
+  "dm_permission": true,
+  "contexts": [0, 1, 2],
+  "integration_types": [0, 1],
+  "options": [
+    {
+      "name": "animal",
+      "description": "The type of animal",
+      "type": 3,
+      "required": true,
+      "choices": [
+        {
+          "name": "Dog",
+          "value": "animal_dog"
+        },
+        {
+          "name": "Cat",
+          "value": "animal_cat"
+        },
+        {
+          "name": "Penguin",
+          "value": "animal_penguin"
+        }
+      ]
+    },
+    {
+      "name": "only_smol",
+      "description": "Whether to show only baby animals",
+      "type": 5,
+      "required": false
+    }
+  ],
+  "nsfw": false
+}
+```
+
+When someone uses a slash command, your application will receive an interaction:
+
+###### Example Slash Command Interaction
+
+<Collapsible title="Slash Command Interaction" description="View sample payload for Slash Command interactions" icon="code">
+
+```json
+{
+  "id": "786008729715212338",
+  "application_id": "775799577604522054",
+  "type": 2,
+  "data": {
+    "id": "1267261558183034922",
+    "name": "blep",
+    "options": [
+      {
+        "type": 3,
+        "name": "animal",
+        "value": "animal_cat"
+      },
+      {
+        "type": 5,
+        "name": "only_smol",
+        "value": true
+      }
+    ]
+  },
+  "guild": {
+    "id": "290926798626357999",
+    "features": [],
+    "locale": "en-US"
+  },
+  "channel": {
+    "id": "645027906669510667",
+    "type": 0,
+    "guild_id": "290926798626357999",
+    "position": 0,
+    "name": "general",
+    "topic": null,
+    "nsfw": false,
+    "last_message_id": null,
+    "rate_limit_per_user": 0,
+    "parent_id": null,
+    "last_pin_timestamp": null,
+    "permissions": "2147483647",
+    "flags": 0,
+    "icon_emoji": null,
+    "theme_color": null
+  },
+  "channel_id": "645027906669510667",
+  "member": {
+    "user": {
+      "id": "53908232506183680",
+      "username": "mason",
+      "avatar": "a_d5efa99b3eeaa7dd43acca82f5692432",
+      "discriminator": "0",
+      "public_flags": 4325445,
+      "banner": "42db4e3be824706cb1304fba05995722",
+      "accent_color": null,
+      "global_name": "Mason",
+      "avatar_decoration_data": null,
+      "collectibles": null,
+      "display_name_styles": null,
+      "primary_guild": null
+    },
+    "nick": null,
+    "avatar": null,
+    "avatar_decoration_data": null,
+    "banner": null,
+    "roles": ["539082325061836999"],
+    "joined_at": "2017-03-13T19:19:14.040000+00:00",
+    "premium_since": null,
+    "deaf": false,
+    "mute": false,
+    "pending": false,
+    "communication_disabled_until": null,
+    "unusual_dm_activity_until": null,
+    "flags": 0,
+    "permissions": "2147483647"
+  },
+  "token": "A_UNIQUE_TOKEN",
+  "version": 1,
+  "app_permissions": "442368",
+  "locale": "en-US",
+  "guild_locale": "en-US",
+  "entitlements": [],
+  "entitlement_sku_ids": [],
+  "authorizing_integration_owners": {
+    "0": "290926798626357999",
+    "1": "53908232506183680"
+  },
+  "attachment_size_limit": 524288000
+}
+```
+
+</Collapsible>
+
+## Subcommands and Subcommand Groups
+
+For those developers looking to make more organized and complex groups of commands, look no further than subcommands and groups.
+
+**Subcommands** organize your commands by **specifying actions within a command or group**.
+
+**Subcommand Groups** organize your **subcommands** by **grouping subcommands by similar action or resource within a command**.
+
+These are not enforced rules. You are free to use subcommands and groups however you'd like; it's just how Discord thinks about them.
+
+<Alert type="danger">
+
+Using subcommands or subcommand groups will make your base command unusable. You can't send the base `/permissions` command as a valid command if you also have `/permissions add | remove` as subcommands or subcommand groups
+
+</Alert>
+
+Discord supports nesting one level deep within a group, meaning your top level command can contain subcommand groups, and those groups can contain subcommands. **That is the only kind of nesting supported.** Here's some visual examples:
+
+```
+VALID
+
+  command
+  |
+  |__ subcommand
+  |
+  |__ subcommand
+
+  #######
+
+  command
+  |
+  |__ subcommand-group
+      |
+      |__ subcommand
+  |
+  |__ subcommand-group
+      |
+      |__ subcommand
+
+#######
+
+INVALID
+
+  command
+  |
+  |__ subcommand-group
+      |
+      |__ subcommand-group
+  |
+  |__ subcommand-group
+      |
+      |__ subcommand-group
+
+  #######
+
+  command
+  |
+  |__ subcommand
+      |
+      |__ subcommand-group
+  |
+  |__ subcommand
+      |
+      |__ subcommand-group
+```
+
+### Example Walkthrough
+
+<Collapsible title="Example Walkthrough" description="View a moderation bot command example" icon="code">
+
+Let's look at an example. Let's imagine you run a moderation bot. You want to make a `/permissions` command that can do the following:
+
+- Get the guild permissions for a user or a role
+- Get the permissions for a user or a role on a specific channel
+- Change the guild permissions for a user or a role
+- Change the permissions for a user or a role on a specific channel
+
+We'll start by defining the top-level information for `/permissions`:
+
+```js
+{
+    "name": "permissions",
+    "description": "Get or edit permissions for a user or a role",
+    "options": []
+}
+```
+
+Now we have a command named `permissions`. We want this command to be able to affect users and roles. Rather than making two separate commands, we can use subcommand groups. We want to use subcommand groups here because we are grouping commands on a similar resource: `user` or `role`.
+
+```js
+{
+    "name": "permissions",
+    "description": "Get or edit permissions for a user or a role",
+    "options": [
+        {
+            "name": "user",
+            "description": "Get or edit permissions for a user",
+            "type": 2 // 2 is type SUB_COMMAND_GROUP
+        },
+        {
+            "name": "role",
+            "description": "Get or edit permissions for a role",
+            "type": 2
+        }
+    ]
+}
+```
+
+You'll notice that a command like this **will not show up** in the command explorer. That's because groups are effectively "folders" for commands, and we've made two empty folders. So let's continue.
+
+Now that we've effectively made `user` and `role` "folders", we want to be able to either `get` and `edit` permissions. Within the subcommand groups, we can make subcommands for `get` and `edit`:
+
+```js
+{
+    "name": "permissions",
+    "description": "Get or edit permissions for a user or a role",
+    "options": [
+        {
+            "name": "user",
+            "description": "Get or edit permissions for a user",
+            "type": 2, // 2 is type SUB_COMMAND_GROUP
+            "options": [
+                {
+                    "name": "get",
+                    "description": "Get permissions for a user",
+                    "type": 1 // 1 is type SUB_COMMAND
+                },
+                {
+                    "name": "edit",
+                    "description": "Edit permissions for a user",
+                    "type": 1
+                }
+            ]
+        },
+        {
+            "name": "role",
+            "description": "Get or edit permissions for a role",
+            "type": 2,
+            "options": [
+                {
+                    "name": "get",
+                    "description": "Get permissions for a role",
+                    "type": 1
+                },
+                {
+                    "name": "edit",
+                    "description": "Edit permissions for a role",
+                    "type": 1
+                }
+            ]
+        }
+    ]
+}
+```
+
+Now, we need some arguments! If we chose `user`, we need to be able to pick a user; if we chose `role`, we need to be able to pick a role. We also want to be able to pick between guild-level permissions and channel-specific permissions. For that, we can use optional arguments:
+
+```js
+{
+    "name": "permissions",
+    "description": "Get or edit permissions for an user or a role",
+    "options": [
+        {
+            "name": "user",
+            "description": "Get or edit permissions for an user",
+            "type": 2, // 2 is type SUB_COMMAND_GROUP
+            "options": [
+                {
+                    "name": "get",
+                    "description": "Get permissions for an user",
+                    "type": 1, // 1 is type SUB_COMMAND
+                    "options": [
+                        {
+                            "name": "user",
+                            "description": "The user to get",
+                            "type": 6, // 6 is type USER
+                            "required": true
+                        },
+                        {
+                            "name": "channel",
+                            "description": "The channel permissions to get. If omitted, the guild permissions will be returned",
+                            "type": 7, // 7 is type CHANNEL
+                            "required": false
+                        }
+                    ]
+                },
+                {
+                    "name": "edit",
+                    "description": "Edit permissions for an user",
+                    "type": 1,
+                    "options": [
+                        {
+                            "name": "user",
+                            "description": "The user to edit",
+                            "type": 6,
+                            "required": true
+                        },
+                        {
+                            "name": "channel",
+                            "description": "The channel permissions to edit. If omitted, the guild permissions will be edited",
+                            "type": 7,
+                            "required": false
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "name": "role",
+            "description": "Get or edit permissions for a role",
+            "type": 2,
+            "options": [
+                {
+                    "name": "get",
+                    "description": "Get permissions for a role",
+                    "type": 1,
+                    "options": [
+                        {
+                            "name": "role",
+                            "description": "The role to get",
+                            "type": 8, // 8 is type ROLE
+                            "required": true
+                        },
+                        {
+                            "name": "channel",
+                            "description": "The channel permissions to get. If omitted, the guild permissions will be returned",
+                            "type": 7,
+                            "required": false
+                        }
+                    ]
+                },
+                {
+                    "name": "edit",
+                    "description": "Edit permissions for a role",
+                    "type": 1,
+                    "options": [
+                        {
+                            "name": "role",
+                            "description": "The role to edit",
+                            "type": 8,
+                            "required": true
+                        },
+                        {
+                            "name": "channel",
+                            "description": "The channel permissions to edit. If omitted, the guild permissions will be edited",
+                            "type": 7,
+                            "required": false
+                        }
+                    ]
+                }
+            ]
+        }
+    ]
+}
+```
+
+And, done! The JSON looks a bit complicated, but what we've ended up with is a single command that can be scoped to multiple actions, and then further scoped to a particular resource, and then even _further_ scope with optional arguments.
+
+</Collapsible>
+
+## User Commands
+
+User commands are application commands that appear on the context menu (right click or tap) of users. They're a great way to surface quick actions for your app that target users. They don't take any arguments, and will return the user on whom you clicked or tapped in the interaction response.
+
+<Alert type="warn">
+
+A user must have permission to send text messages in the channel they invoke a user command in.
+
+</Alert>
+
+<Alert type="danger">
+
+The `description` field is not allowed when creating user commands. However, to avoid breaking changes to data models, `description` will be an **empty string** (instead of `null`) when fetching commands.
+
+</Alert>
+
+###### Example User Command
+
+```json
+{
+  "id": "1241360244118917161",
+  "application_id": "682654466453012553",
+  "version": "1263110356692373562",
+  "default_member_permissions": null,
+  "type": 2,
+  "name": "High Five",
+  "description": "",
+  "dm_permission": true,
+  "contexts": [0, 1, 2],
+  "integration_types": [1],
+  "nsfw": false
+}
+```
+
+When someone uses a user command, your application will receive an interaction:
+
+###### Example User Command Interaction
+
+<Collapsible title="User Command Interaction" description="View sample payload for User Command interactions" icon="code">
+
+```json
+{
+  "id": "867794291820986368",
+  "application_id": "775799577604522054",
+  "type": 2,
+  "data": {
+    "id": "1303493304175955988",
+    "name": "High Five",
+    "type": 2,
+    "resolved": {
+      "members": {
+        "809850198683418695": {
+          "nick": null,
+          "avatar": null,
+          "avatar_decoration_data": null,
+          "banner": null,
+          "roles": [],
+          "joined_at": "2021-02-12T18:25:07.972000+00:00",
+          "premium_since": null,
+          "pending": false,
+          "communication_disabled_until": null,
+          "unusual_dm_activity_until": null,
+          "flags": 0,
+          "permissions": "246997699136"
+        }
+      },
+      "users": {
+        "809850198683418695": {
+          "id": "809850198683418695",
+          "username": "VoltyDemo",
+          "avatar": "afc428077119df8aabbbd84b0dc90c74",
+          "discriminator": "7302",
+          "public_flags": 524288,
+          "bot": true,
+          "banner": null,
+          "accent_color": null,
+          "global_name": null,
+          "avatar_decoration_data": null,
+          "collectibles": null,
+          "display_name_styles": null,
+          "primary_guild": null
+        }
+      }
+    },
+    "target_id": "809850198683418695"
+  },
+  "guild": {
+    "id": "772904309264089089",
+    "features": [],
+    "locale": "en-US"
+  },
+  "channel": {
+    "id": "772908445358620702",
+    "type": 0,
+    "guild_id": "772904309264089089",
+    "position": 0,
+    "name": "general",
+    "topic": null,
+    "nsfw": false,
+    "last_message_id": null,
+    "rate_limit_per_user": 0,
+    "parent_id": null,
+    "last_pin_timestamp": null,
+    "permissions": "2147483647",
+    "flags": 0,
+    "icon_emoji": null,
+    "theme_color": null
+  },
+  "channel_id": "772908445358620702",
+  "member": {
+    "user": {
+      "id": "167348773423415296",
+      "username": "ian",
+      "avatar": "f61594630cbc4848cfe9d8da1a13088e",
+      "discriminator": "0",
+      "public_flags": 4604418,
+      "banner": "6b9757e5926ac9f31d9e206581fc3cc3",
+      "accent_color": 16119261,
+      "global_name": "ian",
+      "avatar_decoration_data": null,
+      "collectibles": null,
+      "display_name_styles": null,
+      "primary_guild": null
+    },
+    "nick": null,
+    "avatar": null,
+    "avatar_decoration_data": null,
+    "banner": null,
+    "roles": ["785609923542777878"],
+    "joined_at": "2020-11-02T20:46:57.364000+00:00",
+    "premium_since": null,
+    "deaf": false,
+    "mute": false,
+    "pending": false,
+    "communication_disabled_until": null,
+    "unusual_dm_activity_until": null,
+    "flags": 0,
+    "permissions": "274877906943"
+  },
+  "token": "AN_UNIQUE_TOKEN",
+  "version": 1,
+  "app_permissions": "442368",
+  "locale": "en-US",
+  "guild_locale": "en-US",
+  "entitlements": [],
+  "entitlement_sku_ids": [],
+  "authorizing_integration_owners": {
+    "0": "772904309264089089",
+    "1": "167348773423415296"
+  },
+  "attachment_size_limit": 524288000
+}
+```
+
+</Collapsible>
+
+## Message Commands
+
+Message commands are application commands that appear on the context menu (right click or tap) of messages. They're a great way to surface quick actions for your app that target messages. They don't take any arguments, and will return the message on whom you clicked or tapped in the interaction response.
+
+<Alert type="danger">
+
+The `description` field is not allowed when creating message commands. However, to avoid breaking changes to data models, `description` will be an **empty string** (instead of `null`) when fetching commands.
+
+</Alert>
+
+###### Example Message Command
+
+```json
+{
+  "id": "1303493304175955988",
+  "application_id": "682654466453012553",
+  "version": "1303493304175955989",
+  "default_member_permissions": null,
+  "type": 3,
+  "name": "Bookmarks",
+  "description": "",
+  "dm_permission": true,
+  "contexts": [0, 1, 2],
+  "integration_types": [1],
+  "nsfw": false
+}
+```
+
+When someone uses a message command, your application will receive an interaction:
+
+###### Example Message Command Interaction
+
+<Collapsible title="Message Command Interaction" description="View sample payload for Message Command interactions" icon="code">
+
+```json
+{
+  "id": "867794291820986368",
+  "application_id": "775799577604522054",
+  "type": 2,
+  "data": {
+    "id": "1303493304175955988",
+    "name": "Bookmarks",
+    "type": 3,
+    "resolved": {
+      "messages": {
+        "867793854505943041": {
+          "id": "867793854505943041",
+          "channel_id": "772908445358620702",
+          "author": {
+            "id": "167348773423415296",
+            "username": "ian",
+            "avatar": "f61594630cbc4848cfe9d8da1a13088e",
+            "discriminator": "0",
+            "public_flags": 4604418,
+            "banner": "6b9757e5926ac9f31d9e206581fc3cc3",
+            "accent_color": 16119261,
+            "global_name": "ian",
+            "avatar_decoration_data": null,
+            "collectibles": null,
+            "display_name_styles": null,
+            "primary_guild": null
+          },
+          "content": "some message",
+          "timestamp": "2021-07-22T15:42:57.744000+00:00",
+          "edited_timestamp": null,
+          "tts": false,
+          "mention_everyone": false,
+          "mentions": [],
+          "mention_roles": [],
+          "attachments": [],
+          "embeds": [],
+          "pinned": false,
+          "type": 0,
+          "flags": 0,
+          "components": []
+        }
+      }
+    },
+    "target_id": "867793854505943041"
+  },
+  "guild": {
+    "id": "772904309264089089",
+    "features": [],
+    "locale": "en-US"
+  },
+  "channel": {
+    "id": "772908445358620702",
+    "type": 0,
+    "guild_id": "772904309264089089",
+    "position": 0,
+    "name": "general",
+    "topic": null,
+    "nsfw": false,
+    "last_message_id": null,
+    "rate_limit_per_user": 0,
+    "parent_id": null,
+    "last_pin_timestamp": null,
+    "permissions": "2147483647",
+    "flags": 0,
+    "icon_emoji": {
+      "id": null,
+      "name": "💬"
+    },
+    "theme_color": null
+  },
+  "channel_id": "772908445358620702",
+  "member": {
+    "user": {
+      "id": "167348773423415296",
+      "username": "ian",
+      "avatar": "f61594630cbc4848cfe9d8da1a13088e",
+      "discriminator": "0",
+      "public_flags": 4604418,
+      "banner": "6b9757e5926ac9f31d9e206581fc3cc3",
+      "accent_color": 16119261,
+      "global_name": "ian",
+      "avatar_decoration_data": null,
+      "collectibles": null,
+      "display_name_styles": null,
+      "primary_guild": null
+    },
+    "nick": null,
+    "avatar": null,
+    "avatar_decoration_data": null,
+    "banner": null,
+    "roles": ["785609923542777878"],
+    "joined_at": "2020-11-02T20:46:57.364000+00:00",
+    "premium_since": null,
+    "deaf": false,
+    "mute": false,
+    "pending": false,
+    "communication_disabled_until": null,
+    "unusual_dm_activity_until": null,
+    "flags": 0,
+    "permissions": "274877906943"
+  },
+  "token": "AN_UNIQUE_TOKEN",
+  "version": 1,
+  "app_permissions": "442368",
+  "locale": "en-US",
+  "guild_locale": "en-US",
+  "entitlements": [],
+  "entitlement_sku_ids": [],
+  "authorizing_integration_owners": {
+    "0": "772904309264089089",
+    "1": "167348773423415296"
+  },
+  "attachment_size_limit": 524288000
+}
+```
+
+</Collapsible>
+
+## Entry Point Commands
+
+An Entry Point command serves as the primary way for users to open an application's embedded activity.
+
+For the Entry Point command to be visible to users, an app must have the [`EMBEDDED` flag](/resources/application#application-flags) enabled.
+
+###### Example Entry Point Command
+
+```json
+{
+  "id": "1277685617043439616",
+  "type": 4,
+  "application_id": "1006584476094177371",
+  "version": "1277685617043439617",
+  "name": "launch",
+  "description": "Launch Racing with Friends",
+  "dm_permission": true,
+  "contexts": [0, 1, 2],
+  "integration_types": [0, 1],
+  "handler": 2
+}
+```
+
+### Entry Point Handlers
+
+When a user invokes an app's Entry Point command, the value of [`handler`](#application-command-object) will determine how the interaction is handled:
+
+- For `APP_HANDLER`, the application is responsible for [responding to the interaction](/interactions/receiving-and-responding#responding-to-an-interaction). It can respond by launching the app's associated embedded activity using the [`LAUNCH_ACTIVITY` interaction callback type](/interactions/receiving-and-responding##interaction-callback-type), or take another action (like sending a follow-up message in channel).
+- For `DISCORD_LAUNCH_ACTIVITY`, Discord will handle the interaction automatically by launching the associated embedded activity and sending a message to the channel where it was launched.
+- For `APP_HANDLER_LAUNCH_ACTIVITY`, the application is again responsible for [responding to the interaction](/interactions/receiving-and-responding#responding-to-an-interaction), but it can only respond by launching the app's associated embedded activity using the [`LAUNCH_ACTIVITY` interaction callback type](/interactions/receiving-and-responding##interaction-callback-type).
+
+When embedded activities are enabled on an application, an Entry Point command (named "launch") is automatically created for your app with `DISCORD_LAUNCH_ACTIVITY` set as the [Entry Point handler](#entry-point-handlers).
+
+## Autocomplete
+
+Autocomplete interactions allow your application to dynamically return option suggestions to a user as they type.
+
+An autocomplete interaction **can return partial data** for option values. Your application will receive partial data for any existing user input, as long as that input passes client-side validation.
+For example, you may receive partial strings, but not invalid numbers. The option the user is currently typing will be sent with a `focused: true` boolean field, and will always be casted to a string.
+Options the user has already filled will also be sent but without the `focused` field. This is a special case where options that are otherwise required might not be present, due to the user not having filled them yet.
+
+Autocomplete interactions will not contain attachments.
+
+<Alert type="warn">
+
+This validation is **client-side only**.
+
+</Alert>
+
+## Localization
+
+Application commands can be localized, which will cause them to use localized names and descriptions depending on the client's selected language. This is entirely optional.
+Localization is available for names and descriptions of commands, subcommands, and options, as well as the names of choices, by submitting the appropriate `name_localizations` and `description_localizations` fields when creating or updating the application command.
+
+Application commands may be partially localized—not all [available locales](/reference#locales) are required, nor do different fields within a command need to support the same set of locales.
+If a locale is not present in a localizations dictionary for a field, users in that locale will see the default value for that field. It's not necessary to fill out all locales with the default value. Any localized values that are identical to the default will be ignored.
+
+Localized option names are subject to an additional constraint, which is that they must be distinct from all other default option names of that command, as well as all other option names within that locale on that command.
+
+When taking advantage of command localization, the interaction payload received by your client will still use default command, subcommand, and option names.
+To localize your interaction response, you can determine the client's selected language by using the `locale` key in the interaction payload.
+
+An application command furnished with localizations might look like this:
+
+```json
+{
+  "name": "birthday",
+  "type": 1,
+  "description": "Wish a friend a happy birthday",
+  "name_localizations": {
+    "zh-CN": "生日",
+    "el": "γενέθλια"
+  },
+  "description_localizations": {
+    "zh-CN": "祝你朋友生日快乐"
+  },
+  "options": [
+    {
+      "name": "age",
+      "type": 4,
+      "description": "Your friend's age",
+      "name_localizations": {
+        "zh-CN": "岁数"
+      },
+      "description_localizations": {
+        "zh-CN": "你朋友的岁数"
+      }
+    }
+  ]
+}
+```
+
+### Locale Fallbacks
+
+For application commands, there are built-in fallbacks in case a user's locale isn't present in the localizations. If the fallback locale is also missing, it will use the default.
+
+<Alert type="warn">
+
+You should make sure to include your default value in its proper locale key, otherwise it may use a fallback value unexpectedly.
+For example, if your default value is `en-US`, but you don't specify the `en-US` value in your localizations, users with `en-US` selected will see the `en-GB` value if it's specified.
+For example, if you have a command with the default name "color", and your localizations specify only the `en-GB` value as "colour", users in the `en-US` locale will see "colour" because the `en-US` key is missing.
+
+</Alert>
+
+| Locale | Fallback |
+| ------ | -------- |
+| en-US  | en-GB    |
+| en-GB  | en-US    |
+| es-419 | es-ES    |
+
+### Retrieving Localized Commands
+
+While most endpoints that return application command objects will return the `name_localizations` and `description_localizations` fields, some will not by default. This includes `GET` endpoints that return all of an application's guild or global commands.
+Instead, those endpoints will supply additional `name_localized` or `description_localized` fields, which only contain the localization relevant to the requester's locale. The full dictionaries can still be obtained by supplying the appropriate query argument.
+
+[Application command index](#application-command-index-object) objects have special behavior for localization. See the [application command](#application-command-object) object notes for details.
+
+For example, if a batch `GET` request were made with locale `zh-CN`, including the above command, the returned object would look as follows:
+
+```json
+{
+  "name": "birthday",
+  "type": 1,
+  "description": "Wish a friend a happy birthday",
+  "name_localized": "生日",
+  "description_localized": "祝你朋友生日快乐",
+  "options": [
+    {
+      "name": "age",
+      "type": 4,
+      "description": "Your friend's age",
+      "name_localized": "岁数",
+      "description_localized": "你朋友的岁数"
+    }
+  ]
+}
+```
+
+If the requester's locale is not found in a localizations dictionary, then the corresponding `name_localized` or `description_localized` for that field will also not be present.
+
+Locale is determined by looking at the `X-Discord-Locale` header, then the `Accept-Language` header if not present, then lastly the user settings locale.
+
+## Age-Restricted Commands
+
+A command that contains age-restricted content should have the [`nsfw` field](#application-command-object) set to `true` upon creation or update. Marking a command as age-restricted will limit who can see and access the command, and from which channels.
+
+### Using Age-Restricted Commands
+
+To use an age-restricted command, a user must be 18 years or older and access the command from either:
+
+- an [age-restricted channel](https://support.discord.com/hc/articles/115000084051-Age-Restricted-Channels-and-Content) or
+- a DM with the app _after_ [enabling age-restricted commands](https://support.discord.com/hc/en-us/articles/10123937946007) within their user settings.
+
+Details about accessing and using age-restricted commands is in [the Help Center](https://support.discord.com/hc/en-us/articles/10123937946007).
+
+## Endpoints
+
+<RouteHeader method="GET" url="/applications/{application.id}/application-command-index">
+  Get Application Command Index
+</RouteHeader>
+
+Returns an [application command index](#application-command-index-object) object for the given application ID, containing all of the application's available commands. User must have the application authorized on their account.
+
+<RouteHeader method="GET" url="/channels/{channel.id}/application-command-index">
+  Get Channel Application Command Index
+</RouteHeader>
+
+Returns an [application command index](#application-command-index-object) object for the given private channel ID. In a bot DM, this will return the commands available from the application associated with the bot. In a group DM, it will query the integrations authorized to the channel.
+
+<RouteHeader method="GET" url="/guilds/{guild.id}/application-command-index">
+  Get Guild Application Command Index
+</RouteHeader>
+
+Returns an [application command index](#application-command-index-object) object for the given guild ID, containing the commands available from all applications installed to the guild. User must be a member of the guild.
+
+<RouteHeader method="GET" url="/users/@me/application-command-index">
+  Get User Application Command Index
+</RouteHeader>
+
+Returns an [application command index](#application-command-index-object) object for the current user, containing the commands available from all applications installed to the user's account.
+
+<RouteHeader
+  method="GET"
+  url="/applications/{application.id}/commands"
+  supportsOAuth2="applications.commands.update"
+  supportsBot
+>
+  List Global Application Commands
+</RouteHeader>
+
+Returns a list of global [application command](#application-command-object) objects for the given application ID. User must be the owner of the application, developer of the application's team, or have a DM channel with the application's bot.
+
+<Alert type="warn">
+
+For OAuth2 requests, only the application associated with the access token can be used.
+
+</Alert>
+
+###### Query String Params
+
+| Field               | Type    | Description                                                                                                                                                                                                          |
+| ------------------- | ------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| with_localizations? | boolean | Whether to include full localization dictionaries (`name_localizations` and `description_localizations`) in the returned objects, instead of the `name_localized` and `description_localized` fields (default false) |
+
+<RouteHeader
+  method="POST"
+  url="/applications/{application.id}/commands"
+  supportsOAuth2="applications.commands.update"
+  supportsBot
+>
+  Create Global Application Command
+</RouteHeader>
+
+Creates a new global command. Returns an [application command](#application-command-object) object on success.
+
+<Alert type="warn">
+
+This endpoint is only usable with an OAuth2 access token with the `applications.commands.update` scope for the application specified in the path.
+
+</Alert>
+
+<Alert type="danger">
+
+Creating a command with the same name as an existing command for your application will overwrite the old command.
+
+</Alert>
+
+###### JSON Params
+
+| Field                           | Type                                                                              | Description                                                                                                                                                 | Valid Types           |
+| ------------------------------- | --------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------- |
+| type?                           | integer                                                                           | The type of the command (default `CHAT_INPUT`)                                                                                                              | All                   |
+| name                            | string                                                                            | The name of the option (1-32 characters)                                                                                                                    | All                   |
+| name_localizations?             | ?map[string, string]                                                              | The localized name for each [locale](/reference#locales) (values follow same restrictions as `name`)                                                        | All                   |
+| description? ^1^                | string                                                                            | The description of the option (1-100 characters)                                                                                                            | All                   |
+| description_localizations?      | ?map[string, string]                                                              | The localized description for each [locale](/reference#locales) (values follow same restrictions as `description`)                                          | All                   |
+| options?                        | array[[application command option](#application-command-option-structure) object] | The options for the command (max 25)                                                                                                                        | `CHAT_INPUT`          |
+| default_member_permissions?     | ?string                                                                           | The default required permissions to call the command                                                                                                        | All                   |
+| dm_permission? **(deprecated)** | boolean                                                                           | Whether the command is available in DMs with the application (default true)                                                                                 | All                   |
+| nsfw?                           | boolean                                                                           | Whether the command is age-restricted (default false)                                                                                                       | All                   |
+| integration_types?              | array[integer]                                                                    | The [installation contexts](/resources/application#application-integration-type) where the command is available (default application's configured contexts) | All                   |
+| contexts?                       | array[integer]                                                                    | The [interaction context](/interactions/receiving-and-responding#interaction-context-type) where the command can be used                                    | All                   |
+| handler?                        | integer                                                                           | [How the command should be handled when called](#application-command-handler-type)                                                                          | `PRIMARY_ENTRY_POINT` |
+
+^1^ Required for [`PRIMARY_ENTRY_POINT` commands](#application-command-type).
+
+<RouteHeader
+  method="GET"
+  url="/applications/{application.id}/commands/{command.id}"
+  supportsOAuth2="applications.commands.update"
+  supportsBot
+>
+  Get Global Application Command
+</RouteHeader>
+
+Returns an [application command](#application-command-object) object for the given application and command ID.
+
+<Alert type="warn">
+
+This endpoint is only usable with an OAuth2 access token with the `applications.commands.update` scope for the application specified in the path.
+
+</Alert>
+
+<RouteHeader
+  method="PATCH"
+  url="/applications/{application.id}/commands/{command.id}"
+  supportsOAuth2="applications.commands.update"
+  supportsBot
+>
+  Modify Global Application Command
+</RouteHeader>
+
+Modifies a global command. Returns the updated [application command](#application-command-object) object on success.
+
+<Alert type="warn">
+
+This endpoint is only usable with an OAuth2 access token with the `applications.commands.update` scope for the application specified in the path.
+
+</Alert>
+
+###### JSON Params
+
+| Field                           | Type                                                                               | Description                                                                                                                                                 | Valid Types           |
+| ------------------------------- | ---------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------- |
+| name?                           | string                                                                             | The name of the option (1-32 characters)                                                                                                                    | All                   |
+| name_localizations?             | ?map[string, string]                                                               | The localized name for each [locale](/reference#locales) (values follow same restrictions as `name`)                                                        | All                   |
+| description?                    | string                                                                             | The description of the option (1-100 characters)                                                                                                            | All                   |
+| description_localizations?      | ?map[string, string]                                                               | The localized description for each [locale](/reference#locales) (values follow same restrictions as `description`)                                          | All                   |
+| options?                        | ?array[[application command option](#application-command-option-structure) object] | The options for the command (max 25)                                                                                                                        | `CHAT_INPUT`          |
+| default_member_permissions      | ?string                                                                            | The default required permissions to call the command                                                                                                        | All                   |
+| dm_permission? **(deprecated)** | ?boolean                                                                           | Whether the command is available in DMs with the application                                                                                                | All                   |
+| ~~default_permission?~~         | ~~boolean~~                                                                        | ~~Whether the command is enabled by default when the application is added to a guild (default true)~~                                                       | All                   |
+| nsfw?                           | ?boolean                                                                           | Whether the command is age-restricted                                                                                                                       | All                   |
+| integration_types?              | ?array[integer]                                                                    | The [installation contexts](/resources/application#application-integration-type) where the command is available (default application's configured contexts) | All                   |
+| contexts?                       | ?array[integer]                                                                    | The [interaction context](/interactions/receiving-and-responding#interaction-context-type) where the command can be used                                    | All                   |
+| handler?                        | ?integer                                                                           | [How the command should be handled when called](#application-command-handler-type)                                                                          | `PRIMARY_ENTRY_POINT` |
+
+<RouteHeader
+  method="DELETE"
+  url="/applications/{application.id}/commands/{command.id}"
+  supportsOAuth2="applications.commands.update"
+  supportsBot
+>
+  Delete Global Application Command
+</RouteHeader>
+
+Deletes a global command. Returns a 204 empty response on success.
+
+<Alert type="warn">
+
+This endpoint is only usable with an OAuth2 access token with the `applications.commands.update` scope for the application specified in the path.
+
+</Alert>
+
+<RouteHeader
+  method="PUT"
+  url="/applications/{application.id}/commands"
+  supportsOAuth2="applications.commands.update"
+  supportsBot
+>
+  Bulk Modify Global Application Commands
+</RouteHeader>
+
+Overwrites all existing commands that are registered globally for this application. Accepts a list of [application command](#application-command-object) objects. Returns a list of [application command](#application-command-object) objects on success.
+Commands that do not already exist will count toward daily application command create limits.
+
+<Alert type="warn">
+
+This endpoint is not usable by user accounts.
+
+</Alert>
+
+<Alert type="danger">
+
+This will overwrite **all** types of application commands: slash commands, user commands, message commands, and primary entry-point commands.
+
+</Alert>
+
+<RouteHeader
+  method="GET"
+  url="/applications/{application.id}/guilds/{guild.id}/commands"
+  supportsOAuth2="applications.commands.update"
+  supportsBot
+>
+  List Guild Application Commands
+</RouteHeader>
+
+Returns a list of [application command](#application-command-object) objects for the given guild ID. User must be the owner of the application or developer of the application's team.
+
+<Alert type="warn">
+
+For OAuth2 requests, only the application associated with the access token can be used.
+
+</Alert>
+
+###### Query String Params
+
+| Field               | Type    | Description                                                                                                                                                                                                          |
+| ------------------- | ------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| with_localizations? | boolean | Whether to include full localization dictionaries (`name_localizations` and `description_localizations`) in the returned objects, instead of the `name_localized` and `description_localized` fields (default false) |
+
+<RouteHeader
+  method="POST"
+  url="/applications/{application.id}/guilds/{guild.id}/commands"
+  supportsOAuth2="applications.commands.update"
+  supportsBot
+>
+  Create Guild Application Command
+</RouteHeader>
+
+Creates a new guild command. Returns an [application command](#application-command-object) object. If the command did not already exist, it will count toward daily application command create limits.
+
+<Alert type="warn">
+
+This endpoint is only usable with an OAuth2 access token with the `applications.commands.update` scope for the application specified in the path.
+
+</Alert>
+
+<Alert type="danger">
+
+Creating a command with the same name as an existing command for your application will overwrite the old command.
+
+</Alert>
+
+###### JSON Params
+
+| Field                       | Type                                                                               | Description                                                                                                        | Valid Types  |
+| --------------------------- | ---------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ | ------------ |
+| type?                       | integer                                                                            | The type of the command (default `CHAT_INPUT`)                                                                     | All          |
+| name                        | string                                                                             | The name of the option (1-32 characters)                                                                           | All          |
+| name_localizations?         | ?map[string, string]                                                               | The localized name for each [locale](/reference#locales) (values follow same restrictions as `name`)               | All          |
+| description                 | string                                                                             | The description of the option (1-100 characters)                                                                   | All          |
+| description_localizations?  | ?map[string, string]                                                               | The localized description for each [locale](/reference#locales) (values follow same restrictions as `description`) | All          |
+| options?                    | ?array[[application command option](#application-command-option-structure) object] | The options for the command (max 25)                                                                               | `CHAT_INPUT` |
+| default_member_permissions? | ?string                                                                            | The default required permissions to call the command                                                               | All          |
+| nsfw?                       | boolean                                                                            | Whether the command is age-restricted                                                                              | All          |
+
+<RouteHeader
+  method="GET"
+  url="/applications/{application.id}/guilds/{guild.id}/commands/{command.id}"
+  supportsOAuth2="applications.commands.update"
+  supportsBot
+>
+  Get Guild Application Command
+</RouteHeader>
+
+Returns an [application command](#application-command-object) object for the given application, guild, and command ID.
+
+<Alert type="warn">
+
+This endpoint is only usable with an OAuth2 access token with the `applications.commands.update` scope for the application specified in the path.
+
+</Alert>
+
+<RouteHeader
+  method="PATCH"
+  url="/applications/{application.id}/guilds/{guild.id}/commands/{command.id}"
+  supportsOAuth2="applications.commands.update"
+  supportsBot
+>
+  Modify Guild Application Command
+</RouteHeader>
+
+Modifies a guild command. Returns the updated guild [application command](#application-command-object) object on success. Fires [Guild Application Command Index Update](/gateway/gateway-events#guild-application-command-index-update) Gateway event.
+
+<Alert type="warn">
+
+This endpoint is only usable with an OAuth2 access token with the `applications.commands.update` scope for the application specified in the path.
+
+</Alert>
+
+###### JSON Params
+
+| Field                       | Type                                                                               | Description                                                                                                        | Valid Types  |
+| --------------------------- | ---------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ | ------------ |
+| name?                       | string                                                                             | The name of the option (1-32 characters)                                                                           | All          |
+| name_localizations?         | ?map[string, string]                                                               | The localized name for each [locale](/reference#locales) (values follow same restrictions as `name`)               | All          |
+| description?                | string                                                                             | The description of the option (1-100 characters)                                                                   | All          |
+| description_localizations?  | ?map[string, string]                                                               | The localized description for each [locale](/reference#locales) (values follow same restrictions as `description`) | All          |
+| options?                    | ?array[[application command option](#application-command-option-structure) object] | The options for the command (max 25)                                                                               | `CHAT_INPUT` |
+| default_member_permissions? | ?string                                                                            | The default required permissions to call the command                                                               | All          |
+| nsfw?                       | ?boolean                                                                           | Whether the command is age-restricted                                                                              | All          |
+
+<RouteHeader
+  method="DELETE"
+  url="/applications/{application.id}/guilds/{guild.id}/commands/{command.id}"
+  supportsOAuth2="applications.commands.update"
+  supportsBot
+>
+  Delete Guild Application Command
+</RouteHeader>
+
+Deletes a guild application command. Returns a 204 empty response on success.
+
+<Alert type="warn">
+
+This endpoint is only usable with an OAuth2 access token with the `applications.commands.update` scope for the application specified in the path.
+
+</Alert>
+
+<RouteHeader
+  method="PUT"
+  url="/applications/{application.id}/guilds/{guild.id}/commands"
+  supportsOAuth2="applications.commands.update"
+  supportsBot
+>
+  Bulk Modify Guild Application Commands
+</RouteHeader>
+
+Overwrites all existing commands that are registered for the given guild. Accepts a list of [application command](#application-command-object) objects. Returns a list of [application command](#application-command-object) objects on success.
+Commands that do not already exist will count toward daily application command create limits.
+
+<Alert type="warn">
+
+This endpoint is not usable by user accounts.
+
+</Alert>
+
+<RouteHeader
+  method="GET"
+  url="/applications/{application.id}/guilds/{guild.id}/commands/permissions"
+  supportsOAuth2="applications.commands.permissions.update"
+>
+  List Guild Application Command Permissions
+</RouteHeader>
+
+Returns a list of [guild application command permissions](#guild-application-command-permissions-structure) objects representing all configured command permissions for your application in a guild.
+
+<RouteHeader
+  method="GET"
+  url="/applications/{application.id}/guilds/{guild.id}/commands/{command.id}/permissions"
+  supportsOAuth2="applications.commands.permissions.update"
+>
+  Get Application Command Permissions
+</RouteHeader>
+
+Returns a [guild application command permissions](#guild-application-command-permissions-structure) object for a specific application command in a guild.
+
+<RouteHeader
+  method="PUT"
+  url="/applications/{application.id}/guilds/{guild.id}/commands/{command.id}/permissions"
+  supportsOAuth2="applications.commands.permissions.update"
+>
+  Modify Application Command Permissions
+</RouteHeader>
+
+Replaces permissions for a specific application command in a guild. Returns a [guild application command permissions](#guild-application-command-permissions-structure) object on success.
+You can only add up to 10 permission overwrites for a command. Deleting or renaming a command will permanently delete all permissions for that command.
+
+###### JSON Params
+
+| Field       | Type                                                                                        | Description                                  |
+| ----------- | ------------------------------------------------------------------------------------------- | -------------------------------------------- |
+| permissions | array[[application command permissions](#application-command-permissions-structure) object] | The permissions for the command in the guild |
