@@ -13,6 +13,7 @@ import { readGuildSettings } from "../../config/defaults.ts";
 import { listBackupsByGuild } from "../../db/queries/backups.ts";
 import { listActiveGuilds } from "../../db/queries/guilds.ts";
 import { listJobsByGuild } from "../../db/queries/jobs.ts";
+import { deleteEventsBefore } from "../../db/queries/tracked-events.ts";
 import { listDueRecords } from "../../db/queries/verify-records.ts";
 import type { BackupRow, Database, JobKind, JobRow } from "../../db/types.ts";
 import type { Logger } from "../../lib/log.ts";
@@ -65,6 +66,8 @@ export interface TickResult {
     readonly exports: number;
     readonly counters: number;
     readonly webhooks: number;
+    /** the timeline rows past the guild's keep_days (19.5). */
+    readonly tracking: number;
   };
   /** the token refresh: the records that were due, and the jobs that went out. */
   readonly refresh: { readonly due: number; readonly enqueued: number };
@@ -81,7 +84,7 @@ function emptyResult(): TickResult {
   return {
     due: 0,
     enqueued: 0,
-    swept: { states: 0, exports: 0, counters: 0, webhooks: 0 },
+    swept: { states: 0, exports: 0, counters: 0, webhooks: 0, tracking: 0 },
     refresh: { due: 0, enqueued: 0 },
     restores: 0,
   };
@@ -96,6 +99,7 @@ export function createScheduler(options: SchedulerOptions): Scheduler {
   // both are caches of an idempotent job: losing them costs one extra run.
   let lastResetDay: string | null = null;
   let lastWebhookSweep: number | null = null;
+  let lastTrackingDay: string | null = null;
 
   // the refresh job is ours: the tick enqueues it, the handler runs the sweep
   // over the guild's records (D4PLAN 13.5).
@@ -137,6 +141,22 @@ export function createScheduler(options: SchedulerOptions): Scheduler {
     return result.deleted;
   };
 
+  // the timeline's own retention (19.5): once a day, in the same tick as the
+  // backups, its count reported on its own.
+  const maybeSweepTracking = async (at: number): Promise<number> => {
+    const day = utcDay(at);
+    if (lastTrackingDay === day) return 0;
+    const guilds = await listSchedulableGuilds(options.db);
+    let removed = 0;
+    for (const guild of guilds) {
+      if (guild.trackedKeepDays === null) continue;
+      const cutoff = new Date(at - guild.trackedKeepDays * 86_400_000).toISOString();
+      removed += await deleteEventsBefore(options.db, guild.guildId, cutoff);
+    }
+    lastTrackingDay = day;
+    return removed;
+  };
+
   const tick = async (): Promise<TickResult> => {
     if (!options.enabled) {
       return emptyResult();
@@ -150,6 +170,7 @@ export function createScheduler(options: SchedulerOptions): Scheduler {
       const states = await sweepExpiredStates(options.db, at);
       const counters = await maybeResetCounters(at);
       const webhooks = await maybeSweepWebhooks(at);
+      const tracking = await maybeSweepTracking(at);
 
       // the due work: an auto backup per guild, an auto restore after a
       // successful backup, and the token refresh sweep. each one is a job row,
@@ -172,7 +193,7 @@ export function createScheduler(options: SchedulerOptions): Scheduler {
       const result: TickResult = {
         due: due.items.length,
         enqueued,
-        swept: { states, exports: expired.removed, counters, webhooks },
+        swept: { states, exports: expired.removed, counters, webhooks, tracking },
         refresh: { due: due.refreshRecords, enqueued: refreshEnqueued },
         restores,
       };
@@ -183,6 +204,7 @@ export function createScheduler(options: SchedulerOptions): Scheduler {
         exports: result.swept.exports,
         counters: result.swept.counters,
         webhooks: result.swept.webhooks,
+        tracking: result.swept.tracking,
         refreshRecords: result.refresh.due,
         restores: result.restores,
       });
@@ -391,6 +413,8 @@ interface SchedulableGuild {
   readonly restoreClearBefore: boolean;
   readonly restoreTimestampSuffix: boolean;
   readonly intervalHours: number;
+  /** the timeline's retention window in days, or null to keep everything. */
+  readonly trackedKeepDays: number | null;
 }
 
 async function listSchedulableGuilds(db: Database): Promise<SchedulableGuild[]> {
@@ -407,6 +431,7 @@ async function listSchedulableGuilds(db: Database): Promise<SchedulableGuild[]> 
       restoreClearBefore: read.restore_clear_before,
       restoreTimestampSuffix: read.restore_message_timestamp_suffix,
       intervalHours: read.auto_backup_interval_hours,
+      trackedKeepDays: read.tracking.keep_days,
     });
   }
   return out;

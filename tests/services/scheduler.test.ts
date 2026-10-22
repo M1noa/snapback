@@ -187,7 +187,7 @@ describe("the scheduler", () => {
     const { scheduler, enqueued } = deps({ enabled: false });
     const result = await scheduler.tick();
     expect(result.enqueued).toBe(0);
-    expect(result.swept).toEqual({ states: 0, exports: 0, counters: 0, webhooks: 0 });
+    expect(result.swept).toEqual({ states: 0, exports: 0, counters: 0, webhooks: 0, tracking: 0 });
     expect(result.refresh).toEqual({ due: 0, enqueued: 0 });
     expect(result.restores).toBe(0);
     expect(enqueued).toEqual([]);

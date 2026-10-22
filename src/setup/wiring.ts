@@ -99,6 +99,8 @@ export interface SetupWiringInput {
   readonly ownerId: string;
   /** injectable clock in epoch ms. defaults to Date.now. */
   readonly now?: () => number;
+  /** called after a save lands, so caches that hold settings can re-read. */
+  readonly settingsSaved?: (guildId: string) => void | Promise<void>;
 }
 
 /** what the gateway resolved its intent names to. discord does not echo the
@@ -244,6 +246,10 @@ export function createSetupDeps(input: SetupWiringInput): SetupDeps {
           created_at: iso(),
         });
       }
+
+      // a cache of these settings is now stale. a failure here is not a failed
+      // save: the row is written, the cache re-reads on the next boot.
+      await input.settingsSaved?.(save.guildId);
 
       return { settings: next, changed };
     },

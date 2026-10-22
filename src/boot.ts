@@ -313,6 +313,7 @@ export async function boot(): Promise<Boot> {
     gateway,
     log,
     ownerId: env.discord.ownerId,
+    settingsSaved: (guildId) => tracking.invalidate(guildId),
   });
   registerSetupHandlers(router, setupDeps);
 

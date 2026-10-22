@@ -135,11 +135,17 @@ export async function countEventsByGuild(db: Database, guildId: string): Promise
   return Number(rows[0]?.n ?? 0);
 }
 
-/** the retention sweep. everything strictly older than the cutoff goes. */
+/** the retention sweep. everything strictly older than the cutoff goes. the rows
+ *  are counted first, so the tick can report what it swept. */
 export async function deleteEventsBefore(
   db: Database,
   guildId: string,
   cutoff: string,
-): Promise<void> {
+): Promise<number> {
+  const rows = await db.query<{ n: SqlValue }>(
+    'SELECT COUNT(*) AS n FROM tracked_events WHERE guild_id = ? AND "at" < ?',
+    [guildId, cutoff],
+  );
   await db.run('DELETE FROM tracked_events WHERE guild_id = ? AND "at" < ?', [guildId, cutoff]);
+  return Number(rows[0]?.n ?? 0);
 }
