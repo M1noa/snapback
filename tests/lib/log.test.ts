@@ -56,16 +56,30 @@ describe("level filtering", () => {
     const dir = trackedDir();
     const logger = createLogger({ level: "warn", dir });
 
+    logger.verbose("the verbose line");
     logger.debug("the debug line");
     logger.info("the info line");
     logger.warn("the warn line");
     logger.error("the error line");
 
     const out = readLog(dir);
+    expect(out).not.toContain("the verbose line");
     expect(out).not.toContain("the debug line");
     expect(out).not.toContain("the info line");
     expect(out).toContain("the warn line");
     expect(out).toContain("the error line");
+  });
+
+  test("verbose is below debug, so a debug logger still drops it", () => {
+    const dir = trackedDir();
+    const logger = createLogger({ level: "debug", dir });
+
+    logger.verbose("the verbose line");
+    logger.debug("the debug line");
+
+    const out = readLog(dir);
+    expect(out).not.toContain("the verbose line");
+    expect(out).toContain("the debug line");
   });
 });
 

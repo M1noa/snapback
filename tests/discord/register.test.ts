@@ -31,6 +31,7 @@ function recordingLogger(): Logger & { records: { msg: string; fields: LogFields
   const records: { msg: string; fields: LogFields }[] = [];
   const log = {
     level: "debug" as LogLevel,
+    verbose: () => {},
     debug: () => {},
     info: (msg: string, fields: LogFields = {}) => records.push({ msg, fields }),
     warn: () => {},

@@ -13,9 +13,10 @@ import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 import { redactText, redactValue } from "./redact.ts";
 
-export type LogLevel = "debug" | "info" | "warn" | "error";
+export type LogLevel = "verbose" | "debug" | "info" | "warn" | "error";
 
-const RANK: Record<LogLevel, number> = { debug: 10, info: 20, warn: 30, error: 40 };
+// verbose sits under debug: per-request chatter, never on by default.
+const RANK: Record<LogLevel, number> = { verbose: 5, debug: 10, info: 20, warn: 30, error: 40 };
 const LEVELS = Object.keys(RANK) as LogLevel[];
 
 function isLevel(value: unknown): value is LogLevel {
@@ -53,6 +54,7 @@ export interface LoggerOptions {
 
 export interface Logger {
   readonly level: LogLevel;
+  verbose(msg: string, fields?: LogFields): void;
   debug(msg: string, fields?: LogFields): void;
   info(msg: string, fields?: LogFields): void;
   warn(msg: string, fields?: LogFields): void;
@@ -207,6 +209,7 @@ export function createLogger(options: LoggerOptions = {}): Logger {
     get level() {
       return level();
     },
+    verbose: (msg, fields) => emit("verbose", msg, fields),
     debug: (msg, fields) => emit("debug", msg, fields),
     info: (msg, fields) => emit("info", msg, fields),
     warn: (msg, fields) => emit("warn", msg, fields),

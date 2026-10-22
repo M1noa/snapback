@@ -26,6 +26,7 @@ const GUILD = "123456789012345678";
 
 const log: Logger = {
   level: "error",
+  verbose() {},
   debug() {},
   info() {},
   warn() {},

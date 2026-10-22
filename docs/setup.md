@@ -137,7 +137,7 @@ The backup directory and the database file are siblings by default, so a move of
 
 | Key | Default | Meaning |
 |---|---|---|
-| `LOG_LEVEL` | `info` | verbosity of structured stdout |
+| `LOG_LEVEL` | `info` | verbosity of structured stdout: `verbose`, `debug`, `info`, `warn`, `error` |
 | `AUTOMATION_ENABLED` | `true` | `false` turns the scheduler off and makes every job manual |
 | `DISCORD_DEV_GUILD_ID` | unset | set it to register commands to one guild instantly while developing |
 

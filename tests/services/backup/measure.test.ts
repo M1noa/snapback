@@ -46,6 +46,7 @@ afterAll(async () => {
 
 const log = {
   level: "error" as const,
+  verbose() {},
   debug() {},
   info() {},
   warn() {},

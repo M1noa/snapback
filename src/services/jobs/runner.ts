@@ -121,6 +121,7 @@ function childLogger(parent: Logger, base: LogFields): Logger {
     get level() {
       return parent.level;
     },
+    verbose: (msg, fields) => parent.verbose(msg, { ...base, ...fields }),
     debug: (msg, fields) => parent.debug(msg, { ...base, ...fields }),
     info: (msg, fields) => parent.info(msg, { ...base, ...fields }),
     warn: (msg, fields) => parent.warn(msg, { ...base, ...fields }),

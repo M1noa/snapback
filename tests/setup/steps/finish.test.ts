@@ -16,6 +16,7 @@ const INVITE = "https://discord.com/oauth2/authorize?client_id=30000000000000000
 
 const silent: Logger = {
   level: "error",
+  verbose() {},
   debug() {},
   info() {},
   warn() {},

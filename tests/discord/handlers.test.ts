@@ -20,6 +20,7 @@ function quietLogger(): Logger & { lines: string[] } {
   const lines: string[] = [];
   const sink = {
     level: "debug" as LogLevel,
+    verbose: (msg: string) => lines.push(`verbose ${msg}`),
     debug: (msg: string) => lines.push(`debug ${msg}`),
     info: (msg: string) => lines.push(`info ${msg}`),
     warn: (msg: string) => lines.push(`warn ${msg}`),

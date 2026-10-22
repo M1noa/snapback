@@ -236,6 +236,7 @@ describe("DiscordClient logging", () => {
     const records: { level: LogLevel; msg: string; fields?: LogFields }[] = [];
     const log = {
       level: "debug" as LogLevel,
+      verbose: () => {},
       debug: () => {},
       info: () => {},
       warn: (msg: string, fields?: LogFields) => {
@@ -264,6 +265,7 @@ describe("DiscordClient logging", () => {
     const records: LogFields[] = [];
     const log = {
       level: "debug" as LogLevel,
+      verbose: () => {},
       debug: () => {},
       info: () => {},
       warn: (_msg: string, fields?: LogFields) => {

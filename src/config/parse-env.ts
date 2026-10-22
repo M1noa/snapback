@@ -6,7 +6,7 @@
 // binding that reads the real environment and exits on a problem.
 
 export type IpStorage = "hash" | "encrypted" | "plaintext";
-export type LogLevel = "debug" | "info" | "warn" | "error";
+export type LogLevel = "verbose" | "debug" | "info" | "warn" | "error";
 
 /** the challenge the landing page shows before the oauth flow starts. */
 export type CaptchaProvider = "none" | "turnstile" | "recaptcha" | "cap";
@@ -315,7 +315,11 @@ export function parseEnv(read: EnvSource): EnvResult {
       }),
 
       app: Object.freeze({
-        logLevel: pick<LogLevel>("LOG_LEVEL", ["debug", "info", "warn", "error"], "info"),
+        logLevel: pick<LogLevel>(
+          "LOG_LEVEL",
+          ["verbose", "debug", "info", "warn", "error"],
+          "info",
+        ),
         automationEnabled: bool("AUTOMATION_ENABLED", true),
       }),
     }),
