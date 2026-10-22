@@ -8,7 +8,7 @@
 import type { Database, MetaRow } from "./types.ts";
 
 // bump only when a migration is added; schema.sql's shape is version 1.
-export const SCHEMA_VERSION = 4;
+export const SCHEMA_VERSION = 5;
 
 export interface Migration {
   readonly version: number;
@@ -63,6 +63,40 @@ export const MIGRATIONS: readonly Migration[] = [
       );
       CREATE INDEX IF NOT EXISTS idx_verify_signals_lookup
         ON verify_signals (guild_id, kind, value);`,
+  },
+  // 5: the event timeline (D4PLAN 19.5). one append-only table for every change
+  // we can observe inside the intents we already request. schema.sql carries the
+  // same shape for a fresh install.
+  //
+  // "at" is quoted because AT is a reserved word in duckdb, and postgres accepts
+  // the quoted form too, so this stays one script for both.
+  //
+  // no foreign keys and no cascade: an event outlives the guild row it belongs to
+  // on purpose. deleting a guild's settings must not quietly erase the history of
+  // what happened in it.
+  {
+    version: 5,
+    sql: `CREATE TABLE IF NOT EXISTS tracked_events (
+      event_id VARCHAR PRIMARY KEY,
+      guild_id VARCHAR,
+      subject_kind VARCHAR,
+      subject_id VARCHAR,
+      kind VARCHAR,
+      actor_id VARCHAR,
+      source VARCHAR,
+      channel_id VARCHAR,
+      before_json TEXT,
+      after_json TEXT,
+      detail_json TEXT,
+      "at" VARCHAR,
+      recorded_at VARCHAR
+    );
+    CREATE INDEX IF NOT EXISTS idx_tracked_events_guild_at
+      ON tracked_events (guild_id, "at");
+    CREATE INDEX IF NOT EXISTS idx_tracked_events_subject
+      ON tracked_events (guild_id, subject_id, "at");
+    CREATE INDEX IF NOT EXISTS idx_tracked_events_kind
+      ON tracked_events (guild_id, kind, "at");`,
   },
 ];
 

@@ -52,7 +52,68 @@ export type VerifyStatus = "verified" | "refused";
 
 /** the signals one verification left behind, used to spot another account. */
 export type VerifySignalKind = "device" | "ip" | "email" | "avatar" | "name";
-export type ExportKind = "backup" | "records" | "all";
+export type ExportKind =
+  | "backup"
+  | "records"
+  | "all"
+  | "tracking_user"
+  | "tracking_server"
+  | "tracking_all";
+
+/** what a tracked event is about. one row per change, never one row per user. */
+export type TrackedSubjectKind = "user" | "guild";
+
+/** where the observation came from. a gateway diff is not the same claim as a
+ *  record we wrote ourselves, and the export says which is which. */
+export type EventSource = "gateway" | "verify" | "pull" | "admin";
+
+/** the event vocabulary. keep this list and services/tracking/kinds.ts in step:
+ *  the table accepts a string so an older row survives a vocabulary change. */
+export type TrackedEventKind =
+  // a member's state in one guild
+  | "member_join"
+  | "member_leave"
+  | "member_roles"
+  | "member_nickname"
+  | "member_username"
+  | "member_global_name"
+  | "member_avatar"
+  | "member_flags"
+  | "member_boost"
+  | "member_timeout"
+  | "member_pending"
+  // what a member did
+  | "voice_join"
+  | "voice_leave"
+  | "voice_move"
+  | "voice_state"
+  | "message_delete"
+  | "message_edit"
+  | "ban_add"
+  | "ban_remove"
+  | "blacklist_add"
+  | "blacklist_remove"
+  // verification and the pull it drives
+  | "verify_passed"
+  | "verify_refused"
+  | "verify_revoked"
+  | "verify_guilds"
+  | "pull_attempt"
+  | "pull_added"
+  // the guild itself
+  | "guild_update"
+  | "role_create"
+  | "role_update"
+  | "role_delete"
+  | "channel_create"
+  | "channel_update"
+  | "channel_delete"
+  | "emoji_update"
+  | "sticker_update"
+  | "thread_create"
+  | "thread_delete"
+  | "bot_join"
+  | "bot_leave";
 
 /** how many backups a guild keeps, by age or count, filtered by kind (17.2). */
 export interface RetentionRow {
@@ -554,4 +615,25 @@ export interface PendingExportRow {
   size_bytes: number;
   created_at: string;
   expires_at: string;
+}
+
+/** one observed change, append-only. `at` is when it happened as far as we can
+ *  tell (discord does not send a timestamp for most of these, so it is when the
+ *  gateway told us); `recorded_at` is when the row was written. `actor_id` is
+ *  who caused it when discord says so, null when it was discord itself or
+ *  self-service. before/after hold only the fields that changed. */
+export interface TrackedEventRow {
+  event_id: string;
+  guild_id: string;
+  subject_kind: TrackedSubjectKind;
+  subject_id: string;
+  kind: TrackedEventKind;
+  actor_id: string | null;
+  source: EventSource;
+  channel_id: string | null;
+  before_json: JsonObject | null;
+  after_json: JsonObject | null;
+  detail_json: JsonObject | null;
+  at: string;
+  recorded_at: string;
 }

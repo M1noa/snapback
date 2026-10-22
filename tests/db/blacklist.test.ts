@@ -80,7 +80,7 @@ describe("the blacklist table", () => {
 
     expect(await tableExists("guild_blacklist")).toBe(true);
     expect(await recordedVersion()).toBe(SCHEMA_VERSION);
-    expect(SCHEMA_VERSION).toBe(4);
+    expect(SCHEMA_VERSION).toBe(5);
   });
 
   test("the migration itself creates the table", async () => {

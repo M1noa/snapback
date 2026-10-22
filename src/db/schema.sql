@@ -431,6 +431,27 @@ CREATE TABLE IF NOT EXISTS verify_record_events (
   PRIMARY KEY (record_id, "at", kind)
 );
 
+-- one observed change, append-only. subject_kind is 'user' or 'guild': the first
+-- reads as that person's history, the second as the server's. before/after hold
+-- only the fields that changed; detail_json holds what neither side describes
+-- (a message's attachment count, a voice channel's previous id).
+-- "at" is quoted because AT is reserved in duckdb.
+CREATE TABLE IF NOT EXISTS tracked_events (
+  event_id      VARCHAR PRIMARY KEY,
+  guild_id      VARCHAR,
+  subject_kind  VARCHAR,
+  subject_id    VARCHAR,
+  kind          VARCHAR,
+  actor_id      VARCHAR,
+  source        VARCHAR,
+  channel_id    VARCHAR,
+  before_json   TEXT,
+  after_json    TEXT,
+  detail_json   TEXT,
+  "at"          VARCHAR,
+  recorded_at   VARCHAR
+);
+
 -- one row per guild-join attempt made with a member's token.
 CREATE TABLE IF NOT EXISTS pull_attempts (
   id            VARCHAR PRIMARY KEY,
@@ -500,6 +521,17 @@ CREATE INDEX IF NOT EXISTS idx_jobs_kind_status
 
 CREATE INDEX IF NOT EXISTS idx_audit_log_guild_created
   ON audit_log (guild_id, created_at);
+
+-- the three read paths on the event timeline: the whole server newest first, one
+-- subject's page, and one kind's page for the settings view.
+CREATE INDEX IF NOT EXISTS idx_tracked_events_guild_at
+  ON tracked_events (guild_id, "at");
+
+CREATE INDEX IF NOT EXISTS idx_tracked_events_subject
+  ON tracked_events (guild_id, subject_id, "at");
+
+CREATE INDEX IF NOT EXISTS idx_tracked_events_kind
+  ON tracked_events (guild_id, kind, "at");
 
 CREATE INDEX IF NOT EXISTS idx_interaction_state_expires
   ON interaction_state (expires_at);

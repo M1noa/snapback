@@ -86,6 +86,30 @@ export const BACKUP_INCLUDE_KEYS = Object.freeze([
   "onboarding",
 ] as const);
 
+/**
+ * what the event timeline records (D4PLAN 19.5). the two switches are separate
+ * on purpose: `history` is state you can point at on a record page, `palantir`
+ * is behaviour, which reads much more like surveillance and so is off until
+ * someone turns it on.
+ *
+ * `keep_days` is null for forever. the scheduler prunes `tracked_events` past
+ * it; backups have their own policy in retention_policies.
+ */
+export interface TrackingSettings {
+  /** append member, profile, role, channel and guild changes to tracked_events. */
+  readonly history: boolean;
+  /** also record what people do: voice joins and leaves, edits, deletes, bans. */
+  readonly palantir: boolean;
+  /** days of tracked_events to keep. null keeps everything. */
+  readonly keep_days: number | null;
+}
+
+export const DEFAULT_TRACKING: Readonly<TrackingSettings> = Object.freeze({
+  history: true,
+  palantir: false,
+  keep_days: null,
+});
+
 /** discord message types worth naming in a toggle. anything else in range is
  *  still storable by number; it just has no label in the ui. */
 export const MESSAGE_TYPE_NAMES: Readonly<Record<number, string>> = Object.freeze({
@@ -154,6 +178,8 @@ export interface GuildSettings {
   restore_clear_before: boolean;
   restore_message_timestamp_suffix: boolean;
   notify_on_join: boolean;
+  /** what the event timeline records, and for how long. */
+  tracking: TrackingSettings;
   wizard: WizardState;
   /** the panel is also the switch: no panel means verification is not in use, so
    *  the wizard does not ask for its three steps (D4PLAN 10.1). */
@@ -178,6 +204,8 @@ export const LIMITS = Object.freeze({
   pull_daily_limit: { min: 100, max: 500 } as Range,
   pull_failure_cooldown_minutes: { min: 1, max: 1440 } as Range,
   pull_restricted_hours: { min: 1, max: 720 } as Range,
+  // ten years. above this a keep_days is a typo, not a policy.
+  tracking_keep_days: { min: 1, max: 3650 } as Range,
 });
 
 export const DEFAULT_WIZARD: Readonly<WizardState> = Object.freeze({
@@ -344,6 +372,20 @@ function urlOrNull(value: unknown): string | null {
   return /^https:\/\/\S+$/.test(trimmed) ? trimmed : null;
 }
 
+// a missing key keeps the default, so a settings row written before this
+// existed reads as "history on, palantir off" rather than as both off.
+function readTrackingSettings(stored: unknown): TrackingSettings {
+  if (!isRecord(stored)) return { ...DEFAULT_TRACKING };
+  return {
+    history: typeof stored.history === "boolean" ? stored.history : DEFAULT_TRACKING.history,
+    palantir: typeof stored.palantir === "boolean" ? stored.palantir : DEFAULT_TRACKING.palantir,
+    keep_days:
+      stored.keep_days === null || stored.keep_days === undefined
+        ? null
+        : (clampInt(stored.keep_days, LIMITS.tracking_keep_days) ?? DEFAULT_TRACKING.keep_days),
+  };
+}
+
 // a missing key keeps the default, an explicit false turns the category off.
 function readBackupInclude(stored: unknown): BackupInclude {
   const out = { ...DEFAULT_BACKUP_INCLUDE } as Record<string, boolean>;
@@ -402,6 +444,7 @@ export const FIELDS: {
   restore_clear_before: bool(false),
   restore_message_timestamp_suffix: bool(false),
   notify_on_join: bool(false),
+  tracking: { default: DEFAULT_TRACKING, read: readTrackingSettings },
   wizard: { default: DEFAULT_WIZARD, read: readWizardState },
   verify_panel: { default: null, read: readVerifyPanel },
   verify_vpn_policy: { default: "off", read: (v) => oneOf(v, VPN_POLICIES) ?? "off" },

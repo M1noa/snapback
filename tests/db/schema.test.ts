@@ -49,6 +49,7 @@ const EXPECTED_TABLES = [
   // retention and export
   "retention_policies",
   "pending_exports",
+  "tracked_events",
 ] as const;
 
 let dir: string;

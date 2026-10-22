@@ -42,6 +42,7 @@ const EXPECTED_TABLES = [
   "account_counters",
   "retention_policies",
   "pending_exports",
+  "tracked_events",
 ] as const;
 
 let dir: string;
