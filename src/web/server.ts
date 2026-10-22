@@ -24,19 +24,24 @@ export interface ServerDeps {
   };
   readonly port: number;
   readonly hostname?: string;
+  /** the policy to send. defaults to the one with no third party on it. */
+  readonly csp?: string;
 }
 
-/** the headers every response carries. the csp allows exactly one inline
- *  script (ours, allowed by hash), inline css, and discord's icon cdn. a route
- *  that sets a header replaces the default line for line, and no route does. */
-const BASE_HEADERS: Readonly<Record<string, string>> = {
-  "content-security-policy": WEB_CSP,
-  "referrer-policy": "no-referrer",
-  "x-content-type-options": "nosniff",
-  "x-frame-options": "DENY",
-  "cross-origin-opener-policy": "same-origin",
-  "permissions-policy": "camera=(), microphone=(), geolocation=(), interest-cohort=()",
-};
+/** the headers every response carries. the csp allows inline scripts by hash
+ *  only, inline css, and discord's icon cdn. a captcha provider widens it with
+ *  its own origins and the form field; nothing else does. a route that sets a
+ *  header replaces the default line for line, and no route does. */
+function baseHeaders(csp: string): Readonly<Record<string, string>> {
+  return {
+    "content-security-policy": csp,
+    "referrer-policy": "no-referrer",
+    "x-content-type-options": "nosniff",
+    "x-frame-options": "DENY",
+    "cross-origin-opener-policy": "same-origin",
+    "permissions-policy": "camera=(), microphone=(), geolocation=(), interest-cohort=()",
+  };
+}
 
 export interface WebServer {
   readonly port: number;
@@ -45,6 +50,7 @@ export interface WebServer {
 }
 
 export function createServer(deps: ServerDeps): WebServer {
+  const headers = baseHeaders(deps.csp ?? WEB_CSP);
   const router = createRouter({
     home: deps.routes.home,
     callback: deps.routes.callback,
@@ -64,6 +70,7 @@ export function createServer(deps: ServerDeps): WebServer {
         headers: request.headers,
         // the socket's address, for the ip capture when there is no proxy header.
         remoteAddress: server_.requestIP(request)?.address ?? null,
+        text: () => request.text(),
       };
 
       let response: WebResponse;
@@ -89,7 +96,7 @@ export function createServer(deps: ServerDeps): WebServer {
 
       return new Response(response.body, {
         status: response.status,
-        headers: { ...BASE_HEADERS, ...response.headers },
+        headers: { ...headers, ...response.headers },
       });
     },
   });

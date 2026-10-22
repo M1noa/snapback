@@ -139,6 +139,7 @@ function harness(settings: GuildSettings = DEFAULT_GUILD_SETTINGS, users: string
       port: 8080,
       behindCloudflareTunnel: false,
       trustedProxyDepth: 0,
+      captcha: "none",
       listening: async () => true,
     },
     privacy: { ipStorage: "hash", tokenStorage: true },

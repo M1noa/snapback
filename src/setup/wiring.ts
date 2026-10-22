@@ -299,6 +299,7 @@ export function createSetupDeps(input: SetupWiringInput): SetupDeps {
     port: env.web.port,
     behindCloudflareTunnel: env.web.behindCloudflareTunnel,
     trustedProxyDepth: env.web.trustedProxyDepth,
+    captcha: env.captcha.provider,
 
     async listening(): Promise<boolean> {
       // any answer means a socket accepted the connection, which is all the self

@@ -137,6 +137,9 @@ export interface WebFacts {
   readonly port: number;
   readonly behindCloudflareTunnel: boolean;
   readonly trustedProxyDepth: number;
+  /** the challenge the landing page shows before the flow starts. the keys stay
+   *  in the environment: /setup reports what is in force, it never stores one. */
+  readonly captcha: string;
   /** whether the local socket is accepting, probed live. */
   listening(): Promise<boolean>;
 }

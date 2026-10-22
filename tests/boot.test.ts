@@ -141,6 +141,7 @@ function fakeSetupDeps(): SetupDeps {
       port: 8080,
       behindCloudflareTunnel: false,
       trustedProxyDepth: 0,
+      captcha: "none",
       listening: async () => false,
     },
     privacy: { ipStorage: "hash", tokenStorage: false },

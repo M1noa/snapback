@@ -81,6 +81,7 @@ function fakeDeps(settings: GuildSettings = DEFAULT_GUILD_SETTINGS): {
       port: 8080,
       behindCloudflareTunnel: false,
       trustedProxyDepth: 0,
+      captcha: "none",
       listening: async () => true,
     },
     privacy: { ipStorage: "hash", tokenStorage: true },

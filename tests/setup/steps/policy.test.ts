@@ -52,6 +52,7 @@ function fakeDeps(): SetupDeps {
       port: 8080,
       behindCloudflareTunnel: false,
       trustedProxyDepth: 0,
+      captcha: "none",
       listening: unused,
     },
     privacy: { ipStorage: "hash", tokenStorage: true },

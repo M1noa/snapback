@@ -68,8 +68,47 @@ export function fingerprintScript(): string {
 /** the sha256 the policy must allow the inline script by. */
 const SCRIPT_HASH: string = new Bun.CryptoHasher("sha256").update(RAW_SCRIPT).digest("base64");
 
-/** the only scripts allowed in are ours, by hash: this one, the landing page's
- *  opener and the result page's close countdown. images come from this origin
- *  (the grain tile) and discord's cdn (guild icons), and the forms field is none
- *  because no page has one. */
-export const WEB_CSP = `default-src 'none'; img-src 'self' https://cdn.discordapp.com; font-src 'self'; style-src 'unsafe-inline'; script-src 'sha256-${SCRIPT_HASH}' 'sha256-${COUNTDOWN_SCRIPT_HASH}' 'sha256-${OPENER_SCRIPT_HASH}'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'`;
+/** what a page needs from outside this origin, beyond the defaults. a captcha
+ *  widget is the only thing that ever adds to it. */
+export interface CspSources {
+  readonly script?: readonly string[];
+  readonly frame?: readonly string[];
+  readonly connect?: readonly string[];
+  /** the page posts a form back to itself. */
+  readonly form?: boolean;
+}
+
+/** the policy every response carries. inline scripts are allowed by hash and
+ *  never by 'unsafe-inline', so a script that appears without its hash is
+ *  dropped by the browser; tests/web/csp.test.ts holds that line. images come
+ *  from this origin (the grain tile) and discord's cdn (guild icons). */
+export function webCsp(sources: CspSources = {}): string {
+  const scripts = [
+    `'sha256-${SCRIPT_HASH}'`,
+    `'sha256-${COUNTDOWN_SCRIPT_HASH}'`,
+    `'sha256-${OPENER_SCRIPT_HASH}'`,
+  ]
+    .concat(sources.script ?? [])
+    .join(" ");
+  const directives = [
+    "default-src 'none'",
+    "img-src 'self' https://cdn.discordapp.com",
+    "font-src 'self'",
+    "style-src 'unsafe-inline'",
+    `script-src ${scripts}`,
+    "object-src 'none'",
+    "base-uri 'none'",
+    sources.form === true ? "form-action 'self'" : "form-action 'none'",
+    "frame-ancestors 'none'",
+  ];
+  if (sources.frame !== undefined && sources.frame.length > 0) {
+    directives.push(`frame-src ${sources.frame.join(" ")}`);
+  }
+  if (sources.connect !== undefined && sources.connect.length > 0) {
+    directives.push(`connect-src ${sources.connect.join(" ")}`);
+  }
+  return directives.join("; ");
+}
+
+/** the policy a page with no third party on it gets. */
+export const WEB_CSP: string = webCsp();

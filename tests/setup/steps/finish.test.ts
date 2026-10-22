@@ -49,6 +49,7 @@ function makeDeps(docs: string | null): SetupDeps {
       port: 8080,
       behindCloudflareTunnel: false,
       trustedProxyDepth: 0,
+      captcha: "none",
       listening: async () => true,
     },
     privacy: { ipStorage: "hash", tokenStorage: false },

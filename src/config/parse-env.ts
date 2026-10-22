@@ -8,6 +8,9 @@
 export type IpStorage = "hash" | "encrypted" | "plaintext";
 export type LogLevel = "debug" | "info" | "warn" | "error";
 
+/** the challenge the landing page shows before the oauth flow starts. */
+export type CaptchaProvider = "none" | "turnstile" | "recaptcha" | "cap";
+
 export interface EnvWarning {
   readonly key: string;
   readonly text: string;
@@ -60,6 +63,15 @@ export interface Env {
     /** the client secret from the developer portal. required: the verify
      *  callback is a core feature, not an option. */
     readonly clientSecret: string;
+  };
+  readonly captcha: {
+    readonly provider: CaptchaProvider;
+    /** the public key the widget carries. empty when the provider is none. */
+    readonly siteKey: string;
+    /** the private key the verifier takes. never leaves the server. */
+    readonly secret: string;
+    /** cap serves its own widget and verifier, so it needs an origin. */
+    readonly baseUrl: string;
   };
   readonly storage: {
     readonly backupDir: string;
@@ -155,6 +167,44 @@ export function parseEnv(read: EnvSource): EnvResult {
     "the client secret from the developer portal, OAuth2 tab. the verification callback is a core feature and does not work without it.",
   );
 
+  const captchaProvider = pick<CaptchaProvider>(
+    "CAPTCHA_PROVIDER",
+    ["none", "turnstile", "recaptcha", "cap"],
+    "none",
+  );
+  const captchaSiteKey = optional("CAPTCHA_SITE_KEY", "");
+  const captchaSecret = optional("CAPTCHA_SECRET", "");
+  const captchaBaseUrl = optional("CAPTCHA_BASE_URL", "").replace(/\/+$/, "");
+
+  if (captchaProvider !== "none") {
+    if (captchaSiteKey === "") {
+      problems.push(
+        `CAPTCHA_SITE_KEY is not set. Required when CAPTCHA_PROVIDER=${captchaProvider}: the public key the widget carries.`,
+      );
+    }
+    if (captchaSecret === "") {
+      problems.push(
+        `CAPTCHA_SECRET is not set. Required when CAPTCHA_PROVIDER=${captchaProvider}: the private key the verifier takes.`,
+      );
+    }
+  }
+
+  // cap is the only provider that does not live at a fixed address. without the
+  // origin there is nothing to point the widget or the verifier at.
+  if (captchaProvider === "cap") {
+    if (captchaBaseUrl === "") {
+      problems.push(
+        "CAPTCHA_BASE_URL is not set. Required when CAPTCHA_PROVIDER=cap: the origin of your instance, e.g. https://cap.example.com",
+      );
+    } else if (!URL.canParse(captchaBaseUrl)) {
+      problems.push(
+        `CAPTCHA_BASE_URL is not a url: ${captchaBaseUrl}. Expected the origin of your cap instance, e.g. https://cap.example.com`,
+      );
+    }
+  } else if (captchaBaseUrl !== "") {
+    warnings.push({ key: "CAPTCHA_BASE_URL", text: "only cap uses a base url, ignoring it" });
+  }
+
   if (ipStorage === "hash" && ipHashPepper === "") {
     problems.push(
       "IP_HASH_PEPPER is not set. Required when IP_STORAGE=hash, any long random string.",
@@ -245,6 +295,13 @@ export function parseEnv(read: EnvSource): EnvResult {
 
       oauth: Object.freeze({
         clientSecret: oauthSecret,
+      }),
+
+      captcha: Object.freeze({
+        provider: captchaProvider,
+        siteKey: captchaSiteKey,
+        secret: captchaSecret,
+        baseUrl: captchaBaseUrl,
       }),
 
       storage: Object.freeze({

@@ -14,6 +14,7 @@ function ctx(path: string, query = ""): RequestContext {
     query: new URLSearchParams(query),
     headers: new Headers(),
     remoteAddress: null,
+    text: async () => "",
   };
 }
 

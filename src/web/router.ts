@@ -16,6 +16,8 @@ export interface RequestContext {
   readonly headers: Headers;
   /** the socket's remote address, when the server has one. */
   readonly remoteAddress: string | null;
+  /** the posted form's body. lazy: a route that never asks reads nothing. */
+  readonly text: () => Promise<string>;
 }
 
 export interface WebResponse {

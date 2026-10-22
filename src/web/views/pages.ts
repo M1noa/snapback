@@ -1,12 +1,14 @@
 // the pages the web layer renders. server-rendered html, one file per page, and
-// nothing in them that a person did not ask for: no trackers, no third-party
-// scripts, and no embedded scripts beyond the fingerprint the plan names.
+// nothing in them that a person did not ask for: no trackers, and no embedded
+// scripts beyond the fingerprint the plan names. the one third party is the
+// captcha widget, and only on an install that configured one.
 //
 // every page is one centred column: a wordmark, the seal, a small label, the
 // display line, one sentence, one control. the palette is a random pastel
 // chosen here, on the server, so the same page looks different each load
 // without shipping a line of javascript.
 
+import type { CaptchaWidget } from "./captcha.ts";
 import { countdownScript } from "./countdown.ts";
 import { openerScript } from "./opener.ts";
 import { hueStyle, pastelHue, THEME_CSS, themeColor } from "./theme.ts";
@@ -114,6 +116,10 @@ export interface HomePageInput {
   readonly guildName: string | null;
   readonly guildIconUrl: string | null;
   readonly verifyUrl: string | null;
+  /** the challenge to solve first. absent or null when the install has none. */
+  readonly captcha?: CaptchaWidget | null;
+  /** what the provider said about the last attempt, verbatim. */
+  readonly captchaError?: string | null;
 }
 
 export function homePage(input: HomePageInput): string {
@@ -128,19 +134,34 @@ export function homePage(input: HomePageInput): string {
   }
 
   const name = input.guildName ?? input.guildId;
+  // with a challenge the control is a form, and the flow stays in this tab: a
+  // tab the browser navigated to is one it will not let the result page close.
+  const challenge = input.captcha ?? null;
+  const lede =
+    challenge === null
+      ? "Approve it on Discord's own screen and you are done. There is nothing to install."
+      : "Solve the challenge, then continue to Discord. There is nothing to install.";
   const button =
     input.verifyUrl === null
       ? ""
-      : `<a class="button" id="sb-open" href="${escapeHtml(input.verifyUrl)}">Continue with Discord${ARROW_SVG}</a>
+      : challenge === null
+        ? `<a class="button" id="sb-open" href="${escapeHtml(input.verifyUrl)}">Continue with Discord${ARROW_SVG}</a>
 <p class="fine">Opens discord.com in a new tab, which closes itself when it is finished.</p>
-${openerScript()}`;
+${openerScript()}`
+        : `<form class="challenge" method="post" action="${escapeHtml(input.verifyUrl)}">
+${challenge.markup}
+${input.captchaError === null || input.captchaError === undefined ? "" : `<p class="status is-err" id="sb-captcha-error">${escapeHtml(input.captchaError)}</p>`}
+<button class="button" type="submit">Continue with Discord${ARROW_SVG}</button>
+</form>
+<p class="fine">Discord opens in this tab.</p>
+<script type="module" src="${escapeHtml(challenge.scriptSrc)}"></script>`;
 
   return page({
     title: `verify for ${name}`,
     body: `${seal({ name: input.guildName, iconUrl: input.guildIconUrl, state: "pending" })}
 <p class="eyebrow rise" style="--i:1">verify for</p>
 <h1 class="rise" style="--i:2">${escapeHtml(name)}</h1>
-<p class="lede rise" style="--i:3">Approve it on Discord's own screen and you are done. There is nothing to install.</p>
+<p class="lede rise" style="--i:3">${lede}</p>
 <div class="rise" style="--i:4">${button}</div>`,
   });
 }

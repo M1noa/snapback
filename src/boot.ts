@@ -76,11 +76,13 @@ import { createTokenStore } from "./services/verify/token-store.ts";
 import { registerSetupHandlers, SETUP_SPECS } from "./setup/handlers.ts";
 import { createSetupDeps } from "./setup/wiring.ts";
 import { assetRoute } from "./web/assets.ts";
+import { webCsp } from "./web/capture/fingerprint-script.ts";
 import { displayName } from "./web/display-name.ts";
 import { callbackRoute } from "./web/routes/callback.ts";
 import { healthRoute } from "./web/routes/health.ts";
 import { homeRoute } from "./web/routes/home.ts";
 import { createServer } from "./web/server.ts";
+import { captchaSources } from "./web/views/captcha.ts";
 
 // every customID surface this build produces. the boot assertion below refuses to
 // start when one has no handler (D4PLAN 9.3). the /setup wizard is the first
@@ -690,6 +692,9 @@ export async function boot(): Promise<Boot> {
   const web = createServer({
     db,
     log,
+    // the challenge brings a third party onto the page, so the policy widens to
+    // exactly its origins and nothing else.
+    csp: webCsp(captchaSources(env.captcha)),
     ip: {
       behindCloudflareTunnel: env.web.behindCloudflareTunnel,
       trustedProxyDepth: env.web.trustedProxyDepth,
@@ -700,6 +705,7 @@ export async function boot(): Promise<Boot> {
     routes: {
       home: homeRoute({
         db,
+        captcha: env.captcha,
         authorizeUrl: async (guildId) => {
           const built = await buildAuthorizeUrl(oauthDeps, {
             guildId,

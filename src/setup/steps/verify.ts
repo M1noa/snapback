@@ -98,6 +98,14 @@ function render(ctx: StepContext): ContainerComponent {
   const redirectLine = textDisplay(
     `**redirect target** \`${redirect}\`\n-# paste this exact string into the Developer Panel under OAuth2 > Redirects. discord rejects the whole flow on a mismatch (D4PLAN 7.3).`,
   );
+  // the challenge is an environment setting, not a guild one: every guild on
+  // this instance shares the landing page, so this line reports and never edits.
+  const challenge = ctx.deps.web.captcha;
+  const captchaLine = textDisplay(
+    challenge === "none"
+      ? "**challenge** none\n-# the landing page goes straight to discord. set `CAPTCHA_PROVIDER` to require one first."
+      : `**challenge** \`${challenge}\`\n-# solved on the landing page before discord opens. the keys live in the environment, not in a guild setting.`,
+  );
 
   return page({
     state: "info",
@@ -119,6 +127,7 @@ function render(ctx: StepContext): ContainerComponent {
       separator({ divider: true }),
       scopesLine,
       redirectLine,
+      captchaLine,
     ],
     controls: [
       actionRow([

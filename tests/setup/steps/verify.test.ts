@@ -51,6 +51,7 @@ function fakeDeps(publicBaseUrl = "https://verify.example.com"): SetupDeps {
       port: 8080,
       behindCloudflareTunnel: false,
       trustedProxyDepth: 0,
+      captcha: "none",
       listening: unused,
     },
     privacy: { ipStorage: "hash", tokenStorage: true },
