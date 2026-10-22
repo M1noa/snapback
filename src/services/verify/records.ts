@@ -34,6 +34,7 @@ const EVENT_KINDS = [
   "refreshed_ok",
   "refreshed_fail",
   "refused",
+  "role",
   "note",
 ] as const;
 

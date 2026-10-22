@@ -738,6 +738,7 @@ Fields, in the order the user asked for them:
 | Button URL | derived from `PUBLIC_BASE_URL`, editable, defaulted and validated |
 | Scopes | checkbox group, consequence lines from `7.2` |
 | Redirect target | read-only display of `{PUBLIC_BASE_URL}/callback` with a copy button |
+| Verified role | role select, plus a "grant no role" button, because a role select cannot express none |
 
 Then a live preview: the wizard posts the assembled panel **to the wizard channel only** with a "send to #channel" button and a "discard" button. The preview is the real component tree, not a mock, so what is previewed is what ships. This catches the 40-component overflow and the "link button inside a section accessory" mistake before it reaches production.
 
@@ -1173,6 +1174,9 @@ The record page shows the verdict with the evidence: the ASN, the ASN org, and t
 |---|---|---|
 | `verify_vpn_policy` | `off`, `block` | a hosting, vpn or tor network is refused |
 | `verify_alt_policy` | `off`, `flag`, `block` | `off` keeps no signals; `flag` keeps them and shows a match on the record; `block` refuses a match scored high |
+| `verify_role_id` | a role id, or null | the role a completed verification grants. null grants nothing, so the flow still closes with a page |
+
+`services/verify/role.ts` does the grant with one route, `PUT /guilds/{guild}/members/{user}/roles/{role}`, carrying an audit-log reason. A refusal does not undo the verification: the record is written, the page says the role could not be added, and the timeline keeps discord's code and message on the `role` event. The web flow has no guild, so a verification from the landing page grants nothing.
 
 `services/verify/alt.ts` scores a verification against the accounts already in that guild: device digest 70, address 45, email digest 35, avatar hash 25, name 10, summed and clamped at 100. High is 70, medium 40, low 15, and anything under low is not named at all. The guild is part of the lookup, so a signal is only ever compared inside the server that asked for it, and the account being verified never matches itself. The address signal is `null` in `encrypted` storage mode, because every encryption uses a fresh IV and the ciphertext never repeats (`14.5`).
 

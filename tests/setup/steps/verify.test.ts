@@ -200,4 +200,40 @@ describe("the verify step", () => {
     const seen = inspect(renderOf(verifyStep, context(settings())));
     expect(seen.ids).toContain(panelChannelId(GUILD));
   });
+
+  test("the role it grants is on the page, or the page says none is granted", () => {
+    const ROLE = "144102483157850113";
+    const set = inspect(renderOf(verifyStep, context(settings({ verify_role_id: ROLE }))));
+    expect(set.texts.some((text) => text.includes(`<@&${ROLE}>`))).toBe(true);
+
+    const unset = inspect(renderOf(verifyStep, context(settings())));
+    expect(unset.texts.some((text) => text.includes("grants nothing"))).toBe(true);
+  });
+
+  test("a chosen role is saved and an untouched select keeps the current one", () => {
+    const ROLE = "144102483157850113";
+    const OTHER = "144102483157850114";
+    const selectId = cursorId("role");
+
+    const chosen = applyOf(verifyStep, context(settings()), { [selectId]: ROLE });
+    expect(chosen.verify_role_id).toBe(ROLE);
+
+    const kept = applyOf(verifyStep, context(settings({ verify_role_id: OTHER })), {});
+    expect(kept.verify_role_id).toBe(OTHER);
+  });
+
+  test("the clear button sets the role to none", () => {
+    const patch = applyOf(verifyStep, context(settings({ verify_role_id: "144102483157850114" })), {
+      [cursorId("role-none")]: "",
+    });
+    expect(patch.verify_role_id).toBeNull();
+  });
 });
+
+// the role controls are not panel fields, so their ids are found by cursor.
+function cursorId(cursor: string): string {
+  const seen = inspect(renderOf(verifyStep, context(settings())));
+  const id = seen.ids.find((candidate) => parseCustomId(candidate).cursor === cursor);
+  if (id === undefined) throw new Error(`the verify step renders no ${cursor} control`);
+  return id;
+}

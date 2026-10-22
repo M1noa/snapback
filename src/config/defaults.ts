@@ -188,6 +188,9 @@ export interface GuildSettings {
   verify_vpn_policy: VerifyVpnPolicy;
   /** what happens when the verification looks like another account here. */
   verify_alt_policy: VerifyAltPolicy;
+  /** the role a completed verification grants. null grants nothing, so the
+   *  flow still closes with a page and no role (D4PLAN 10.3). */
+  verify_role_id: string | null;
   /** iso timestamp of the restricted-scope acknowledgement (D4PLAN 7.2). */
   acknowledged_restricted_scopes: string | null;
   branding: BrandingSettings;
@@ -449,6 +452,7 @@ export const FIELDS: {
   verify_panel: { default: null, read: readVerifyPanel },
   verify_vpn_policy: { default: "off", read: (v) => oneOf(v, VPN_POLICIES) ?? "off" },
   verify_alt_policy: { default: "off", read: (v) => oneOf(v, ALT_POLICIES) ?? "off" },
+  verify_role_id: nullableId(),
   acknowledged_restricted_scopes: nullableIso(),
   branding: { default: DEFAULT_BRANDING, read: readBranding },
 };

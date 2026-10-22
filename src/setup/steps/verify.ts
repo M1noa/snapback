@@ -23,9 +23,12 @@ import {
   checkbox,
   checkboxGroup,
   label,
+  roleSelect,
   textInput,
 } from "../../discord/components/row.ts";
+import { snowflake } from "../../lib/validate.ts";
 import {
+  SETUP_ACTION,
   SETUP_OBJECT,
   SetupInputError,
   type StepContext,
@@ -55,6 +58,27 @@ const SWATCHES: readonly string[] = Object.freeze(
 
 const ACK_LABEL = `acknowledge ${RESTRICTED_SCOPE_IDS[0] ?? "the restricted scope"}`;
 const ACK_DESCRIPTION = "restricted scope: needs Discord approval and the Social SDK terms";
+
+// the role is a guild setting, not a panel field, so it carries its own cursor
+// under the preview action this page already dispatches. a confirm button
+// clears it: a role select cannot express "none".
+function roleSelectId(guildId: string): string {
+  return setupCustomId({
+    guildId,
+    object: SETUP_OBJECT.panel,
+    action: SETUP_ACTION.preview,
+    cursor: "role",
+  });
+}
+
+function roleClearId(guildId: string): string {
+  return setupCustomId({
+    guildId,
+    object: SETUP_OBJECT.panel,
+    action: SETUP_ACTION.preview,
+    cursor: "role-none",
+  });
+}
 
 function currentPanel(ctx: StepContext): VerifyPanelSettings {
   return ctx.settings.verify_panel ?? { ...DEFAULT_VERIFY_PANEL };
@@ -106,6 +130,12 @@ function render(ctx: StepContext): ContainerComponent {
       ? "**challenge** none\n-# the landing page goes straight to discord. set `CAPTCHA_PROVIDER` to require one first."
       : `**challenge** \`${challenge}\`\n-# solved on the landing page before discord opens. the keys live in the environment, not in a guild setting.`,
   );
+  // the grant is what closes the loop: without a role a passed verification
+  // leaves the person with nothing (D4PLAN 10.3).
+  const roleId = ctx.settings.verify_role_id;
+  const roleLine = textDisplay(
+    `**verified role** ${roleId === null ? "not set: a passed verification grants nothing" : `<@&${roleId}>`}\n-# added by snapback after the challenge and the policy allow it. snapback needs manage roles, and its own role has to sit above this one.`,
+  );
 
   return page({
     state: "info",
@@ -128,13 +158,32 @@ function render(ctx: StepContext): ContainerComponent {
       scopesLine,
       redirectLine,
       captchaLine,
+      // the clear button rides the role line as a section accessory, which keeps
+      // the two control rows for the selects and the swatches (page() enforces it).
+      section({
+        texts: [roleLine],
+        accessory: button({
+          id: roleClearId(guildId),
+          label: "grant no role",
+          style: ButtonStyles.SECONDARY,
+          disabled: roleId === null,
+        }),
+      }),
     ],
     controls: [
+      // two selects share one row: discord does not allow a select and a button
+      // in the same action row, so the clear button cannot sit next to it.
       actionRow([
         channelSelect({
           id: panelChannelId(guildId),
           placeholder: "channel to post the panel in",
           channelTypes: [...PANEL_CHANNEL_TYPES],
+          minValues: 1,
+          maxValues: 1,
+        }),
+        roleSelect({
+          id: roleSelectId(guildId),
+          placeholder: "role to grant once verification passes",
           minValues: 1,
           maxValues: 1,
         }),
@@ -242,9 +291,15 @@ function apply(ctx: StepContext, values: StepValues): Partial<GuildSettings> {
     );
   }
 
+  // an unset select keeps the current role; the clear button sets it to none,
+  // since a role select has no way to express that on its own.
+  const chosenRole = snowflake(values[roleSelectId(guildId)]);
+  const cleared = values[roleClearId(guildId)] !== undefined;
+
   return {
     verify_panel: panel,
     acknowledged_restricted_scopes: acknowledgedAt,
+    verify_role_id: cleared ? null : (chosenRole ?? ctx.settings.verify_role_id),
   };
 }
 

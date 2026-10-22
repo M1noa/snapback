@@ -45,6 +45,7 @@ export type RecordEventKind =
   | "refreshed_ok"
   | "refreshed_fail"
   | "refused"
+  | "role"
   | "note";
 
 /** how a verification ended (D4PLAN 14.4). */

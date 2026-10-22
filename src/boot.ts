@@ -71,7 +71,8 @@ import { DEFAULT_RETENTION } from "./services/retention/index.ts";
 import { decideVerification } from "./services/verify/guard.ts";
 import { buildAuthorizeUrl, exchangeCode, refreshAccessToken } from "./services/verify/oauth.ts";
 import { createPanel, postPanel } from "./services/verify/panel.ts";
-import { upsertRecord } from "./services/verify/records.ts";
+import { addRecordEvent, upsertRecord } from "./services/verify/records.ts";
+import { grantVerifiedRole } from "./services/verify/role.ts";
 import { createTokenStore } from "./services/verify/token-store.ts";
 import { registerSetupHandlers, SETUP_SPECS } from "./setup/handlers.ts";
 import { createSetupDeps } from "./setup/wiring.ts";
@@ -770,6 +771,34 @@ export async function boot(): Promise<Boot> {
             input,
           ),
         tokens: tokenStore,
+        // the grant reads the guild's own setting, so the route stays free of
+        // settings and db reads. the timeline keeps the outcome either way.
+        grant: async ({ guildId, userId }) => {
+          const settings = guildId === null ? null : await getGuildSettings(db, guildId);
+          const result = await grantVerifiedRole(
+            { client, log },
+            { guildId, userId, roleId: settings?.verify_role_id ?? null },
+          );
+          if (guildId !== null && guildId !== "") {
+            try {
+              await addRecordEvent(
+                { db, log },
+                {
+                  userId,
+                  guildId,
+                  kind: "role",
+                  detail: { role_id: settings?.verify_role_id ?? null, outcome: result.outcome },
+                },
+              );
+            } catch (error) {
+              // the role is what matters; a timeline write never fails the grant.
+              log.error("writing the role event threw", {
+                message: error instanceof Error ? error.message : String(error),
+              });
+            }
+          }
+          return result;
+        },
         record: async ({
           userId,
           guildId,

@@ -14,6 +14,7 @@ import { DiscordApiError, formatDiscordError } from "../../discord/errors.ts";
 import type { Logger } from "../../lib/log.ts";
 import { type AltSignals, emailDigest } from "../../services/verify/alt.ts";
 import type { GuardDecision, GuardInput } from "../../services/verify/guard.ts";
+import type { RoleGrantResult } from "../../services/verify/role.ts";
 import type { TokenStore } from "../../services/verify/token-store.ts";
 import { deviceDigest, readFingerprint } from "../capture/fingerprint.ts";
 import { COOKIE_NAME } from "../capture/fingerprint-script.ts";
@@ -46,6 +47,9 @@ export interface CallbackDeps {
   } | null>;
   /** the policy: the network rule and the anti-alt rule. */
   readonly guard: (input: GuardInput) => Promise<GuardDecision>;
+  /** grant the verified role. from services/verify/role.ts, wrapped by boot so
+   *  the guild's own setting is read there. */
+  readonly grant: (input: { guildId: string | null; userId: string }) => Promise<RoleGrantResult>;
   /** the token store. a refused verification gives its token back. */
   readonly tokens: TokenStore;
   /** write the record. from services/verify/records.ts. */
@@ -86,6 +90,15 @@ const REFUSED_DETAIL =
 
 const REFUSED_ALT_DETAIL =
   "This verification was not completed. It matches another account on this server too closely, so it was refused. If this is you, ask the server's admins.";
+
+/** the success sentences. the role is the one thing the person is waiting for,
+ *  so the page says what happened to it. */
+const GRANTED_DETAIL = "The verification is complete and the role is on your account.";
+
+const GRANT_FAILED_DETAIL =
+  "The verification is complete, but the role could not be added. Ask a server admin to add it for you.";
+
+const DONE_DETAIL = "Nothing is left to do here.";
 
 export function callbackRoute(deps: CallbackDeps) {
   return async (ctx: RequestContext): Promise<WebResponse> => {
@@ -190,16 +203,35 @@ export function callbackRoute(deps: CallbackDeps) {
       };
     }
 
+    // the record is written, so the role is the last thing. a grant that fails
+    // never turns a completed verification into a failure: the page says what
+    // happened, and the operator gets discord's words in the log.
+    let granted: RoleGrantResult = { outcome: "skipped", said: null };
+    try {
+      granted = await deps.grant({ guildId: exchanged.guildId, userId: exchanged.userId });
+    } catch (error) {
+      deps.log.error("granting the verified role threw", {
+        message: error instanceof Error ? error.message : String(error),
+      });
+      granted = { outcome: "failed", said: error instanceof Error ? error.message : String(error) };
+    }
+
     return {
       status: 200,
       headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" },
       body: resultPage({
         ok: true,
         guildName: exchanged.guildName,
-        detail: "Nothing is left to do here.",
+        detail: successDetail(granted),
       }),
     };
   };
+}
+
+function successDetail(granted: RoleGrantResult): string {
+  if (granted.outcome === "granted") return GRANTED_DETAIL;
+  if (granted.outcome === "failed") return GRANT_FAILED_DETAIL;
+  return DONE_DETAIL;
 }
 
 /** the fingerprint the landing page put in a cookie. */
