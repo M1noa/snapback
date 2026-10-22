@@ -1,13 +1,16 @@
 import { describe, expect, test } from "bun:test";
 import {
+  connectionPropertiesFor,
   diagnoseCloseCode,
   GATEWAY_INTENTS,
   INTENTS_CHECKLIST,
   LIVE_REACTIONS_INTENT,
+  MOBILE_IDENTIFY,
 } from "../../src/discord/gateway.ts";
 
-// the pure parts of the gateway: the close-code diagnosis table and the intent
-// list. the connection itself needs a live token and is not exercised here.
+// the pure parts of the gateway: the close-code diagnosis table, the intent
+// list, and the identify properties. the connection itself needs a live token
+// and is not exercised here.
 
 describe("gateway close-code diagnosis (D4PLAN 18.4)", () => {
   test("a known code keeps the code and reason and adds a diagnosis", () => {
@@ -74,5 +77,25 @@ describe("gateway intents (D4PLAN 7.1)", () => {
 
   test("has no duplicates", () => {
     expect(new Set(GATEWAY_INTENTS).size).toBe(GATEWAY_INTENTS.length);
+  });
+});
+
+describe("mobile identify (cosmetic badge)", () => {
+  test("on sends the android client properties", () => {
+    expect(connectionPropertiesFor(true)).toEqual({
+      browser: "Discord Android",
+      device: "Snapback",
+      os: "Android",
+    });
+  });
+
+  test("off sends nothing, so oceanic uses its own defaults", () => {
+    expect(connectionPropertiesFor(false)).toBeUndefined();
+  });
+
+  test("the returned properties are a copy, not the frozen constant", () => {
+    const props = connectionPropertiesFor(true);
+    expect(props).not.toBe(MOBILE_IDENTIFY);
+    expect(props?.device).toBe("Snapback");
   });
 });

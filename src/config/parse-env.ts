@@ -81,6 +81,7 @@ export interface Env {
   readonly app: {
     readonly logLevel: LogLevel;
     readonly automationEnabled: boolean;
+    readonly mobileStatus: boolean;
   };
 }
 
@@ -321,6 +322,9 @@ export function parseEnv(read: EnvSource): EnvResult {
           "info",
         ),
         automationEnabled: bool("AUTOMATION_ENABLED", true),
+        // identifies as the phone client, so the member list shows the mobile
+        // badge next to the bot. cosmetic; false sends the library defaults.
+        mobileStatus: bool("MOBILE_STATUS", true),
       }),
     }),
   };

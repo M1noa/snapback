@@ -88,11 +88,26 @@ function closeFields(info: Error | string, shard: number | undefined): Record<st
   return fields;
 }
 
+// the identify properties. discord draws a phone badge next to a connection
+// whose browser claims the mobile client; nothing else changes. cosmetic only.
+export const MOBILE_IDENTIFY = Object.freeze({
+  browser: "Discord Android",
+  device: "Snapback",
+  os: "Android",
+});
+
+/** the identify properties for one connection, or undefined for the defaults. */
+export function connectionPropertiesFor(mobile: boolean): typeof MOBILE_IDENTIFY | undefined {
+  return mobile ? { ...MOBILE_IDENTIFY } : undefined;
+}
+
 export interface GatewayOptions {
   readonly token: string;
   readonly log: Logger;
   /** D4PLAN 7.1: add GUILD_MESSAGE_REACTIONS for live reaction capture. off by default. */
   readonly liveReactions?: boolean;
+  /** identify as the phone client and collect the mobile badge. on by default. */
+  readonly mobile?: boolean;
 }
 
 /** the resolved gateway state the boot path reads. */
@@ -117,7 +132,13 @@ export class Gateway {
     const intents = options.liveReactions
       ? [...GATEWAY_INTENTS, LIVE_REACTIONS_INTENT]
       : [...GATEWAY_INTENTS];
-    this.#client = new Client({ auth: `Bot ${options.token}`, gateway: { intents } });
+    this.#client = new Client({
+      auth: `Bot ${options.token}`,
+      gateway: {
+        intents,
+        connectionProperties: connectionPropertiesFor(options.mobile ?? true),
+      },
+    });
     this.#registerHooks();
   }
 

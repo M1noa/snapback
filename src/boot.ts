@@ -254,7 +254,11 @@ export async function boot(): Promise<Boot> {
   };
 
   // 3. gateway. oceanic owns the connection (D4PLAN 2, 4).
-  const gateway = new Gateway({ token: env.discord.token, log });
+  const gateway = new Gateway({
+    token: env.discord.token,
+    log,
+    mobile: env.app.mobileStatus,
+  });
 
   // what discord says a guild is, kept fresh where the web pages read it: a
   // server rename lands on the landing page without a capture. no settings and

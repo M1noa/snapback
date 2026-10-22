@@ -139,6 +139,7 @@ The backup directory and the database file are siblings by default, so a move of
 |---|---|---|
 | `LOG_LEVEL` | `info` | verbosity of structured stdout: `verbose`, `debug`, `info`, `warn`, `error` |
 | `AUTOMATION_ENABLED` | `true` | `false` turns the scheduler off and makes every job manual |
+| `MOBILE_STATUS` | `true` | identify as the phone client so the bot shows the mobile badge. cosmetic; `false` sends the library defaults |
 | `DISCORD_DEV_GUILD_ID` | unset | set it to register commands to one guild instantly while developing |
 
 ## First run
