@@ -1422,7 +1422,7 @@ Who might attack this, and what stops them:
 - `relationships.read` is off unless the owner acknowledges the Social SDK terms (`7.2`).
 - Fingerprint fields are a fixed, documented list (`14.2`), not an extensible grab bag. The list is documented in this plan and in `docs/privacy.md`; it is not shown on the website (operator decision).
 - Revocation is real: `/verify revoke` clears the tokens and records the event, and `/verify delete` is the full-deletion path.
-- Retention applies to records too, not only backups. A guild that sets `keep_days: 90` has records older than 90 days deleted by the same sweep, with the count reported.
+- Retention applies to records too, not only backups. `tracking.keep_days` (`19.5`) deletes timeline rows older than the number, in the same scheduler tick that prunes backups, with the count reported.
 
 ### 19.3 What the verify panel says
 
@@ -1442,6 +1442,23 @@ Stated because the reference material contains all of it `[r]` and it will come 
 - No public geo-lookup endpoint. The earlier draft exposed `POST /api/geo` so the site could ask the server what an arbitrary IP resolves to; that is an unauthenticated query surface against the intel data and it is not built. Geolocation is computed internally, at verify time, from the stored IP, and never on request.
 - No payment, subscription, or gift-code surface. Five of the reference's tables exist to run a paid SaaS; this is a self-hosted tool.
 - No "block alts" enforcement that acts on a hash match alone. An IP hash match is a signal shown to an operator, never an automatic ban, because shared NAT, student halls, and mobile carriers all produce false matches.
+
+### 19.5 The event timeline
+
+`tracked_events` is one append-only table of changes, written from four sources (`source` column): `gateway` for what the connection told us, `verify` for a verification we ran, `pull` for a pull we drove, `admin` for an operator action we took ourselves. A gateway diff is not the same claim as a record we wrote, so the export says which is which.
+
+One row per change, never one row per user. `before_json` and `after_json` hold only the fields that changed, so a nickname edit does not carry the whole member object. Discord does not send a timestamp for most of these events, so `at` is when the gateway told us and `recorded_at` is when the row was written; they are separate columns because on a restart or a backlog they differ. `actor_id` is filled only where Discord names the actor. We never infer it from a diff.
+
+Two switches, and the split between them is the whole difference between a record of a server and a record of its people. The vocabulary and the split live in `services/tracking/kinds.ts`, and a type test fails if a kind is added to neither list.
+
+- `tracking.history`, **on by default**: state anyone with the member list could already look up. Member join and leave, roles, nickname, username, global name, avatar, flags, boost, timeout, pending; verifications; guild, role, channel, emoji, sticker, thread and bot-presence changes.
+- `tracking.palantir`, **off by default**: what someone did. Voice join, leave, move and state; message delete and edit; ban and unban; blacklist add and remove; pull attempt and pull added. Off by default because a behaviour stream reads like surveillance, and an operator should have to ask for it on purpose. The name is the joke and the warning at once.
+
+Neither switch records message content or attachment bytes. A `message_delete` row records that a message in a channel was deleted by an actor; it does not keep the text. `message_edit` records the before and after length, not the strings.
+
+`tracking.keep_days` is the timeline's own number, `null` by default, clamped 1 to 3650 (`LIMITS.tracking_keep_days`). `null` means keep it, because a default that quietly deletes a server's history is worse than one that grows. It is deliberately separate from the backup retention policy (`services/retention/index.ts`): a guild can want 400 backups and 30 days of timeline, or the reverse. Both are swept in the same scheduler tick (`17.1`), each from its own number, and the tick reports the counts separately.
+
+Exports: the three `tracking_*` kinds (`tracking_user`, `tracking_server`, `tracking_all`) read this table and nothing else. They go out through the normal export path, so they get the same expiry and the same never-contain-tokens rule as every other export.
 
 ---
 
