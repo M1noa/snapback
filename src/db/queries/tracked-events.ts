@@ -37,7 +37,7 @@ function toTrackedEventRow(raw: Record<string, SqlValue>): TrackedEventRow {
     before_json: json<JsonObject>(raw.before_json),
     after_json: json<JsonObject>(raw.after_json),
     detail_json: json<JsonObject>(raw.detail_json),
-    at: toText(raw["at"]) ?? "",
+    at: toText(raw.at) ?? "",
     recorded_at: toText(raw.recorded_at) ?? "",
   };
 }

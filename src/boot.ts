@@ -68,6 +68,7 @@ import { pullAccounts } from "./services/pull/index.ts";
 import { createRestoreJobHandler } from "./services/restore/job.ts";
 import { buildPlan } from "./services/restore/plan.ts";
 import { DEFAULT_RETENTION } from "./services/retention/index.ts";
+import { TrackingService } from "./services/tracking/index.ts";
 import { decideVerification } from "./services/verify/guard.ts";
 import { buildAuthorizeUrl, exchangeCode, refreshAccessToken } from "./services/verify/oauth.ts";
 import { createPanel, postPanel } from "./services/verify/panel.ts";
@@ -285,6 +286,12 @@ export async function boot(): Promise<Boot> {
   };
   gateway.client.on("guildCreate", syncIdentity);
   gateway.client.on("guildUpdate", syncIdentity);
+
+  // the timeline. settings are read once here and refreshed when /setup saves,
+  // so a handler costs no read. every handler catches its own failure.
+  const tracking = new TrackingService(db, log);
+  await tracking.load();
+  tracking.attach(gateway.client);
 
   // 4. interactions. the enqueue is deliberately left unwired: the default throws,
   // which surfaces as a failed interaction rather than a silently dropped job.
