@@ -201,14 +201,17 @@ export function backupCommands(deps: BackupDeps): SlashCommand[] {
     {
       group: GROUP,
       subcommand: "export",
-      description: "write one backup out as json",
+      description: "write one backup out as a file",
       options: [
         BACKUP_OPTION,
         {
           name: "format",
-          description: "the file format",
+          description: "json keeps everything, restorecord matches their download",
           type: OPTION_TYPE.string,
-          choices: [{ name: "json", value: "json" }],
+          choices: [
+            { name: "json (lossless)", value: "json" },
+            { name: "restorecord", value: "restorecord" },
+          ],
         },
       ],
       async autocomplete(ctx) {
@@ -224,10 +227,11 @@ export function backupCommands(deps: BackupDeps): SlashCommand[] {
 
         // writing a large backup outlives an interaction, so it is a job like
         // everything else (rule 7).
+        const format = ctx.options.format === "restorecord" ? "restorecord" : "json";
         const job = await deps.jobs.enqueue("export", {
           guildId: ctx.guildId,
           requestedBy: ctx.userId,
-          payload: { backupId: row.backup_id, format: "json" },
+          payload: { backupId: row.backup_id, format },
         });
         await deps.audit({
           guildId: ctx.guildId,

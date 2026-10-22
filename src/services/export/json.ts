@@ -63,11 +63,12 @@ export interface ExportBundle {
 }
 
 // our own export errors. one code, one fixed message (AGENTS.md errors).
-export type ExportErrorCode = "SB_EXPORT_NO_BACKUP" | "SB_EXPORT_MALFORMED";
+export type ExportErrorCode = "SB_EXPORT_NO_BACKUP" | "SB_EXPORT_MALFORMED" | "SB_EXPORT_FORMAT";
 
 const EXPORT_MESSAGES: Record<ExportErrorCode, string> = {
   SB_EXPORT_NO_BACKUP: "the backup to export does not exist",
   SB_EXPORT_MALFORMED: "the file is not a snapback export bundle",
+  SB_EXPORT_FORMAT: "that is not a format snapback writes",
 };
 
 export class ExportError extends Error {

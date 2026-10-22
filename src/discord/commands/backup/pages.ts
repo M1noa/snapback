@@ -173,6 +173,8 @@ export interface JobPageInput {
   readonly pauseId: string;
   readonly cancelId: string;
   readonly infoId: string | null;
+  /** one extra line about the result, such as where an export landed. */
+  readonly note?: string | null;
 }
 
 /** a job's page. the words say what the colour says, and the ETA appears only
@@ -195,6 +197,7 @@ export function jobPage(input: JobPageInput): ContainerComponent {
   if (input.etaSeconds !== null)
     lines.push(`about ${formatDuration(input.etaSeconds * 1000)} left`);
   if (job.error_code !== null) lines.push(`**${job.error_code}** ${job.error_body ?? ""}`);
+  if (input.note != null) lines.push(input.note);
 
   const controls = [] as ReturnType<typeof actionRow>[];
   const live = job.status === "queued" || job.status === "running" || job.status === "paused";

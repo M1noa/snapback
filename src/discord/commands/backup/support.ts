@@ -4,13 +4,41 @@
 // every read is scoped to the guild. a backup id from another server is not
 // reachable from here, so an id pasted from another guild finds nothing.
 
+import { listPendingExportsByGuild } from "../../../db/queries/exports.ts";
 import { getJob } from "../../../db/queries/jobs.ts";
 import type { BackupRow, JobRow } from "../../../db/types.ts";
 import { countRows } from "../../../services/backup/selfcheck.ts";
 import { failurePage } from "../../interactions/dispatch.ts";
-import type { CommandContext, CommandResult } from "../types.ts";
+import {
+  type CommandContext,
+  type CommandResult,
+  formatBytes,
+  relativeTimestamp,
+} from "../types.ts";
 import { BACKUP_ACTION, BACKUP_OBJECT, type BackupDeps, backupCustomId } from "./deps.ts";
 import { infoPage, jobPage, LIST_PAGE_SIZE, listPage } from "./pages.ts";
+
+// where a finished export landed. the job row holds no path, so the pending
+// export the job wrote is the record of it. matched on the backup id in the
+// payload, which is exact, rather than on the newest row in the guild. an
+// export nobody can find is the same as one that never ran.
+async function exportNote(deps: BackupDeps, job: JobRow): Promise<string | null> {
+  if (job.kind !== "export" || job.status !== "succeeded") return null;
+  const backupId = (job.payload_json as { backupId?: unknown } | null)?.backupId;
+  if (typeof backupId !== "string") return null;
+
+  const rows = await listPendingExportsByGuild(deps.db, job.guild_id);
+  const row = rows.find(
+    (candidate) =>
+      candidate.kind === "backup" &&
+      (candidate.scope_json as { backupId?: unknown } | null)?.backupId === backupId,
+  );
+  if (row === undefined) return null;
+
+  const format = (row.scope_json as { format?: unknown } | null)?.format;
+  const label = typeof format === "string" ? format : "json";
+  return `file: \`${row.file_path}\` · ${label} · ${formatBytes(row.size_bytes)} · removed ${relativeTimestamp(Date.parse(row.expires_at))}`;
+}
 
 /** null when the person may act, and the refusal page when they may not. */
 export async function refusal(
@@ -169,6 +197,7 @@ export async function jobPageFor(
     job,
     guildId,
     etaSeconds: await deps.jobs.eta(jobId),
+    note: await exportNote(deps, job),
     refreshId: backupCustomId({
       guildId,
       object: BACKUP_OBJECT.job,

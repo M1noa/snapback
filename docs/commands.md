@@ -36,7 +36,7 @@ The wizard. Stateful and resumable; the subcommands jump straight to a step.
 | `/backup create` | `label`, `messages` (bool), `members` (bool), `message_limit` (int), `dry_run` (bool) | queues a backup job; a dry run writes nothing |
 | `/backup list` | `page` | paginated list, newest first |
 | `/backup info` | `backup` (autocomplete) | counts, size, age, contents summary, the self-check's failures and skips |
-| `/backup export` | `backup` (autocomplete), `format` | writes the JSON bundle into the export directory and reports the path and its size |
+| `/backup export` | `backup` (autocomplete), `format` | writes the backup into the export directory as json (lossless) or restorecord, and reports the path, its size, and when the sweeper takes it |
 | `/backup delete` | `backup` (autocomplete), `confirm` | arms the delete on a typed value, then hard-deletes the rows and the asset files |
 | `/backup prune` | `dry_run` (default on) | shows the retention policy's plan, and acts on the second press. the page's **set the policy** button opens the modal that stores the day and count limits |
 
