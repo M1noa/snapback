@@ -65,6 +65,29 @@ See `docs/self-hosting.md` for the DuckDB single-writer rule and how to move to 
 
 The client id is the application id, so there is nothing to configure for it. The secret is the only piece the developer portal hands out that the bot holds.
 
+### Captcha
+
+| Key | Default | Meaning |
+|---|---|---|
+| `CAPTCHA_PROVIDER` | `none` | `none`, `turnstile`, `recaptcha`, or `cap` |
+| `CAPTCHA_SITE_KEY` | unset | the public site key, rendered into the widget |
+| `CAPTCHA_SECRET` | unset | the secret the server checks a token with. never sent to a browser |
+| `CAPTCHA_BASE_URL` | unset | cap only: the origin of your own instance, no trailing slash |
+
+With a provider set, the landing page asks for the challenge and the token is checked before any OAuth state is minted. Nothing reaches Discord without it. `none` keeps the old behaviour, where the button goes straight to Discord.
+
+`turnstile` and `cap` are the two that do not hand a tracker a person's browser. `cap` is self-hosted, so it also keeps the challenge on your own domain. `recaptcha` works, but the widget and the check both go to Google.
+
+```sh
+CAPTCHA_PROVIDER=turnstile
+CAPTCHA_SITE_KEY=0x4AAAAAAA...
+CAPTCHA_SECRET=0x4AAAAAAA...
+```
+
+The keys live in the environment, not in a guild setting: the landing page is shared by every guild on the instance. `/setup` reports which provider is in force and never stores one. A provider named without its keys stops the process at boot with the missing key named, rather than half-working.
+
+This is a challenge, not a solver. The project does not integrate a CAPTCHA-solving service, and `19.4` of `D4PLAN.md` says why.
+
 ### Proxy awareness
 
 | Key | Default | Meaning |

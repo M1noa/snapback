@@ -10,7 +10,7 @@ Legend for confidence:
 - `[r]` taken from a reference project, behaviour read directly
 - `[?]` assumed, needs a spike before it is coded
 
-Companion docs: `AGENTS.md` is the coding contract, `D4TODO.md` is the execution order, `S5PLAN.md` is the earlier draft this supersedes (its command list, its two-file schema, and its `snap:` id namespace are all replaced here; the captcha and public geo-lookup routes it proposed are dropped, see `19.4`).
+Companion docs: `AGENTS.md` is the coding contract, `D4TODO.md` is the execution order, `S5PLAN.md` is the earlier draft this supersedes (its command list, its two-file schema, and its `snap:` id namespace are all replaced here; the public geo-lookup route it proposed is dropped, see `19.4`, and its captcha surface survives only as the landing-page challenge in `19.4`).
 
 ---
 
@@ -1438,7 +1438,7 @@ Stated because the reference material contains all of it `[r]` and it will come 
 
 - No proxy rotation or ban evasion. No `zproxy.lum-superproxy.io`, no `CF_API_TOKEN`-driven zone juggling. The reference project's setup doc wires a residential proxy in front of every Discord API call; that is an evasion infrastructure and this project does not include it.
 - No selfbot behaviour, no user-token message sending, no token harvesting.
-- No CAPTCHA-solving service integration. hCaptcha is in the reference's env; here, verification is the OAuth flow and nothing else.
+- No CAPTCHA-solving service integration. hCaptcha is in the reference's env; here, a challenge is optional (`CAPTCHA_PROVIDER`: `none`, `turnstile`, `recaptcha`, `cap`), it runs on the landing page before the OAuth flow, and a token is checked with the provider's own siteverify before any state is minted. A solver is what is excluded, not a challenge: the flow is still the OAuth flow and nothing else. Self-hosting notes are in `docs/setup.md`.
 - No public geo-lookup endpoint. The earlier draft exposed `POST /api/geo` so the site could ask the server what an arbitrary IP resolves to; that is an unauthenticated query surface against the intel data and it is not built. Geolocation is computed internally, at verify time, from the stored IP, and never on request.
 - No payment, subscription, or gift-code surface. Five of the reference's tables exist to run a paid SaaS; this is a self-hosted tool.
 - No "block alts" enforcement that acts on a hash match alone. An IP hash match is a signal shown to an operator, never an automatic ban, because shared NAT, student halls, and mobile carriers all produce false matches.

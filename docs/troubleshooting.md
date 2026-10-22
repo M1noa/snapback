@@ -42,6 +42,14 @@ The failures that actually happen, by symptom. Each entry names the cause and th
 
 **Fix.** In the Developer Panel's OAuth2 page, add the exact string `/setup app` prints: `{PUBLIC_BASE_URL}/callback`. It must be byte-identical to what `PUBLIC_BASE_URL` produces, including no trailing slash and the same hostname. Discord requires HTTPS for it, so a plain `http://` localhost URL will not work; use a tunnel per `docs/cloudflare-tunnel.md`. If you used a quick tunnel, the hostname changed on restart, so re-register the new one.
 
+## The challenge is refused as invalid-input-response
+
+**Symptom.** The landing page shows the widget, you solve it, and the page comes back with `The challenge was refused: invalid-input-response, ...`. The OAuth flow never starts.
+
+**Cause.** The provider rejected the token. Usual reasons: `CAPTCHA_SECRET` belongs to a different site key than `CAPTCHA_SITE_KEY`, the widget's domain is not on the provider's allowlist for that key, or the token was already spent (they are single-use, and a page reload spends a fresh one).
+
+**Fix.** Re-copy both keys from the provider dashboard as a pair. For turnstile, add `{PUBLIC_BASE_URL}`'s hostname under the widget's allowed domains. Then reload the landing page and solve it once more. The refusal line carries the provider's own code, so a code other than `invalid-input-response` names the real problem and can be looked up in their docs.
+
 ## Every captured IP is ::1 behind a tunnel
 
 **Symptom.** Records show `::1` or `127.0.0.1` for every user. Every VPN check looks identical.

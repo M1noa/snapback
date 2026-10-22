@@ -55,7 +55,7 @@ The ten non-negotiables, in one place.
 6. **All Discord traffic goes through `discord/client.ts`.** Nothing else imports `fetch` against `discord.com`. oceanic.js is the gateway, not the REST client. One carve-out: read-only CDN downloads go through `lib/http.ts`.
 7. **Nothing long runs in an interaction handler.** Enqueue a job, ack, edit the message from the job runner.
 8. **Re-check authorisation and ownership on every interaction.** A button rendered for an admin last week must fail closed today.
-9. **No user tokens, no selfbot code, no proxy rotation, no CAPTCHA service.**
+9. **No user tokens, no selfbot code, no proxy rotation, no CAPTCHA-solving service.** A challenge before the OAuth flow is fine and configurable; outsourcing a challenge to a solver is not.
 10. **Tokens are encrypted at rest, always.** Exports never contain tokens. Logs never contain emails or IP addresses.
 
 On top of those:
