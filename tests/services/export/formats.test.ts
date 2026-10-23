@@ -14,7 +14,11 @@ import { join } from "node:path";
 import { insertBackupChannels } from "../../../src/db/queries/backup-channels.ts";
 import { insertBackupRoles } from "../../../src/db/queries/backup-roles.ts";
 import type { BackupRoleRow, Database } from "../../../src/db/types.ts";
-import { bundleToRestorecord, parseExportFormat, writeFormattedExport } from "../../../src/services/export/formats.ts";
+import {
+  bundleToRestorecord,
+  parseExportFormat,
+  writeFormattedExport,
+} from "../../../src/services/export/formats.ts";
 import { buildExport, type ExportBundle, ExportError } from "../../../src/services/export/json.ts";
 import { closeFixtureDb, insertFixtureBackup, openFixtureDb } from "../../fixtures/db.ts";
 
