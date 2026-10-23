@@ -14,7 +14,13 @@ import {
   USERS_SURFACE,
   type UsersDeps,
 } from "./deps.ts";
-import { blacklistPageFor, exportPageFor, recordPageFor } from "./index.ts";
+import {
+  ATTEMPTS_CURSOR,
+  attemptsPageFor,
+  blacklistPageFor,
+  exportPageFor,
+  recordPageFor,
+} from "./index.ts";
 
 type Container = Parameters<HandlerContext["surface"]["reply"]>[0]["message"];
 
@@ -105,6 +111,9 @@ function blacklistHandler(deps: UsersDeps): Handler {
         ctx,
         failurePage("that control is not here", "this page has nothing to open."),
       );
+    }
+    if (ctx.id.cursor === ATTEMPTS_CURSOR) {
+      return await answer(ctx, await attemptsPageFor(deps, ctx.id.guild));
     }
     return await answer(ctx, await blacklistPageFor(deps, ctx.id.guild));
   };

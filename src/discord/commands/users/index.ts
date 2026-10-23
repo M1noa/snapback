@@ -9,6 +9,10 @@
 // (D4PLAN 17.3). the address appears in the form the storage mode produced,
 // and the header names the mode so a reader can tell a hash from an address.
 
+import {
+  countBlacklistAttempts,
+  listBlacklistAttempts,
+} from "../../../db/queries/blacklist-attempts.ts";
 import { getAccountCounter } from "../../../db/queries/counters.ts";
 import { listPendingExportsByGuild } from "../../../db/queries/exports.ts";
 import { listJobsByGuild } from "../../../db/queries/jobs.ts";
@@ -38,7 +42,7 @@ import {
   type UsersDeps,
   usersCustomId,
 } from "./deps.ts";
-import { blacklistPage, exportPage, recordPage } from "./pages.ts";
+import { ATTEMPT_LIST_SIZE, attemptsPage, blacklistPage, exportPage, recordPage } from "./pages.ts";
 
 const GROUP = "users";
 
@@ -78,6 +82,7 @@ const BLACKLIST_ACTION_OPTION: CommandOption = {
   required: true,
   choices: [
     { name: "list the entries", value: "list" },
+    { name: "the attempts that hit the list", value: "attempts" },
     { name: "add an entry", value: "add" },
     { name: "remove an entry", value: "remove" },
   ],
@@ -365,6 +370,11 @@ export function usersCommands(deps: UsersDeps): SlashCommand[] {
         if (action === "list") {
           return { page: await blacklistPageFor(deps, ctx.guildId), ephemeral: true };
         }
+        // the attempts need neither a kind nor a value, so this comes before the
+        // validation that would demand them.
+        if (action === "attempts") {
+          return { page: await attemptsPageFor(deps, ctx.guildId), ephemeral: true };
+        }
 
         const kind = oneOf(ctx.options.kind, BLACKLIST_KINDS);
         const value = boundedText(ctx.options.value, 256);
@@ -467,6 +477,9 @@ export function usersCommands(deps: UsersDeps): SlashCommand[] {
   ];
 }
 
+/** the cursor that tells the blacklist control to show the attempts, not the entries. */
+export const ATTEMPTS_CURSOR = "attempts";
+
 /** the blacklist page for this server. the note says what just happened. */
 export async function blacklistPageFor(
   deps: UsersDeps,
@@ -482,6 +495,39 @@ export async function blacklistPageFor(
       guildId,
       object: USERS_OBJECT.blacklist,
       action: USERS_ACTION.blacklist,
+    }),
+    openAttemptsId: usersCustomId({
+      guildId,
+      object: USERS_OBJECT.blacklist,
+      action: USERS_ACTION.blacklist,
+      cursor: ATTEMPTS_CURSOR,
+    }),
+  });
+}
+
+/** what the list matched, newest first. one page, with the total above it. */
+export async function attemptsPageFor(
+  deps: UsersDeps,
+  guildId: string,
+): Promise<ReturnType<typeof attemptsPage>> {
+  const [attempts, total] = await Promise.all([
+    listBlacklistAttempts(deps.db, guildId, ATTEMPT_LIST_SIZE),
+    countBlacklistAttempts(deps.db, guildId),
+  ]);
+  return attemptsPage({
+    guildId,
+    attempts,
+    total,
+    backId: usersCustomId({
+      guildId,
+      object: USERS_OBJECT.blacklist,
+      action: USERS_ACTION.blacklist,
+    }),
+    refreshId: usersCustomId({
+      guildId,
+      object: USERS_OBJECT.blacklist,
+      action: USERS_ACTION.blacklist,
+      cursor: ATTEMPTS_CURSOR,
     }),
   });
 }

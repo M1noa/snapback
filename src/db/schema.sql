@@ -54,6 +54,38 @@ CREATE TABLE IF NOT EXISTS guild_blacklist (
   PRIMARY KEY (guild_id, kind, value)
 );
 
+-- every verification that matched a blacklist entry. the row is the snapshot as
+-- it stood at the time: the network intel, the fingerprint, and the entries it
+-- hit. it carries no decision, because a match never refuses anything
+-- (D4PLAN 19.4). the address is never here, only what the storage mode produced.
+CREATE TABLE IF NOT EXISTS blacklist_attempts (
+  attempt_id       VARCHAR PRIMARY KEY,
+  guild_id         VARCHAR,
+  user_id          VARCHAR,
+  username         VARCHAR,
+  global_name      VARCHAR,
+  status           VARCHAR,
+  refusal_reason   VARCHAR,
+  ip_mode          VARCHAR,
+  ip_hash          VARCHAR,
+  asn              VARCHAR,
+  as_org           VARCHAR,
+  isp              VARCHAR,
+  country_code     VARCHAR,
+  country_name     VARCHAR,
+  ip_type          VARCHAR,
+  is_vpn           BOOLEAN,
+  is_proxy         BOOLEAN,
+  is_tor           BOOLEAN,
+  is_hosting       BOOLEAN,
+  matches_json     TEXT,
+  signals_json     TEXT,
+  fingerprint_json TEXT,
+  device           VARCHAR,
+  "at"             VARCHAR,
+  recorded_at      VARCHAR
+);
+
 -- every long operation. resumable, one runner per kind, serialised per guild.
 CREATE TABLE IF NOT EXISTS jobs (
   id            VARCHAR PRIMARY KEY,
@@ -512,6 +544,12 @@ CREATE INDEX IF NOT EXISTS idx_guild_admins_user
 
 CREATE INDEX IF NOT EXISTS idx_guild_blacklist_guild
   ON guild_blacklist (guild_id, kind);
+
+CREATE INDEX IF NOT EXISTS idx_blacklist_attempts_guild_at
+  ON blacklist_attempts (guild_id, "at");
+
+CREATE INDEX IF NOT EXISTS idx_blacklist_attempts_user_at
+  ON blacklist_attempts (user_id, "at");
 
 CREATE INDEX IF NOT EXISTS idx_jobs_guild_status
   ON jobs (guild_id, status);

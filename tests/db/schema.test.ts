@@ -10,15 +10,16 @@ import { type DuckDBConnection, DuckDBInstance } from "@duckdb/node-api";
 
 const SCHEMA = new URL("../../src/db/schema.sql", import.meta.url);
 
-// the tables the schema holds. D4PLAN 5.1 lists 29; guild_blacklist is the one
-// the blacklist research item added, and the plan needs a row for it. a table
-// added to one and not the other is the failure this list exists to catch.
+// the tables the schema holds. D4PLAN 5.1 lists every one of them, the two
+// blacklist tables included. a table added to one and not the other is the
+// failure this list exists to catch.
 const EXPECTED_TABLES = [
   // core
   "meta",
   "guilds",
   "guild_admins",
   "guild_blacklist",
+  "blacklist_attempts",
   "jobs",
   "job_progress",
   "audit_log",

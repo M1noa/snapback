@@ -159,6 +159,41 @@ export interface GuildBlacklistRow {
   reason: string | null;
 }
 
+/**
+ * one verification that matched a blacklist entry. the row is the snapshot as it
+ * stood at the time, so an operator can judge the match months later. like the
+ * entry it matched, it carries no decision: a match never refuses anything
+ * (D4PLAN 19.4). the address is never here, only the form the storage mode
+ * produced.
+ */
+export interface BlacklistAttemptRow {
+  attempt_id: string;
+  guild_id: string;
+  user_id: string;
+  username: string | null;
+  global_name: string | null;
+  status: string;
+  refusal_reason: string | null;
+  ip_mode: string;
+  ip_hash: string | null;
+  asn: string | null;
+  as_org: string | null;
+  isp: string | null;
+  country_code: string | null;
+  country_name: string | null;
+  ip_type: string | null;
+  is_vpn: boolean | null;
+  is_proxy: boolean | null;
+  is_tor: boolean | null;
+  is_hosting: boolean | null;
+  matches_json: JsonObject[] | null;
+  signals_json: JsonObject | null;
+  fingerprint_json: JsonObject | null;
+  device: string | null;
+  at: string;
+  recorded_at: string;
+}
+
 /** per-flag admin grants. verify.read is not implied by restore.execute. */
 export interface GuildAdminRow {
   guild_id: string;

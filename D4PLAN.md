@@ -304,6 +304,15 @@ Everything asset-like stores a **URL plus a local blob path**. Discord CDN URLs 
 
 `fingerprint_json` holds the `x-track` payload (`14.2`). Storing it as a blob rather than 20 columns because the field set will change and a schema migration per fingerprint field is silly.
 
+**Blacklist**
+
+| Table | Columns |
+|---|---|
+| `guild_blacklist` | `guild_id`, `kind` (`user_id`\|`ip_hash`\|`asn`), `value`, `added_by`, `added_at`, `reason`, PK `(guild_id, kind, value)` |
+| `blacklist_attempts` | `attempt_id` PK, `guild_id`, `user_id`, `username`, `global_name`, `status`, `refusal_reason`, `ip_mode`, `ip_hash`, `asn`, `as_org`, `isp`, `country_code`, `country_name`, `ip_type`, `is_vpn`, `is_proxy`, `is_tor`, `is_hosting`, `matches_json`, `signals_json`, `fingerprint_json`, `device`, `at`, `recorded_at` |
+
+An entry's `value` is never a plain address. `ip_hash` is the address hash the storage mode produced, and only that, because an encrypted value is fresh ciphertext per call and could never match an entry. `blacklist_attempts` carries no decision column on purpose: a match is a signal, not a refusal (`19.4`).
+
 **Retention and export**
 
 | Table | Columns |

@@ -7,7 +7,12 @@
 
 import { ButtonStyles, type ContainerComponent } from "oceanic.js";
 import type { IpStorage } from "../../../config/parse-env.ts";
-import type { GuildBlacklistRow, VerifyRecordRow } from "../../../db/types.ts";
+import type { BlacklistAttemptRow, GuildBlacklistRow, VerifyRecordRow } from "../../../db/types.ts";
+import {
+  describeAttempt,
+  describeMatches,
+  fingerprintPreview,
+} from "../../../services/verify/attempts.ts";
 import { textDisplay } from "../../components/fields.ts";
 import { page } from "../../components/page.ts";
 import { actionRow, button, stringSelect } from "../../components/row.ts";
@@ -250,6 +255,8 @@ export interface BlacklistPageInput {
   /** what just happened, in the operator's words. */
   readonly note: string | null;
   readonly refreshId: string;
+  /** the same button, pointed at the attempts instead of the entries. */
+  readonly openAttemptsId: string;
 }
 
 /**
@@ -293,6 +300,77 @@ export function blacklistPage(input: BlacklistPageInput): ContainerComponent {
     sections,
     controls: [
       actionRow([button({ id: input.refreshId, label: "refresh", style: ButtonStyles.SECONDARY })]),
+      actionRow([
+        button({ id: input.openAttemptsId, label: "the attempts", style: ButtonStyles.SECONDARY }),
+      ]),
+    ],
+  });
+}
+
+/** how many attempts the page shows before it says how many more there are. */
+export const ATTEMPT_LIST_SIZE = 5;
+
+/** how much of a fingerprint the page shows. the dm and the log channel hold it all. */
+const FINGERPRINT_PAGE_CAP = 400;
+
+export interface AttemptsPageInput {
+  readonly guildId: string;
+  /** the newest attempts of this server. */
+  readonly attempts: readonly BlacklistAttemptRow[];
+  /** every attempt this server holds, which is more than one page shows. */
+  readonly total: number;
+  readonly backId: string;
+  readonly refreshId: string;
+}
+
+/**
+ * what a match kept. each attempt is the snapshot the verification gathered, so
+ * the operator can read it long after the alert scrolled away.
+ */
+export function attemptsPage(input: AttemptsPageInput): ContainerComponent {
+  const shown = input.attempts.slice(0, ATTEMPT_LIST_SIZE);
+  const sections = [
+    textDisplay(
+      "**an attempt is a snapshot, not a conviction.** a match keeps what was gathered at the time. nothing was refused over it: shared networks, student halls and mobile carriers all produce false matches (D4PLAN 19.4).",
+    ),
+    textDisplay(
+      input.total === 0
+        ? "no verification has matched the list yet."
+        : `**${input.total} attempt(s)** recorded. newest first.`,
+    ),
+    ...shown.flatMap((row) => [
+      textDisplay(
+        `**<@${row.user_id}>** · ${row.username ?? "unknown"}${
+          row.global_name === null ? "" : ` · ${row.global_name}`
+        } · ${relativeTimestamp(Date.parse(row.at))}`,
+      ),
+      textDisplay(
+        [
+          `matched: ${describeMatches(row)}`,
+          ...describeAttempt(row).map((line) =>
+            line.startsWith("fingerprint: ")
+              ? `fingerprint: ${fingerprintPreview(row, FINGERPRINT_PAGE_CAP)}`
+              : line,
+          ),
+        ].join("\n"),
+      ),
+    ]),
+  ];
+  if (input.total > shown.length) {
+    sections.push(
+      textDisplay(`-# and ${input.total - shown.length} older attempt(s) this page does not show.`),
+    );
+  }
+
+  return page({
+    state: input.total === 0 ? "info" : "warning",
+    title: "the attempts that hit the blacklist",
+    sections,
+    controls: [
+      actionRow([button({ id: input.refreshId, label: "refresh", style: ButtonStyles.SECONDARY })]),
+      actionRow([
+        button({ id: input.backId, label: "back to the list", style: ButtonStyles.SECONDARY }),
+      ]),
     ],
   });
 }

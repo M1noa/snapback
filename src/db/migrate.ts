@@ -8,7 +8,7 @@
 import type { Database, MetaRow } from "./types.ts";
 
 // bump only when a migration is added; schema.sql's shape is version 1.
-export const SCHEMA_VERSION = 5;
+export const SCHEMA_VERSION = 6;
 
 export interface Migration {
   readonly version: number;
@@ -97,6 +97,44 @@ export const MIGRATIONS: readonly Migration[] = [
       ON tracked_events (guild_id, subject_id, "at");
     CREATE INDEX IF NOT EXISTS idx_tracked_events_kind
       ON tracked_events (guild_id, kind, "at");`,
+  },
+  // 6: the log of verifications that matched a blacklist entry (D4PLAN 19.5).
+  // the row is the snapshot the operator needs to judge the match: the network
+  // intel, the fingerprint, and the entries it hit. no decision column, because
+  // a match is a signal and never a refusal (19.4).
+  {
+    version: 6,
+    sql: `CREATE TABLE IF NOT EXISTS blacklist_attempts (
+      attempt_id VARCHAR PRIMARY KEY,
+      guild_id VARCHAR,
+      user_id VARCHAR,
+      username VARCHAR,
+      global_name VARCHAR,
+      status VARCHAR,
+      refusal_reason VARCHAR,
+      ip_mode VARCHAR,
+      ip_hash VARCHAR,
+      asn VARCHAR,
+      as_org VARCHAR,
+      isp VARCHAR,
+      country_code VARCHAR,
+      country_name VARCHAR,
+      ip_type VARCHAR,
+      is_vpn BOOLEAN,
+      is_proxy BOOLEAN,
+      is_tor BOOLEAN,
+      is_hosting BOOLEAN,
+      matches_json TEXT,
+      signals_json TEXT,
+      fingerprint_json TEXT,
+      device VARCHAR,
+      "at" VARCHAR,
+      recorded_at VARCHAR
+    );
+    CREATE INDEX IF NOT EXISTS idx_blacklist_attempts_guild_at
+      ON blacklist_attempts (guild_id, "at");
+    CREATE INDEX IF NOT EXISTS idx_blacklist_attempts_user_at
+      ON blacklist_attempts (user_id, "at");`,
   },
 ];
 

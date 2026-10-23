@@ -76,7 +76,7 @@ The wizard. Stateful and resumable; the subcommands jump straight to a step.
 |---|---|---|
 | `/users lookup` | `user` | what this server holds about a person |
 | `/users export` | `scope` | writes this server's records out as json |
-| `/users blacklist` | `action`, `kind`, `value` | reads the entries you want to look at, for this server |
+| `/users blacklist` | `action`, `kind`, `value` | the entries you want to look at for this server, or the attempts that matched them (fingerprint included) |
 
 ## /pull
 

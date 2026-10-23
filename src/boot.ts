@@ -77,6 +77,7 @@ import { buildPlan } from "./services/restore/plan.ts";
 import { DEFAULT_RETENTION } from "./services/retention/index.ts";
 import { TrackingService } from "./services/tracking/index.ts";
 import { guildDiff, guildIds, mirror } from "./services/tracking/mirror.ts";
+import { matchBlacklist } from "./services/verify/attempts.ts";
 import { decideVerification } from "./services/verify/guard.ts";
 import { buildAuthorizeUrl, exchangeCode, refreshAccessToken } from "./services/verify/oauth.ts";
 import { createPanel, postPanel } from "./services/verify/panel.ts";
@@ -942,6 +943,41 @@ export async function boot(): Promise<Boot> {
             at,
             detail: guildDiff(priorGuilds, guildIds(guilds ?? [])),
           });
+          // a match against this server's list is a signal for the operator: the
+          // snapshot is kept and the two alerts go out, and nothing is refused
+          // over it (D4PLAN 19.4). the record is already written, so a failure
+          // here is logged and nothing else.
+          try {
+            await matchBlacklist(
+              {
+                db,
+                log,
+                now: () => Date.now(),
+                ownerId: env.discord.ownerId,
+                client,
+                logChannel: async (id) => (await getGuildSettings(db, id))?.log_channel_id ?? null,
+                guildName: async (id) =>
+                  displayName(await getGuildSettings(db, id), await getGuild(db, id)),
+              },
+              {
+                guildId: timelineGuild,
+                userId,
+                username,
+                globalName,
+                ip,
+                fingerprint,
+                device,
+                signals: signals ?? null,
+                intel: verdict ?? null,
+                status,
+                refusalReason,
+              },
+            );
+          } catch (error) {
+            log.error("the blacklist check threw", {
+              message: error instanceof Error ? error.message : String(error),
+            });
+          }
         },
       }),
       assets: assetRoute(),
