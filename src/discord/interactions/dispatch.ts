@@ -30,6 +30,9 @@ export type RespondableInteraction =
 export interface V2Payload {
   flags: number;
   components: ContainerComponent[];
+  // no page pings anyone. a preview lists thirty <@id> and a progress line list
+  // the accounts being pulled; none of that should land in someone's mentions.
+  allowed_mentions: { parse: [] };
 }
 
 /** the v2 flag, plus ephemeral when the reply is private. */
@@ -37,6 +40,7 @@ export function v2Payload(message: ContainerComponent, ephemeral: boolean): V2Pa
   return {
     flags: IS_COMPONENTS_V2 | (ephemeral ? MessageFlags.EPHEMERAL : 0),
     components: [message],
+    allowed_mentions: { parse: [] },
   };
 }
 

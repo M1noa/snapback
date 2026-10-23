@@ -110,7 +110,10 @@ function fakeInteraction(
       replies.push({ payload, mode: "update" });
     },
     async deferUpdate() {
-      replies.push({ payload: { flags: 0, components: [] }, mode: "defer" });
+      replies.push({
+        payload: { flags: 0, components: [], allowed_mentions: { parse: [] } },
+        mode: "defer",
+      });
     },
   };
   return { interaction: interaction as unknown as AnyInteractionGateway, replies };
