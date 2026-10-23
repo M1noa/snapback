@@ -8,9 +8,7 @@ timeline export for one person and one server.
 
 ## 1. `tracking_all` export
 
-Whole-instance timeline. `EXPORT_SCOPES` in `src/discord/commands/users/deps.ts:42`
-leaves it out on purpose, and the export row in `index.ts` does not offer it.
-Her words: "export per user data and servers data and all data".
+Whole-instance timeline. Her words: "export per user data and servers data and all data".
 
 - [x] add the scope to `EXPORT_SCOPES` and to the export row
 - [x] `all` needs no guild filter, so the query and the row cap change shape
