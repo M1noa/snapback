@@ -46,6 +46,7 @@ import { setupCommands } from "./discord/commands/setup/index.ts";
 import type { SlashCommand } from "./discord/commands/types.ts";
 import {
   createExportDispatcher,
+  createTrackingExportJobHandler,
   createUsersExportJobHandler,
   USERS_SPECS,
   type UsersDeps,
@@ -355,6 +356,11 @@ export async function boot(): Promise<Boot> {
         ipStorage: env.privacy.ipStorage,
         exportDir: env.storage.exportDir,
         records: async (guildId, limit) => await listRecords(db, guildId, limit),
+      }),
+      tracking: createTrackingExportJobHandler({
+        db,
+        now: () => Date.now(),
+        exportDir: env.storage.exportDir,
       }),
     }),
   );

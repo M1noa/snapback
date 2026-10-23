@@ -12,7 +12,13 @@ import { textDisplay } from "../../components/fields.ts";
 import { page } from "../../components/page.ts";
 import { actionRow, button, stringSelect } from "../../components/row.ts";
 import { formatBytes, relativeTimestamp } from "../types.ts";
-import { type CounterView, IP_MODE_NOTE, type MembershipView, storedIp } from "./deps.ts";
+import {
+  type CounterView,
+  type ExportScope,
+  IP_MODE_NOTE,
+  type MembershipView,
+  storedIp,
+} from "./deps.ts";
 
 /** how many records the list state shows before it says how many more there are. */
 export const RECORD_LIST_SIZE = 10;
@@ -168,12 +174,18 @@ function countersLine(counters: CounterView | null): string {
 
 export interface ExportPageInput {
   readonly guildId: string;
+  /** which of the three exports this page is about. */
+  readonly scope: ExportScope;
+  /** whose timeline it holds, when the scope is one person's. */
+  readonly subjectId: string | null;
   /** the export job, when there is one. */
   readonly jobId: string | null;
   readonly jobStatus: string | null;
   readonly jobError: string | null;
-  /** the record count the job will write. */
-  readonly recordCount: number | null;
+  /** how many records or events the file holds. */
+  readonly count: number | null;
+  /** whether the file's cap cut the oldest out. */
+  readonly truncated: boolean;
   readonly filePath: string | null;
   readonly fileBytes: number | null;
   readonly ipStorage: IpStorage;
@@ -183,32 +195,42 @@ export interface ExportPageInput {
 
 /** the export. what it holds, what it leaves out, and where the file is. */
 export function exportPage(input: ExportPageInput): ContainerComponent {
+  const records = input.scope === "records";
+  const what =
+    input.scope === "records"
+      ? "the file holds every field of every record, with the tokens left out entirely."
+      : "the file holds every change this server recorded, with no message text and no attachment bytes.";
+  const middle = records
+    ? [`the address is written in the \`${input.ipStorage}\` form, and the header names it.`]
+    : [
+        input.scope === "tracking_user" && input.subjectId !== null
+          ? `it covers one person: \`${input.subjectId}\`.`
+          : "it covers every change in this server.",
+        input.truncated
+          ? "the file holds the newest events only. the older ones were left out, and the header says so."
+          : "the file holds every event this server still keeps.",
+      ];
+
   const sections = [
     textDisplay(
       input.jobId === null
         ? "no export has run in this server yet."
         : `job \`${input.jobId.slice(0, 8)}\` · ${input.jobStatus ?? "queued"}`,
     ),
-    textDisplay(
-      input.jobError === null
-        ? "the file holds every field of every record, with the tokens left out entirely."
-        : `**${input.jobError}**`,
-    ),
-    textDisplay(
-      `the address is written in the \`${input.ipStorage}\` form, and the header names it.`,
-    ),
+    textDisplay(input.jobError === null ? what : `**${input.jobError}**`),
+    ...middle.map((line) => textDisplay(line)),
     textDisplay(
       input.filePath === null
         ? "the file is not written yet."
         : `file: \`${input.filePath}\` · ${formatBytes(input.fileBytes)}${
-            input.recordCount === null ? "" : ` · ${input.recordCount} record(s)`
+            input.count === null ? "" : ` · ${input.count} ${records ? "record(s)" : "event(s)"}`
           }`,
     ),
   ];
 
   return page({
     state: input.jobError === null ? "info" : "danger",
-    title: "the export",
+    title: records ? "the export" : "the timeline",
     sections,
     controls: [
       actionRow([button({ id: input.refreshId, label: "refresh", style: ButtonStyles.SECONDARY })]),

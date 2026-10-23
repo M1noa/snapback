@@ -8,7 +8,16 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import type { IpStorage } from "../../../config/parse-env.ts";
 import { insertPendingExport } from "../../../db/queries/exports.ts";
-import type { Database, VerifyRecordRow } from "../../../db/types.ts";
+import { listEventsByGuild, listEventsBySubject } from "../../../db/queries/tracked-events.ts";
+import type {
+  Database,
+  EventSource,
+  JsonObject,
+  TrackedEventKind,
+  TrackedEventRow,
+  TrackedSubjectKind,
+  VerifyRecordRow,
+} from "../../../db/types.ts";
 import type { CustomIdSpec } from "../../../discord/interactions/router.ts";
 import type { Logger } from "../../../lib/log.ts";
 import { EXPORT_TTL_MS } from "../../../services/export/job.ts";
@@ -22,6 +31,24 @@ export const USERS_SURFACE = "users";
 
 /** how many records the export writes and the picker offers. */
 export const RECORDS_LIMIT = 500;
+
+/** how many events one timeline file holds. the query's own default is a page
+ *  size, so the file's cap is stated here instead. */
+export const EVENTS_LIMIT = 5000;
+
+/** the scopes this surface writes out. tracking_all is left out on purpose: a
+ *  bot-wide file would carry one guild's rows into another guild's folder, and
+ *  nothing here is scoped to the instance owner. */
+export const EXPORT_SCOPES = ["records", "tracking_user", "tracking_server"] as const;
+
+export type ExportScope = (typeof EXPORT_SCOPES)[number];
+
+/** the two timeline scopes, as the file header names them. */
+export type TrackingScope = Exclude<ExportScope, "records">;
+
+export function isExportScope(value: unknown): value is ExportScope {
+  return typeof value === "string" && (EXPORT_SCOPES as readonly string[]).includes(value);
+}
 
 /** the object slot, one per surface a control lives on. */
 export const USERS_OBJECT = {
@@ -334,16 +361,181 @@ export function createUsersExportJobHandler(deps: UsersExportDeps): JobHandler {
   };
 }
 
-/** the runner holds one handler per job kind, and the backup export and the
- *  records export share the "export" kind. this dispatches on the scope. */
+/** whether this guild, or one person in it, has any timeline rows at all. it
+ *  reads one row, so the check costs a page of one. */
+export async function hasEvents(
+  db: Database,
+  guildId: string,
+  subjectId: string | null,
+): Promise<boolean> {
+  const rows =
+    subjectId === null
+      ? await listEventsByGuild(db, guildId, { limit: 1 })
+      : await listEventsBySubject(db, guildId, subjectId, { limit: 1 });
+  return rows.length > 0;
+}
+
+/** one event as the export holds it. the guild is in the header, not on every
+ *  row, and there is no message text or attachment here to leave out. */
+export interface ExportedEvent {
+  readonly event_id: string;
+  readonly subject_kind: TrackedSubjectKind;
+  readonly subject_id: string;
+  readonly kind: TrackedEventKind;
+  readonly actor_id: string | null;
+  readonly source: EventSource;
+  readonly channel_id: string | null;
+  readonly at: string;
+  readonly recorded_at: string;
+  readonly before: JsonObject | null;
+  readonly after: JsonObject | null;
+  readonly detail: JsonObject | null;
+}
+
+/** the timeline file. the header says which scope it holds and whether the cap
+ *  cut anything, so a truncated file does not read as a whole one. */
+export interface TrackingExport {
+  readonly schema_version: number;
+  readonly kind: "timeline";
+  readonly exported_at: string;
+  readonly guild_id: string;
+  readonly scope: TrackingScope;
+  readonly subject_id: string | null;
+  readonly event_count: number;
+  readonly truncated: boolean;
+  readonly note: string;
+  readonly events: readonly ExportedEvent[];
+}
+
+export interface TrackingExportInput {
+  readonly scope: TrackingScope;
+  readonly subjectId: string | null;
+  readonly guildId: string;
+  /** newest first, as the query returns them. */
+  readonly events: readonly TrackedEventRow[];
+  readonly truncated: boolean;
+  readonly exportedAt: string;
+}
+
+export function buildTrackingExport(input: TrackingExportInput): TrackingExport {
+  return {
+    schema_version: 1,
+    kind: "timeline",
+    exported_at: input.exportedAt,
+    guild_id: input.guildId,
+    scope: input.scope,
+    subject_id: input.subjectId,
+    event_count: input.events.length,
+    truncated: input.truncated,
+    note: input.truncated
+      ? `the newest ${input.events.length} events, oldest first. older events were left out.`
+      : "every event this server still holds, oldest first.",
+    // the query reads newest first so the page builders can show the latest
+    // change. a file is read down the page, so it is written the other way up.
+    events: [...input.events].reverse().map((row) => ({
+      event_id: row.event_id,
+      subject_kind: row.subject_kind,
+      subject_id: row.subject_id,
+      kind: row.kind,
+      actor_id: row.actor_id,
+      source: row.source,
+      channel_id: row.channel_id,
+      at: row.at,
+      recorded_at: row.recorded_at,
+      before: row.before_json,
+      after: row.after_json,
+      detail: row.detail_json,
+    })),
+  };
+}
+
+/** the file's bytes, keys in the order the bundle declares. */
+export function trackingExportToJson(bundle: TrackingExport): string {
+  return `${JSON.stringify(bundle, null, 2)}\n`;
+}
+
+/** just the parts the timeline export job reads. */
+export type TrackingExportDeps = Pick<UsersDeps, "db" | "exportDir" | "now">;
+
+/** the job that writes a timeline out. the file name is fixed per scope, so
+ *  nothing a command was handed ends up in a path (D4PLAN 17.4). */
+export function createTrackingExportJobHandler(deps: TrackingExportDeps): JobHandler {
+  return async (ctx) => {
+    const guildId = ctx.job.guild_id;
+    const payload = (ctx.job.payload_json ?? {}) as { scope?: unknown; subjectId?: unknown };
+    const scope: TrackingScope =
+      payload.scope === "tracking_user" ? "tracking_user" : "tracking_server";
+    const subjectId = scope === "tracking_user" ? String(payload.subjectId ?? "") : null;
+    if (scope === "tracking_user" && subjectId === "") {
+      throw new Error("SB_EXPORT_NO_SUBJECT: a timeline export names no person to write");
+    }
+
+    // one row past the cap says whether the file is complete, without a second
+    // count query.
+    const rows =
+      subjectId === null
+        ? await listEventsByGuild(deps.db, guildId, { limit: EVENTS_LIMIT + 1 })
+        : await listEventsBySubject(deps.db, guildId, subjectId, { limit: EVENTS_LIMIT + 1 });
+    const truncated = rows.length > EVENTS_LIMIT;
+    const at = new Date(deps.now());
+    const bundle = buildTrackingExport({
+      scope,
+      subjectId,
+      guildId,
+      events: truncated ? rows.slice(0, EVENTS_LIMIT) : rows,
+      truncated,
+      exportedAt: at.toISOString(),
+    });
+    const json = trackingExportToJson(bundle);
+
+    const dir = join(deps.exportDir, guildId);
+    await mkdir(dir, { recursive: true });
+    const path = resolve(
+      dir,
+      scope === "tracking_user" ? "timeline-user.json" : "timeline-server.json",
+    );
+    await writeFile(path, json, "utf8");
+
+    await insertPendingExport(deps.db, {
+      export_id: Bun.randomUUIDv7(),
+      guild_id: guildId,
+      kind: scope,
+      scope_json: {
+        subjectId,
+        eventCount: bundle.event_count,
+        truncated: bundle.truncated,
+      },
+      file_path: path,
+      size_bytes: Buffer.byteLength(json, "utf8"),
+      created_at: at.toISOString(),
+      expires_at: new Date(at.getTime() + EXPORT_TTL_MS).toISOString(),
+    });
+
+    ctx.log.info("timeline export written", {
+      path,
+      events: bundle.event_count,
+      scope,
+      truncated,
+      guildId,
+    });
+  };
+}
+
+/** the runner holds one handler per job kind, and the three exports share the
+ *  "export" kind. this dispatches on the scope. */
 export function createExportDispatcher(deps: {
   readonly backup: JobHandler;
   readonly records: JobHandler;
+  readonly tracking: JobHandler;
 }): JobHandler {
   return async (ctx) => {
     const payload = (ctx.job.payload_json ?? {}) as { scope?: string };
     if (payload.scope === "records") {
       await deps.records(ctx);
+      return;
+    }
+    if (payload.scope === "tracking_user" || payload.scope === "tracking_server") {
+      await deps.tracking(ctx);
       return;
     }
     await deps.backup(ctx);

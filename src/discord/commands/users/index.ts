@@ -28,6 +28,9 @@ import { type CommandOption, OPTION_TYPE } from "../../registry.ts";
 import type { AutocompleteChoice, CommandContext, CommandResult, SlashCommand } from "../types.ts";
 import {
   type CounterView,
+  type ExportScope,
+  hasEvents,
+  isExportScope,
   RECORDS_LIMIT,
   refusal,
   USERS_ACTION,
@@ -52,7 +55,20 @@ const SCOPE_OPTION: CommandOption = {
   description: "what to write out",
   type: OPTION_TYPE.string,
   required: false,
-  choices: [{ name: "the records", value: "records" }],
+  choices: [
+    { name: "the records", value: "records" },
+    { name: "this server's timeline", value: "tracking_server" },
+    { name: "one person's timeline", value: "tracking_user" },
+  ],
+};
+
+/** only read when the scope is one person's timeline. */
+const EXPORT_USER_OPTION: CommandOption = {
+  name: "user",
+  description: "the person whose timeline to write, by id or by name",
+  type: OPTION_TYPE.string,
+  required: false,
+  autocomplete: true,
 };
 
 const BLACKLIST_ACTION_OPTION: CommandOption = {
@@ -155,19 +171,42 @@ async function countersFor(
   };
 }
 
-/** true when a job is a records export and not a backup export. */
-function isRecordsExport(job: { payload_json: unknown }): boolean {
-  if (job.payload_json === null || typeof job.payload_json !== "object") return false;
-  return (job.payload_json as { scope?: unknown }).scope === "records";
+/** the scope a job was enqueued under, when it is one of this surface's. a
+ *  backup export has no scope, so it reads as null and is skipped. */
+function scopeOf(payload: unknown): ExportScope | null {
+  if (payload === null || typeof payload !== "object") return null;
+  const scope = (payload as { scope?: unknown }).scope;
+  return isExportScope(scope) ? scope : null;
 }
 
-/** how many records the written file holds, when the row says so. */
-function recordCountOf(file: { scope_json: unknown } | undefined): number | null {
+/** what the written file says about itself, when it says anything. */
+interface FileFacts {
+  readonly count: number | null;
+  readonly truncated: boolean;
+  readonly subjectId: string | null;
+}
+
+function fileFacts(file: { scope_json: unknown } | undefined): FileFacts {
   if (file === undefined || file.scope_json === null || typeof file.scope_json !== "object") {
-    return null;
+    return { count: null, truncated: false, subjectId: null };
   }
-  const count = (file.scope_json as { recordCount?: unknown }).recordCount;
-  return typeof count === "number" ? count : null;
+  const row = file.scope_json as {
+    recordCount?: unknown;
+    eventCount?: unknown;
+    truncated?: unknown;
+    subjectId?: unknown;
+  };
+  const count =
+    typeof row.recordCount === "number"
+      ? row.recordCount
+      : typeof row.eventCount === "number"
+        ? row.eventCount
+        : null;
+  return {
+    count,
+    truncated: row.truncated === true,
+    subjectId: typeof row.subjectId === "string" && row.subjectId !== "" ? row.subjectId : null,
+  };
 }
 
 /** every /users subcommand, one group. */
@@ -210,37 +249,100 @@ export function usersCommands(deps: UsersDeps): SlashCommand[] {
     {
       group: GROUP,
       subcommand: "export",
-      description: "write this server's records out as json",
-      options: [SCOPE_OPTION],
+      description: "write the records or the timeline out as json",
+      options: [SCOPE_OPTION, EXPORT_USER_OPTION],
+      async autocomplete(ctx) {
+        // the person is the only free field here. the scope is a fixed list.
+        if (ctx.option !== "user") return [];
+        return await recordChoices(deps, ctx.guildId, ctx.value);
+      },
       async run(ctx: CommandContext): Promise<CommandResult> {
         const denied = await refusal(deps, ctx);
         if (denied !== null) return denied;
 
+        const scope: ExportScope = isExportScope(ctx.options.scope) ? ctx.options.scope : "records";
         const records = await deps.records(ctx.guildId, RECORDS_LIMIT);
-        if (records.length === 0) {
+        const wanted = String(ctx.options.user ?? "").trim();
+        let subjectId: string | null = null;
+
+        if (scope === "records") {
+          if (records.length === 0) {
+            return {
+              page: failurePage(
+                "there is nothing to export",
+                "nobody has verified in this server, so there are no records to write.",
+                undefined,
+                "post the verification panel, and run this again once someone has.",
+              ),
+              ephemeral: true,
+            };
+          }
+        } else if (scope === "tracking_user") {
+          // one person's timeline names a person, so it needs one.
+          if (wanted === "") {
+            return {
+              page: failurePage(
+                "no one to write",
+                "a person's timeline is written for one person, and this run named nobody.",
+                undefined,
+                "run this again and pick a name from the `user` list.",
+              ),
+              ephemeral: true,
+            };
+          }
+          const record = await resolveRecord(deps, ctx.guildId, wanted, records);
+          if (record === null) {
+            return {
+              page: failurePage(
+                "no such record",
+                "that person has not verified in this server, so there is no timeline about them here.",
+                undefined,
+                "pick a name from the `user` list, or export this server's timeline instead.",
+              ),
+              ephemeral: true,
+            };
+          }
+          if (!(await hasEvents(deps.db, ctx.guildId, record.user_id))) {
+            return {
+              page: failurePage(
+                "there is nothing to export",
+                "this server has seen no change for that person yet, so their timeline is empty.",
+                undefined,
+                "export this server's timeline instead, or run this again after a change.",
+              ),
+              ephemeral: true,
+            };
+          }
+          subjectId = record.user_id;
+        } else if (!(await hasEvents(deps.db, ctx.guildId, null))) {
           return {
             page: failurePage(
               "there is nothing to export",
-              "nobody has verified in this server, so there are no records to write.",
+              "this server has not changed anything worth recording yet, so its timeline is empty.",
               undefined,
-              "post the verification panel, and run this again once someone has.",
+              "leave tracking on and run this again after a change or two.",
             ),
             ephemeral: true,
           };
         }
 
-        // writing many records outlives an interaction, so it is a job (rule 7).
+        // writing the whole file outlives an interaction, so it is a job (rule 7).
         const job = await deps.jobs.enqueue("export", {
           guildId: ctx.guildId,
           requestedBy: ctx.userId,
-          payload: { scope: "records", guildId: ctx.guildId, fromUserId: "" },
+          payload: { scope, guildId: ctx.guildId, subjectId: subjectId ?? "", fromUserId: "" },
         });
         await deps.audit({
           guildId: ctx.guildId,
           actorUserId: ctx.userId,
           action: "users.export",
           target: job.id,
-          detail: { records: records.length, ipStorage: deps.ipStorage },
+          detail: {
+            scope,
+            subjectId,
+            records: records.length,
+            ipStorage: deps.ipStorage,
+          },
         });
 
         return {
@@ -415,27 +517,48 @@ export async function recordPageFor(
   });
 }
 
+/** which export this page is about. the newest job that names one of this
+ *  surface's scopes wins; with no such job, the newest pending file's kind; and
+ *  with neither, the records. a backup export names no scope, so it never wins. */
+async function scopeFor(deps: UsersDeps, guildId: string): Promise<ExportScope> {
+  for (const job of await listJobsByGuild(deps.db, guildId)) {
+    const scope = scopeOf(job.payload_json);
+    if (scope !== null) return scope;
+  }
+  for (const row of await listPendingExportsByGuild(deps.db, guildId)) {
+    if (isExportScope(row.kind)) return row.kind;
+  }
+  return "records";
+}
+
 /** the export's page: the job, and the file it wrote when it has. */
 export async function exportPageFor(
   deps: UsersDeps,
   guildId: string,
   fromUserId: string,
 ): Promise<ReturnType<typeof exportPage>> {
-  // the backup export and the records export share the job kind, so the scope
-  // in the payload says which one this is.
-  const jobs = (await listJobsByGuild(deps.db, guildId)).filter(isRecordsExport);
+  // the three exports share the job kind, so the scope comes from whichever of
+  // them ran last rather than from the kind (D4PLAN 17.3).
+  const scope = await scopeFor(deps, guildId);
+  const jobs = (await listJobsByGuild(deps.db, guildId)).filter(
+    (job) => scopeOf(job.payload_json) === scope,
+  );
   const latest = jobs[0];
   const pending = (await listPendingExportsByGuild(deps.db, guildId)).filter(
-    (row) => row.kind === "records",
+    (row) => row.kind === scope,
   );
   const file = pending[0];
+  const facts = fileFacts(file);
 
   return exportPage({
     guildId,
+    scope,
+    subjectId: facts.subjectId,
+    count: facts.count,
+    truncated: facts.truncated,
     jobId: latest?.id ?? null,
     jobStatus: latest?.status ?? null,
     jobError: latest?.error_code ?? null,
-    recordCount: recordCountOf(file),
     filePath: file?.file_path ?? null,
     fileBytes: file?.size_bytes ?? null,
     ipStorage: deps.ipStorage,

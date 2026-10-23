@@ -313,15 +313,19 @@ describe("the export", () => {
     const handler = createExportDispatcher({
       backup: async () => void calls.push("backup"),
       records: async () => void calls.push("records"),
+      tracking: async () => void calls.push("tracking"),
     });
 
     // the payload /users export enqueues must reach the records writer, not the
-    // backup writer, which would throw SB_EXPORT_NO_BACKUP on it.
+    // backup writer, which would throw SB_EXPORT_NO_BACKUP on it. the timeline
+    // scopes must not fall through to the backup writer either.
     await handler(jobContext({ scope: "records", guildId: GUILD, fromUserId: "" }));
+    await handler(jobContext({ scope: "tracking_user", guildId: GUILD, subjectId: USER }));
+    await handler(jobContext({ scope: "tracking_server", guildId: GUILD }));
     await handler(jobContext({ backupId: "0190a000-0000-7000-8000-0000000000b1" }));
     await handler(jobContext(null));
 
-    expect(calls).toEqual(["records", "backup", "backup"]);
+    expect(calls).toEqual(["records", "tracking", "tracking", "backup", "backup"]);
   });
 });
 
