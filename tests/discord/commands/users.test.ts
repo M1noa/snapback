@@ -5,12 +5,20 @@
 // record from another server is not reachable from this one.
 
 import { describe, expect, test } from "bun:test";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import type { ContainerComponent } from "oceanic.js";
 import type { VerifyRecordRow } from "../../../src/db/types.ts";
 import {
   buildRecordsExport,
+  buildTrackingExport,
   createExportDispatcher,
+  createTrackingExportJobHandler,
+  EVENTS_LIMIT,
+  hasEvents,
   recordsExportToJson,
+  trackingExportToJson,
   USERS_ACTION,
   USERS_OBJECT,
   USERS_SPECS,
@@ -23,6 +31,7 @@ import { usersCommands } from "../../../src/discord/commands/users/index.ts";
 import { countComponents, PAGE_LIMIT } from "../../../src/discord/components/page.ts";
 import { parseCustomId, Router } from "../../../src/discord/interactions/router.ts";
 import { createLogger } from "../../../src/lib/log.ts";
+import { EXPORT_TTL_MS } from "../../../src/services/export/job.ts";
 import type { JobContext } from "../../../src/services/jobs/runner.ts";
 
 const GUILD = "123456789012345678";
@@ -524,5 +533,250 @@ describe("the custom id builder", () => {
     });
     expect(id.split(":")).toHaveLength(6);
     expect(parseCustomId(id)?.cursor).toBe("");
+  });
+});
+
+// the timeline export. the same rules as the records export apply, plus one of
+// its own: a file is read down the page, so it is written oldest first even
+// though every query hands back the newest change first.
+
+function eventRow(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    event_id: "0190a000-0000-7000-8000-0000000000e1",
+    guild_id: GUILD,
+    subject_kind: "user",
+    subject_id: USER,
+    kind: "member_join",
+    actor_id: null,
+    source: "gateway",
+    channel_id: null,
+    before_json: null,
+    after_json: JSON.stringify({ nickname: "before" }),
+    detail_json: null,
+    at: AT,
+    recorded_at: AT,
+    ...overrides,
+  };
+}
+
+/** answers tracked_events reads and captures pending_exports writes. the json
+ *  columns come back as text, because parseJson throws on anything else. */
+function timelineDb(rows: readonly Record<string, unknown>[]): {
+  db: UsersDeps["db"];
+  inserted: unknown[][];
+  limits: unknown[];
+} {
+  const inserted: unknown[][] = [];
+  const limits: unknown[] = [];
+  const db = {
+    query: async (sql: string, params?: unknown[]) => {
+      if (!sql.includes("FROM tracked_events")) return [];
+      // the limit is the last bind of every read in the module
+      const limit = params?.[params.length - 1];
+      limits.push(limit);
+      return typeof limit === "number" ? rows.slice(0, limit) : rows;
+    },
+    run: async (sql: string, params?: unknown[]) => {
+      if (sql.includes("INSERT INTO pending_exports")) inserted.push(params ?? []);
+    },
+  };
+  return { db: db as unknown as UsersDeps["db"], inserted, limits };
+}
+
+async function scratch(): Promise<string> {
+  return await mkdtemp(join(tmpdir(), "sb-timeline-"));
+}
+
+describe("the timeline export", () => {
+  test("events are written oldest first", () => {
+    const rows = [
+      eventRow({ event_id: "e3", at: "2024-06-03T00:00:00.000Z" }),
+      eventRow({ event_id: "e2", at: "2024-06-02T00:00:00.000Z" }),
+      eventRow({ event_id: "e1", at: "2024-06-01T00:00:00.000Z" }),
+    ];
+    const bundle = buildTrackingExport({
+      scope: "tracking_server",
+      subjectId: null,
+      guildId: GUILD,
+      events: rows as never,
+      truncated: false,
+      exportedAt: AT,
+    });
+    expect(bundle.events.map((event) => event.event_id)).toEqual(["e1", "e2", "e3"]);
+    expect(bundle.event_count).toBe(3);
+  });
+
+  test("an event carries the recorded fields and nothing else", () => {
+    const bundle = buildTrackingExport({
+      scope: "tracking_server",
+      subjectId: null,
+      guildId: GUILD,
+      // buildTrackingExport takes rows the query layer already parsed
+      events: [{ ...eventRow(), after_json: { nickname: "before" } }] as never,
+      truncated: false,
+      exportedAt: AT,
+    });
+    // the key set is the structural promise: no message text, no attachment,
+    // nothing the row does not hold.
+    expect(Object.keys(bundle.events[0]!).sort()).toEqual([
+      "actor_id",
+      "after",
+      "at",
+      "before",
+      "channel_id",
+      "detail",
+      "event_id",
+      "kind",
+      "recorded_at",
+      "source",
+      "subject_id",
+      "subject_kind",
+    ]);
+    expect(bundle.events[0]!.after).toEqual({ nickname: "before" });
+    expect(bundle.events[0]!.before).toBeNull();
+  });
+
+  test("a cut file says it was cut", () => {
+    const complete = buildTrackingExport({
+      scope: "tracking_user",
+      subjectId: USER,
+      guildId: GUILD,
+      events: [eventRow()] as never,
+      truncated: false,
+      exportedAt: AT,
+    });
+    expect(complete.truncated).toBe(false);
+    expect(complete.note).toContain("every event this server still holds");
+
+    const cut = buildTrackingExport({
+      scope: "tracking_user",
+      subjectId: USER,
+      guildId: GUILD,
+      events: [eventRow()] as never,
+      truncated: true,
+      exportedAt: AT,
+    });
+    expect(cut.truncated).toBe(true);
+    expect(cut.note).toContain("older events were left out");
+    expect(cut.event_count).toBe(1);
+  });
+
+  test("the file is the bundle, indented, with a newline", () => {
+    const bundle = buildTrackingExport({
+      scope: "tracking_server",
+      subjectId: null,
+      guildId: GUILD,
+      events: [eventRow()] as never,
+      truncated: false,
+      exportedAt: AT,
+    });
+    const json = trackingExportToJson(bundle);
+    expect(json).toBe(`${JSON.stringify(bundle, null, 2)}\n`);
+    expect(json.endsWith("}\n")).toBe(true);
+  });
+
+  test("the server job writes timeline-server.json and records it", async () => {
+    const dir = await scratch();
+    const { db, inserted } = timelineDb([eventRow()]);
+    const handler = createTrackingExportJobHandler({
+      db,
+      exportDir: dir,
+      now: () => Date.parse(AT),
+    });
+    try {
+      await handler(jobContext({ scope: "tracking_server" }));
+      const path = join(dir, GUILD, "timeline-server.json");
+      const written = await readFile(path, "utf8");
+      expect(JSON.parse(written).scope).toBe("tracking_server");
+      expect(JSON.parse(written).subject_id).toBeNull();
+
+      const [row] = inserted;
+      expect(row?.[1]).toBe(GUILD);
+      expect(row?.[2]).toBe("tracking_server");
+      expect(JSON.parse(String(row?.[3]))).toEqual({
+        subjectId: null,
+        eventCount: 1,
+        truncated: false,
+      });
+      expect(row?.[4]).toBe(path);
+      expect(row?.[5]).toBe(Buffer.byteLength(written, "utf8"));
+      expect(row?.[6]).toBe(AT);
+      expect(row?.[7]).toBe(new Date(Date.parse(AT) + EXPORT_TTL_MS).toISOString());
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("a person's job writes timeline-user.json", async () => {
+    const dir = await scratch();
+    const { db, inserted } = timelineDb([eventRow()]);
+    const handler = createTrackingExportJobHandler({
+      db,
+      exportDir: dir,
+      now: () => Date.parse(AT),
+    });
+    try {
+      await handler(jobContext({ scope: "tracking_user", subjectId: USER }));
+      const path = join(dir, GUILD, "timeline-user.json");
+      const written = JSON.parse(await readFile(path, "utf8"));
+      expect(written.scope).toBe("tracking_user");
+      expect(written.subject_id).toBe(USER);
+      expect(inserted[0]?.[2]).toBe("tracking_user");
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("a person's export that names nobody fails", async () => {
+    const dir = await scratch();
+    const { db, inserted } = timelineDb([]);
+    const handler = createTrackingExportJobHandler({
+      db,
+      exportDir: dir,
+      now: () => Date.parse(AT),
+    });
+    try {
+      await expect(handler(jobContext({ scope: "tracking_user" }))).rejects.toThrow(
+        /SB_EXPORT_NO_SUBJECT/,
+      );
+      expect(inserted).toHaveLength(0);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("one row past the cap means the file was cut", async () => {
+    const dir = await scratch();
+    const rows = Array.from({ length: EVENTS_LIMIT + 1 }, (_unused, index) =>
+      eventRow({ event_id: `e${index}` }),
+    );
+    const { db, inserted, limits } = timelineDb(rows);
+    const handler = createTrackingExportJobHandler({
+      db,
+      exportDir: dir,
+      now: () => Date.parse(AT),
+    });
+    try {
+      await handler(jobContext({ scope: "tracking_server" }));
+      // one row past the cap answers "is there more" without a second count
+      expect(limits).toEqual([EVENTS_LIMIT + 1]);
+      const written = JSON.parse(await readFile(join(dir, GUILD, "timeline-server.json"), "utf8"));
+      expect(written.event_count).toBe(EVENTS_LIMIT);
+      expect(written.events).toHaveLength(EVENTS_LIMIT);
+      expect(written.truncated).toBe(true);
+      expect(JSON.parse(String(inserted[0]?.[3])).truncated).toBe(true);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("hasEvents costs a page of one", async () => {
+    const { db, limits } = timelineDb([eventRow()]);
+    expect(await hasEvents(db as never, GUILD, null)).toBe(true);
+    expect(limits).toEqual([1]);
+
+    const empty = timelineDb([]);
+    expect(await hasEvents(empty.db as never, GUILD, USER)).toBe(false);
+    expect(empty.limits).toEqual([1]);
   });
 });
