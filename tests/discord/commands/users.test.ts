@@ -128,6 +128,7 @@ function fakeDeps(
   const jobRows: Record<string, unknown>[] = [];
   const blacklistRows: Record<string, unknown>[] = [];
   return {
+    ownerId: OWNER,
     db: {
       query: async (sql: string, params?: unknown[]) => {
         if (sql.includes("FROM jobs")) return jobRows;
@@ -195,14 +196,17 @@ function fakeDeps(
 }
 
 /** the smallest job context a handler reads: the row's payload and a logger. */
-function jobContext(payload: Record<string, unknown> | null): JobContext {
+function jobContext(
+  payload: Record<string, unknown> | null,
+  requestedBy: string = OWNER,
+): JobContext {
   return {
     job: {
       id: "job-1",
       guild_id: GUILD,
       kind: "export",
       status: "running",
-      requested_by: OWNER,
+      requested_by: requestedBy,
       payload_json: payload,
       progress_json: null,
       error_code: null,
@@ -331,10 +335,37 @@ describe("the export", () => {
     await handler(jobContext({ scope: "records", guildId: GUILD, fromUserId: "" }));
     await handler(jobContext({ scope: "tracking_user", guildId: GUILD, subjectId: USER }));
     await handler(jobContext({ scope: "tracking_server", guildId: GUILD }));
+    await handler(jobContext({ scope: "tracking_all", guildId: GUILD }));
     await handler(jobContext({ backupId: "0190a000-0000-7000-8000-0000000000b1" }));
     await handler(jobContext(null));
 
-    expect(calls).toEqual(["records", "tracking", "tracking", "backup", "backup"]);
+    expect(calls).toEqual(["records", "tracking", "tracking", "tracking", "backup", "backup"]);
+  });
+
+  test("the owner may write every server's timeline at once", async () => {
+    const harness: FakeHarness = { enqueued: [] };
+    const deps = fakeDeps({ db: timelineDb([eventRow()]).db }, harness);
+    const exportCommand = usersCommands(deps).find((command) => command.subcommand === "export");
+    await exportCommand?.run({ guildId: GUILD, userId: OWNER, options: { scope: "tracking_all" } });
+
+    expect(harness.enqueued).toHaveLength(1);
+    const payload = harness.enqueued[0]?.payload as { scope?: string };
+    expect(payload.scope).toBe("tracking_all");
+  });
+
+  test("a guild admin may not", async () => {
+    const harness: FakeHarness = { enqueued: [] };
+    const deps = fakeDeps({ ownerId: OWNER, db: timelineDb([eventRow()]).db }, harness);
+    const exportCommand = usersCommands(deps).find((command) => command.subcommand === "export");
+    const result = await exportCommand?.run({
+      guildId: GUILD,
+      userId: USER,
+      options: { scope: "tracking_all" },
+    });
+
+    expect(JSON.stringify(result?.page)).toContain("instance owner");
+    // refused before a job, so there is nothing queued for the worker to pick up.
+    expect(harness.enqueued).toHaveLength(0);
   });
 });
 
@@ -626,6 +657,7 @@ describe("the timeline export", () => {
       "channel_id",
       "detail",
       "event_id",
+      "guild_id",
       "kind",
       "recorded_at",
       "source",
@@ -634,6 +666,7 @@ describe("the timeline export", () => {
     ]);
     expect(bundle.events[0]!.after).toEqual({ nickname: "before" });
     expect(bundle.events[0]!.before).toBeNull();
+    expect(bundle.events[0]!.guild_id).toBe(GUILD);
   });
 
   test("a cut file says it was cut", () => {
@@ -682,6 +715,7 @@ describe("the timeline export", () => {
       db,
       exportDir: dir,
       now: () => Date.parse(AT),
+      ownerId: OWNER,
     });
     try {
       await handler(jobContext({ scope: "tracking_server" }));
@@ -714,6 +748,7 @@ describe("the timeline export", () => {
       db,
       exportDir: dir,
       now: () => Date.parse(AT),
+      ownerId: OWNER,
     });
     try {
       await handler(jobContext({ scope: "tracking_user", subjectId: USER }));
@@ -734,6 +769,7 @@ describe("the timeline export", () => {
       db,
       exportDir: dir,
       now: () => Date.parse(AT),
+      ownerId: OWNER,
     });
     try {
       await expect(handler(jobContext({ scope: "tracking_user" }))).rejects.toThrow(
@@ -755,6 +791,7 @@ describe("the timeline export", () => {
       db,
       exportDir: dir,
       now: () => Date.parse(AT),
+      ownerId: OWNER,
     });
     try {
       await handler(jobContext({ scope: "tracking_server" }));
@@ -765,6 +802,60 @@ describe("the timeline export", () => {
       expect(written.events).toHaveLength(EVENTS_LIMIT);
       expect(written.truncated).toBe(true);
       expect(JSON.parse(String(inserted[0]?.[3])).truncated).toBe(true);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("the whole-instance job writes timeline-all.json with every guild's rows", async () => {
+    const dir = await scratch();
+    const { db, inserted } = timelineDb([
+      eventRow({ event_id: "e1" }),
+      eventRow({ event_id: "e2", guild_id: OTHER_GUILD }),
+    ]);
+    const handler = createTrackingExportJobHandler({
+      db,
+      exportDir: dir,
+      now: () => Date.parse(AT),
+      ownerId: OWNER,
+    });
+    try {
+      await handler(jobContext({ scope: "tracking_all" }));
+      // still the invoking guild's folder: a pending export row can only point there.
+      const path = join(dir, GUILD, "timeline-all.json");
+      const written = JSON.parse(await readFile(path, "utf8"));
+
+      expect(written.scope).toBe("tracking_all");
+      // the header names no guild, so the rows have to.
+      expect(written.guild_id).toBeNull();
+      expect(written.events.map((event: { guild_id: string }) => event.guild_id).sort()).toEqual([
+        GUILD,
+        OTHER_GUILD,
+      ]);
+      expect(written.note).toContain("the guild is named on each row");
+      expect(inserted[0]?.[1]).toBe(GUILD);
+      expect(inserted[0]?.[2]).toBe("tracking_all");
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("the job refuses the whole-instance file to anyone but the owner", async () => {
+    const dir = await scratch();
+    const { db, inserted } = timelineDb([eventRow()]);
+    const handler = createTrackingExportJobHandler({
+      db,
+      exportDir: dir,
+      now: () => Date.parse(AT),
+      ownerId: OWNER,
+    });
+    try {
+      // the command already refused this. the row outlives the interaction, so the
+      // job checks the person on the row too.
+      await expect(handler(jobContext({ scope: "tracking_all" }, USER))).rejects.toThrow(
+        /SB_EXPORT_NOT_OWNER/,
+      );
+      expect(inserted).toHaveLength(0);
     } finally {
       await rm(dir, { recursive: true, force: true });
     }

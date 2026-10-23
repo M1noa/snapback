@@ -362,6 +362,7 @@ export async function boot(): Promise<Boot> {
         db,
         now: () => Date.now(),
         exportDir: env.storage.exportDir,
+        ownerId: env.discord.ownerId,
       }),
     }),
   );
@@ -524,6 +525,7 @@ export async function boot(): Promise<Boot> {
     db,
     log,
     jobs,
+    ownerId: env.discord.ownerId,
     now: () => Date.now(),
     ipStorage: env.privacy.ipStorage,
     exportDir: env.storage.exportDir,

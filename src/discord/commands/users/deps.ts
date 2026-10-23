@@ -8,7 +8,11 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import type { IpStorage } from "../../../config/parse-env.ts";
 import { insertPendingExport } from "../../../db/queries/exports.ts";
-import { listEventsByGuild, listEventsBySubject } from "../../../db/queries/tracked-events.ts";
+import {
+  listAllEvents,
+  listEventsByGuild,
+  listEventsBySubject,
+} from "../../../db/queries/tracked-events.ts";
 import type {
   Database,
   EventSource,
@@ -36,14 +40,19 @@ export const RECORDS_LIMIT = 500;
  *  size, so the file's cap is stated here instead. */
 export const EVENTS_LIMIT = 5000;
 
-/** the scopes this surface writes out. tracking_all is left out on purpose: a
- *  bot-wide file would carry one guild's rows into another guild's folder, and
- *  nothing here is scoped to the instance owner. */
-export const EXPORT_SCOPES = ["records", "tracking_user", "tracking_server"] as const;
+/** the scopes this surface writes out. tracking_all is the instance owner's
+ *  alone: the file carries every server's rows at once, so a guild admin may
+ *  never ask for it. the export command is the gate. */
+export const EXPORT_SCOPES = [
+  "records",
+  "tracking_user",
+  "tracking_server",
+  "tracking_all",
+] as const;
 
 export type ExportScope = (typeof EXPORT_SCOPES)[number];
 
-/** the two timeline scopes, as the file header names them. */
+/** the three timeline scopes, as the file header names them. */
 export type TrackingScope = Exclude<ExportScope, "records">;
 
 export function isExportScope(value: unknown): value is ExportScope {
@@ -111,6 +120,8 @@ export interface UsersDeps {
   readonly db: Database;
   readonly log: Logger;
   readonly jobs: JobRunner;
+  /** the instance owner. the only person who may write every guild's timeline. */
+  readonly ownerId: string;
   /** epoch ms. injected so a page's relative timestamps are testable. */
   readonly now: () => number;
   /** the ip storage mode in force. it picks the column and names the export. */
@@ -361,24 +372,29 @@ export function createUsersExportJobHandler(deps: UsersExportDeps): JobHandler {
   };
 }
 
-/** whether this guild, or one person in it, has any timeline rows at all. it
- *  reads one row, so the check costs a page of one. */
+/** whether this guild, one person in it, or the whole instance has any timeline
+ *  rows at all. it reads one row, so the check costs a page of one. */
 export async function hasEvents(
   db: Database,
-  guildId: string,
+  guildId: string | null,
   subjectId: string | null,
 ): Promise<boolean> {
+  // a null guild is the whole-instance read, which is the owner's file alone.
   const rows =
-    subjectId === null
-      ? await listEventsByGuild(db, guildId, { limit: 1 })
-      : await listEventsBySubject(db, guildId, subjectId, { limit: 1 });
+    guildId === null
+      ? await listAllEvents(db, { limit: 1 })
+      : subjectId === null
+        ? await listEventsByGuild(db, guildId, { limit: 1 })
+        : await listEventsBySubject(db, guildId, subjectId, { limit: 1 });
   return rows.length > 0;
 }
 
-/** one event as the export holds it. the guild is in the header, not on every
- *  row, and there is no message text or attachment here to leave out. */
+/** one event as the export holds it. the row carries its guild because the
+ *  whole-instance file mixes them, and there is no message text or attachment
+ *  here to leave out. */
 export interface ExportedEvent {
   readonly event_id: string;
+  readonly guild_id: string;
   readonly subject_kind: TrackedSubjectKind;
   readonly subject_id: string;
   readonly kind: TrackedEventKind;
@@ -393,12 +409,13 @@ export interface ExportedEvent {
 }
 
 /** the timeline file. the header says which scope it holds and whether the cap
- *  cut anything, so a truncated file does not read as a whole one. */
+ *  cut anything, so a truncated file does not read as a whole one. guild_id is
+ *  null for the whole-instance file, where the guild moves onto every row. */
 export interface TrackingExport {
   readonly schema_version: number;
   readonly kind: "timeline";
   readonly exported_at: string;
-  readonly guild_id: string;
+  readonly guild_id: string | null;
   readonly scope: TrackingScope;
   readonly subject_id: string | null;
   readonly event_count: number;
@@ -410,7 +427,7 @@ export interface TrackingExport {
 export interface TrackingExportInput {
   readonly scope: TrackingScope;
   readonly subjectId: string | null;
-  readonly guildId: string;
+  readonly guildId: string | null;
   /** newest first, as the query returns them. */
   readonly events: readonly TrackedEventRow[];
   readonly truncated: boolean;
@@ -418,6 +435,7 @@ export interface TrackingExportInput {
 }
 
 export function buildTrackingExport(input: TrackingExportInput): TrackingExport {
+  const whole = input.scope === "tracking_all";
   return {
     schema_version: 1,
     kind: "timeline",
@@ -429,11 +447,14 @@ export function buildTrackingExport(input: TrackingExportInput): TrackingExport 
     truncated: input.truncated,
     note: input.truncated
       ? `the newest ${input.events.length} events, oldest first. older events were left out.`
-      : "every event this server still holds, oldest first.",
+      : whole
+        ? "every event the instance still holds, oldest first. the guild is named on each row."
+        : "every event this server still holds, oldest first.",
     // the query reads newest first so the page builders can show the latest
     // change. a file is read down the page, so it is written the other way up.
     events: [...input.events].reverse().map((row) => ({
       event_id: row.event_id,
+      guild_id: row.guild_id,
       subject_kind: row.subject_kind,
       subject_id: row.subject_id,
       kind: row.kind,
@@ -455,16 +476,34 @@ export function trackingExportToJson(bundle: TrackingExport): string {
 }
 
 /** just the parts the timeline export job reads. */
-export type TrackingExportDeps = Pick<UsersDeps, "db" | "exportDir" | "now">;
+export type TrackingExportDeps = Pick<UsersDeps, "db" | "exportDir" | "now" | "ownerId">;
 
-/** the job that writes a timeline out. the file name is fixed per scope, so
- *  nothing a command was handed ends up in a path (D4PLAN 17.4). */
+/** one file name per scope, so nothing a command was handed ends up in a path. */
+const FILE_NAMES: Record<TrackingScope, string> = {
+  tracking_user: "timeline-user.json",
+  tracking_server: "timeline-server.json",
+  tracking_all: "timeline-all.json",
+};
+
+/** an unknown scope is a bug upstream, not a reason to write some other file. */
+function trackingScopeOf(value: unknown): TrackingScope {
+  if (value === "tracking_user" || value === "tracking_server" || value === "tracking_all") {
+    return value;
+  }
+  throw new Error("SB_EXPORT_SCOPE: a timeline export named no scope it knows");
+}
+
+/** the job that writes a timeline out (D4PLAN 17.4). */
 export function createTrackingExportJobHandler(deps: TrackingExportDeps): JobHandler {
   return async (ctx) => {
     const guildId = ctx.job.guild_id;
     const payload = (ctx.job.payload_json ?? {}) as { scope?: unknown; subjectId?: unknown };
-    const scope: TrackingScope =
-      payload.scope === "tracking_user" ? "tracking_user" : "tracking_server";
+    const scope = trackingScopeOf(payload.scope);
+    // rule 8: the command checks the owner at enqueue time, and the job checks
+    // again, because the row outlives the interaction.
+    if (scope === "tracking_all" && ctx.job.requested_by !== deps.ownerId) {
+      throw new Error("SB_EXPORT_NOT_OWNER: every server's timeline is the owner's file");
+    }
     const subjectId = scope === "tracking_user" ? String(payload.subjectId ?? "") : null;
     if (scope === "tracking_user" && subjectId === "") {
       throw new Error("SB_EXPORT_NO_SUBJECT: a timeline export names no person to write");
@@ -473,27 +512,31 @@ export function createTrackingExportJobHandler(deps: TrackingExportDeps): JobHan
     // one row past the cap says whether the file is complete, without a second
     // count query.
     const rows =
-      subjectId === null
-        ? await listEventsByGuild(deps.db, guildId, { limit: EVENTS_LIMIT + 1 })
-        : await listEventsBySubject(deps.db, guildId, subjectId, { limit: EVENTS_LIMIT + 1 });
+      scope === "tracking_all"
+        ? await listAllEvents(deps.db, { limit: EVENTS_LIMIT + 1 })
+        : subjectId === null
+          ? await listEventsByGuild(deps.db, guildId, { limit: EVENTS_LIMIT + 1 })
+          : await listEventsBySubject(deps.db, guildId, subjectId, { limit: EVENTS_LIMIT + 1 });
     const truncated = rows.length > EVENTS_LIMIT;
     const at = new Date(deps.now());
     const bundle = buildTrackingExport({
       scope,
       subjectId,
-      guildId,
+      // the whole-instance file names no guild in its header. every row carries
+      // its own instead.
+      guildId: scope === "tracking_all" ? null : guildId,
       events: truncated ? rows.slice(0, EVENTS_LIMIT) : rows,
       truncated,
       exportedAt: at.toISOString(),
     });
     const json = trackingExportToJson(bundle);
 
+    // the whole-instance file still lands in the invoking guild's folder, because
+    // that is the only place a pending export row can point. only the owner can
+    // ask for one, so nothing crosses guilds.
     const dir = join(deps.exportDir, guildId);
     await mkdir(dir, { recursive: true });
-    const path = resolve(
-      dir,
-      scope === "tracking_user" ? "timeline-user.json" : "timeline-server.json",
-    );
+    const path = resolve(dir, FILE_NAMES[scope]);
     await writeFile(path, json, "utf8");
 
     await insertPendingExport(deps.db, {
@@ -521,7 +564,7 @@ export function createTrackingExportJobHandler(deps: TrackingExportDeps): JobHan
   };
 }
 
-/** the runner holds one handler per job kind, and the three exports share the
+/** the runner holds one handler per job kind, and the four exports share the
  *  "export" kind. this dispatches on the scope. */
 export function createExportDispatcher(deps: {
   readonly backup: JobHandler;
@@ -534,7 +577,9 @@ export function createExportDispatcher(deps: {
       await deps.records(ctx);
       return;
     }
-    if (payload.scope === "tracking_user" || payload.scope === "tracking_server") {
+    // a prefix, not a list, so a new tracking scope cannot fall through to the
+    // backup handler and write the wrong file.
+    if (payload.scope?.startsWith("tracking_") === true) {
       await deps.tracking(ctx);
       return;
     }

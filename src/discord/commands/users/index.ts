@@ -63,6 +63,7 @@ const SCOPE_OPTION: CommandOption = {
     { name: "the records", value: "records" },
     { name: "this server's timeline", value: "tracking_server" },
     { name: "one person's timeline", value: "tracking_user" },
+    { name: "every server's timeline (owner only)", value: "tracking_all" },
   ],
 };
 
@@ -266,6 +267,21 @@ export function usersCommands(deps: UsersDeps): SlashCommand[] {
         if (denied !== null) return denied;
 
         const scope: ExportScope = isExportScope(ctx.options.scope) ? ctx.options.scope : "records";
+
+        // the whole-instance file carries every guild's rows at once, so it is the
+        // owner's alone. a guild admin asking for it fails here, before a job exists.
+        if (scope === "tracking_all" && ctx.userId !== deps.ownerId) {
+          return {
+            page: failurePage(
+              "every server is not yours to read",
+              "this file holds every server's timeline at once, and only the instance owner may write it.",
+              undefined,
+              "export this server's timeline instead.",
+            ),
+            ephemeral: true,
+          };
+        }
+
         const records = await deps.records(ctx.guildId, RECORDS_LIMIT);
         const wanted = String(ctx.options.user ?? "").trim();
         let subjectId: string | null = null;
@@ -319,6 +335,19 @@ export function usersCommands(deps: UsersDeps): SlashCommand[] {
             };
           }
           subjectId = record.user_id;
+        } else if (scope === "tracking_all") {
+          // no guild filter: the owner's file reads the whole table.
+          if (!(await hasEvents(deps.db, null, null))) {
+            return {
+              page: failurePage(
+                "there is nothing to export",
+                "no server has recorded a change yet, so the instance timeline is empty.",
+                undefined,
+                "leave tracking on somewhere and run this again after a change or two.",
+              ),
+              ephemeral: true,
+            };
+          }
         } else if (!(await hasEvents(deps.db, ctx.guildId, null))) {
           return {
             page: failurePage(

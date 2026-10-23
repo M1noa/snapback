@@ -76,7 +76,7 @@ The wizard. Stateful and resumable; the subcommands jump straight to a step.
 | Subcommand | Options | Does |
 |---|---|---|
 | `/users lookup` | `user` | what this server holds about a person |
-| `/users export` | `scope` (the records, this server's timeline, or one person's timeline), `user` (only for the last one) | writes records out as json |
+| `/users export` | `scope` (the records, this server's timeline, one person's timeline, or every server's timeline), `user` (only for a person) | writes records out as json. the whole-instance file is the bot owner's alone |
 | `/users blacklist` | `action`, `kind`, `value` | the entries you want to look at for this server, or the attempts that matched them (fingerprint included) |
 
 ## /pull

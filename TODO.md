@@ -12,11 +12,11 @@ Whole-instance timeline. `EXPORT_SCOPES` in `src/discord/commands/users/deps.ts:
 leaves it out on purpose, and the export row in `index.ts` does not offer it.
 Her words: "export per user data and servers data and all data".
 
-- [ ] add the scope to `EXPORT_SCOPES` and to the export row
-- [ ] `all` needs no guild filter, so the query and the row cap change shape
-- [ ] allow it only for the bot owner, not for any guild admin
-- [ ] name the file `timeline-all.json`
-- [ ] test: scope resolves, owner gate refuses a guild admin
+- [x] add the scope to `EXPORT_SCOPES` and to the export row
+- [x] `all` needs no guild filter, so the query and the row cap change shape
+- [x] allow it only for the bot owner, not for any guild admin
+- [x] name the file `timeline-all.json`
+- [x] test: scope resolves, owner gate refuses a guild admin
 
 Verify: `bun run check`, then read the page copy.
 

@@ -179,7 +179,7 @@ function countersLine(counters: CounterView | null): string {
 
 export interface ExportPageInput {
   readonly guildId: string;
-  /** which of the three exports this page is about. */
+  /** which of the four exports this page is about. */
   readonly scope: ExportScope;
   /** whose timeline it holds, when the scope is one person's. */
   readonly subjectId: string | null;
@@ -201,19 +201,25 @@ export interface ExportPageInput {
 /** the export. what it holds, what it leaves out, and where the file is. */
 export function exportPage(input: ExportPageInput): ContainerComponent {
   const records = input.scope === "records";
-  const what =
-    input.scope === "records"
-      ? "the file holds every field of every record, with the tokens left out entirely."
+  const whole = input.scope === "tracking_all";
+  const what = records
+    ? "the file holds every field of every record, with the tokens left out entirely."
+    : whole
+      ? "the file holds every change every server recorded, with no message text and no attachment bytes."
       : "the file holds every change this server recorded, with no message text and no attachment bytes.";
+  const coverage =
+    input.scope === "tracking_user" && input.subjectId !== null
+      ? `it covers one person: \`${input.subjectId}\`.`
+      : whole
+        ? "it covers every server at once, and each row names its own."
+        : "it covers every change in this server.";
   const middle = records
     ? [`the address is written in the \`${input.ipStorage}\` form, and the header names it.`]
     : [
-        input.scope === "tracking_user" && input.subjectId !== null
-          ? `it covers one person: \`${input.subjectId}\`.`
-          : "it covers every change in this server.",
+        coverage,
         input.truncated
           ? "the file holds the newest events only. the older ones were left out, and the header says so."
-          : "the file holds every event this server still keeps.",
+          : `the file holds every event ${whole ? "the instance" : "this server"} still keeps.`,
       ];
 
   const sections = [
@@ -235,7 +241,7 @@ export function exportPage(input: ExportPageInput): ContainerComponent {
 
   return page({
     state: input.jobError === null ? "info" : "danger",
-    title: records ? "the export" : "the timeline",
+    title: records ? "the export" : whole ? "every server's timeline" : "the timeline",
     sections,
     controls: [
       actionRow([button({ id: input.refreshId, label: "refresh", style: ButtonStyles.SECONDARY })]),

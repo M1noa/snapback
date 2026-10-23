@@ -74,10 +74,15 @@ export interface EventQuery {
 
 // the where clause is built from a fixed set of fragments with placeholders, never
 // from a string a caller supplied. kinds are the only variable part of the shape.
-function where(guildId: string, subjectId: string | null, query: EventQuery) {
-  const clauses = ["guild_id = ?"];
+function where(guildId: string | null, subjectId: string | null, query: EventQuery) {
+  // a null guild is the whole-instance read, so it drops the filter entirely.
+  const clauses: string[] = [];
   // SqlParam, not SqlValue: the driver rejects undefined, and toId can return it.
-  const binds: SqlParam[] = [guildId];
+  const binds: SqlParam[] = [];
+  if (guildId !== null) {
+    clauses.push("guild_id = ?");
+    binds.push(guildId);
+  }
   if (subjectId !== null) {
     clauses.push("subject_id = ?");
     binds.push(subjectId);
@@ -90,7 +95,8 @@ function where(guildId: string, subjectId: string | null, query: EventQuery) {
     clauses.push(`kind IN (${query.kinds.map(() => "?").join(", ")})`);
     for (const kind of query.kinds) binds.push(kind);
   }
-  return { clause: clauses.join(" AND "), binds };
+  // 1 = 1 rather than a conditional SELECT, so the query text keeps its shape.
+  return { clause: clauses.length === 0 ? "1 = 1" : clauses.join(" AND "), binds };
 }
 
 // newest first, matching idx_tracked_events_guild_at and _subject.
@@ -111,9 +117,18 @@ export async function listEventsBySubject(
   return list(db, guildId, subjectId, query);
 }
 
+/** every guild's rows, for the instance owner's export. it sorts the whole table,
+ *  and no index leads on "at" alone, so it is a full read. fine at this size. */
+export async function listAllEvents(
+  db: Database,
+  query: EventQuery = {},
+): Promise<TrackedEventRow[]> {
+  return list(db, null, null, query);
+}
+
 async function list(
   db: Database,
-  guildId: string,
+  guildId: string | null,
   subjectId: string | null,
   query: EventQuery,
 ): Promise<TrackedEventRow[]> {
