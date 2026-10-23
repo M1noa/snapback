@@ -5,6 +5,7 @@
 // person's name before it happens.
 
 import type { VerifyPanelRow } from "../../../db/types.ts";
+import { mirror } from "../../../services/tracking/mirror.ts";
 import { label, textInput } from "../../components/row.ts";
 import { failurePage } from "../../interactions/dispatch.ts";
 import type { Handler, HandlerContext, HandlerResult, Router } from "../../interactions/router.ts";
@@ -519,6 +520,15 @@ function revokeHandler(deps: VerifyDeps): Handler {
       actorUserId: ctx.identity.userId,
       action: "verify.record.revoked",
       target: userId,
+      detail: { what: deleted.what },
+    });
+    await mirror(deps.tracking, deps.log, {
+      guildId: ctx.id.guild,
+      subjectKind: "user",
+      subjectId: userId,
+      kind: "verify_revoked",
+      actorId: ctx.identity.userId,
+      source: "verify",
       detail: { what: deleted.what },
     });
     const record = await deps.record(ctx.id.guild, userId);

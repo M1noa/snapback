@@ -74,6 +74,7 @@ import { createRestoreJobHandler } from "./services/restore/job.ts";
 import { buildPlan } from "./services/restore/plan.ts";
 import { DEFAULT_RETENTION } from "./services/retention/index.ts";
 import { TrackingService } from "./services/tracking/index.ts";
+import { guildDiff, guildIds, mirror } from "./services/tracking/mirror.ts";
 import { decideVerification } from "./services/verify/guard.ts";
 import { buildAuthorizeUrl, exchangeCode, refreshAccessToken } from "./services/verify/oauth.ts";
 import { createPanel, postPanel } from "./services/verify/panel.ts";
@@ -491,6 +492,7 @@ export async function boot(): Promise<Boot> {
     },
     refresh: async () => ({ checked: 0, refreshed: 0, failed: 0 }),
     ownerId: env.discord.ownerId,
+    tracking,
     authorize: (userId, guildId) => isGuildAdmin(userId, guildId, "verify"),
     audit: async (input) => {
       await insertAudit(db, {
@@ -541,6 +543,7 @@ export async function boot(): Promise<Boot> {
         joinedAt: member.joinedAt === null ? null : member.joinedAt.toISOString(),
       };
     },
+    tracking,
   };
   registerUsersHandlers(router, usersDeps);
 
@@ -600,8 +603,8 @@ export async function boot(): Promise<Boot> {
       return stored?.accessToken ?? null;
     },
     refresh: pullRefresh,
-    pull: async (input) =>
-      await pullAccounts(
+    pull: async (input) => {
+      const reports = await pullAccounts(
         {
           client,
           db,
@@ -610,7 +613,24 @@ export async function boot(): Promise<Boot> {
           refresh: pullRefresh,
         },
         input,
-      ),
+      );
+      // one row per account, so the timeline says who was tried and how it went.
+      for (const report of reports) {
+        await mirror(tracking, log, {
+          guildId: input.guildId,
+          subjectKind: "user",
+          subjectId: report.userId,
+          kind: report.outcome === "added" ? "pull_added" : "pull_attempt",
+          source: "pull",
+          detail: {
+            outcome: report.outcome,
+            code: report.errorCode,
+            reason: report.reason,
+          },
+        });
+      }
+      return reports;
+    },
   };
   registerPullHandlers(router, pullDeps);
 
@@ -853,6 +873,14 @@ export async function boot(): Promise<Boot> {
           // the record is per (user, guild). the panel flow carries the server
           // it belongs to; the web flow has none, and the row is kept under the
           // empty guild so a second verification does not erase the first.
+          const at = new Date().toISOString();
+          const timelineGuild = guildId === null || guildId === "" ? null : guildId;
+          // the guild list is a snapshot. read the old one before it is
+          // overwritten, so the diff is what changed and not just the new set.
+          const priorGuilds =
+            timelineGuild === null
+              ? []
+              : guildIds((await getRecord(db, timelineGuild, userId))?.guilds_json ?? []);
           await upsertRecord(
             { db, log, ipStorage: env.privacy.ipStorage },
             {
@@ -872,7 +900,7 @@ export async function boot(): Promise<Boot> {
               guilds: guilds ?? [],
               relationships: [],
               oauthScopes: scopes ?? [],
-              grantedAt: new Date().toISOString(),
+              grantedAt: at,
               firstIpStored: ip.stored,
               lastIpStored: ip.stored,
               intel: verdict,
@@ -884,6 +912,26 @@ export async function boot(): Promise<Boot> {
               signals,
             },
           );
+          // the timeline is per guild, so a web-flow record has nowhere to go.
+          if (timelineGuild === null) return;
+          await mirror(tracking, log, {
+            guildId: timelineGuild,
+            subjectKind: "user",
+            subjectId: userId,
+            kind: status === "refused" ? "verify_refused" : "verify_passed",
+            source: "verify",
+            at,
+            detail: { status, refusal_reason: refusalReason ?? null },
+          });
+          await mirror(tracking, log, {
+            guildId: timelineGuild,
+            subjectKind: "user",
+            subjectId: userId,
+            kind: "verify_guilds",
+            source: "verify",
+            at,
+            detail: guildDiff(priorGuilds, guildIds(guilds ?? [])),
+          });
         },
       }),
       assets: assetRoute(),

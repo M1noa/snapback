@@ -179,6 +179,8 @@ function fakeDeps(
     record: async (guildId, userId) =>
       records.find((row) => row.guild_id === guildId && row.user_id === userId) ?? null,
     member: async () => ({ state: "member", nickname: null, joinedAt: null }),
+    // off unless a test hands one in. null is the switch-off shape.
+    tracking: null,
     ...overrides,
   };
 }

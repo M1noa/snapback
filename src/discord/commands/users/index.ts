@@ -15,6 +15,7 @@ import { listJobsByGuild } from "../../../db/queries/jobs.ts";
 import type { VerifyRecordRow } from "../../../db/types.ts";
 import { boundedText, oneOf } from "../../../lib/validate.ts";
 import { utcDay } from "../../../services/pull/counter.ts";
+import { mirror } from "../../../services/tracking/mirror.ts";
 import {
   addEntry,
   BLACKLIST_KINDS,
@@ -308,6 +309,17 @@ export function usersCommands(deps: UsersDeps): SlashCommand[] {
             target: `${kind}:${value}`,
             detail: { kind, value, added: result.added },
           });
+          if (result.added) {
+            await mirror(deps.tracking, deps.log, {
+              guildId: ctx.guildId,
+              subjectKind: kind === "user_id" ? "user" : "guild",
+              subjectId: kind === "user_id" ? value : ctx.guildId,
+              kind: "blacklist_add",
+              actorId: ctx.userId,
+              source: "admin",
+              detail: { kind, value },
+            });
+          }
           return {
             page: await blacklistPageFor(
               deps,
@@ -329,6 +341,17 @@ export function usersCommands(deps: UsersDeps): SlashCommand[] {
           target: `${kind}:${value}`,
           detail: { kind, value, removed },
         });
+        if (removed) {
+          await mirror(deps.tracking, deps.log, {
+            guildId: ctx.guildId,
+            subjectKind: kind === "user_id" ? "user" : "guild",
+            subjectId: kind === "user_id" ? value : ctx.guildId,
+            kind: "blacklist_remove",
+            actorId: ctx.userId,
+            source: "admin",
+            detail: { kind, value },
+          });
+        }
         return {
           page: await blacklistPageFor(
             deps,

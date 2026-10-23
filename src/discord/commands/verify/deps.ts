@@ -6,6 +6,7 @@ import type { CustomIdSpec } from "../../../discord/interactions/router.ts";
 import type { StateStore } from "../../../discord/interactions/state.ts";
 import type { Logger } from "../../../lib/log.ts";
 import type { JobRunner } from "../../../services/jobs/runner.ts";
+import type { Tracker } from "../../../services/tracking/mirror.ts";
 import { customID } from "../../components/row.ts";
 
 export const VERIFY_SURFACE = "verify";
@@ -90,6 +91,8 @@ export interface VerifyDeps {
   ) => Promise<{ checked: number; refreshed: number; failed: number }>;
   /** the instance owner, or null. only the owner may erase captured data. */
   readonly ownerId: string;
+  /** the timeline. null when the switch is off, and the mirror skips. */
+  readonly tracking: Tracker | null;
   /** re-checked on every interaction (AGENTS.md rule 8). */
   readonly authorize: (userId: string, guildId: string) => Promise<boolean>;
   readonly audit: (input: {

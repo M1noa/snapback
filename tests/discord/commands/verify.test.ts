@@ -126,6 +126,8 @@ function fakeDeps(overrides: Partial<VerifyDeps> = {}): VerifyDeps {
     ownerId: OWNER,
     authorize: async () => true,
     audit: async () => {},
+    // off unless a test hands one in. null is the switch-off shape.
+    tracking: null,
     ...overrides,
   };
 }

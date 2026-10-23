@@ -13,6 +13,7 @@ import type { CustomIdSpec } from "../../../discord/interactions/router.ts";
 import type { Logger } from "../../../lib/log.ts";
 import { EXPORT_TTL_MS } from "../../../services/export/job.ts";
 import type { JobHandler, JobRunner } from "../../../services/jobs/runner.ts";
+import type { Tracker } from "../../../services/tracking/mirror.ts";
 import { customID } from "../../components/row.ts";
 import { failurePage } from "../../interactions/dispatch.ts";
 import type { CommandContext, CommandResult } from "../types.ts";
@@ -107,6 +108,8 @@ export interface UsersDeps {
   readonly record: (guildId: string, userId: string) => Promise<VerifyRecordRow | null>;
   /** whether the person is in this server. null when it cannot be told. */
   readonly member: (guildId: string, userId: string) => Promise<MembershipView | null>;
+  /** the timeline. null when the switch is off, and the mirror skips. */
+  readonly tracking: Tracker | null;
 }
 
 /** null when the person may act, and the refusal page when they may not. */
