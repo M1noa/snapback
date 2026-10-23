@@ -493,7 +493,7 @@ function trackingScopeOf(value: unknown): TrackingScope {
   throw new Error("SB_EXPORT_SCOPE: a timeline export named no scope it knows");
 }
 
-/** the job that writes a timeline out (D4PLAN 17.4). */
+/** the job that writes a timeline out (D4PLAN 19.5). */
 export function createTrackingExportJobHandler(deps: TrackingExportDeps): JobHandler {
   return async (ctx) => {
     const guildId = ctx.job.guild_id;

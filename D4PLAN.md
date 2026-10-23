@@ -1489,6 +1489,8 @@ Neither switch records message content or attachment bytes. A `message_delete` r
 
 Exports: the three `tracking_*` kinds (`tracking_user`, `tracking_server`, `tracking_all`) read this table and nothing else. They go out through the normal export path, so they get the same expiry and the same never-contain-tokens rule as every other export.
 
+`tracking_all` is the bot owner's file and nobody else's: the command refuses a non-owner before it fetches anything, and the job checks `requested_by` again because the row outlives the interaction (`9.3`). It is the only read of this table that drops the guild filter. Its header names no guild, so every row carries its own `guild_id`; the file itself still lands in the invoking guild's export folder, because that is the only place a `pending_exports` row can point. The note in the file says which of those is true, so a reader can tell an empty server from an empty instance.
+
 ---
 
 ## 20. Testing
