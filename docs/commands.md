@@ -23,6 +23,7 @@ The wizard. Stateful and resumable; the subcommands jump straight to a step.
 | `/setup branding` | bot avatar, banner, and display name |
 | `/setup admins` | who else may change settings |
 | `/setup logs` | log channel and event families |
+| `/setup tracking` | what the timeline records, and how long it is kept |
 | `/setup backup` | include set, message limits, auto-backup schedule |
 | `/setup restore` | clear-before, timestamp suffix, default selections |
 | `/setup verify` | the panel, its colour, and its buttons |

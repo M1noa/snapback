@@ -717,14 +717,15 @@ A resumable state machine, persisted in `guilds.settings_json` under `wizard`. E
 | 3 | Branding | no | avatar and banner upload, GIF accepted (`10.2`) |
 | 4 | Admins | no | wizard offers the invoking user first |
 | 5 | Logging | no | pick channel, test-fire one entry so the operator sees it work |
-| 6 | Backup defaults | no | include set, message limits, auto-backup schedule |
-| 7 | Restore defaults | no | clear-before off by default, timestamp suffix off by default |
-| 8 | Verification panel | only if verification is enabled | `10.3` |
-| 9 | Verification policy | only if verification is enabled | the network rule and the alt check, both off until chosen (`14.4`) |
-| 10 | Scopes | only if verification is enabled | default three, restricted scope needs an acknowledgement |
-| 11 | Finish | yes | writes `wizard.done`, prints the invite, the command list, and the docs pointer |
+| 6 | Timeline | no | the two tracking switches and the retention window (`19.5`) |
+| 7 | Backup defaults | no | include set, message limits, auto-backup schedule |
+| 8 | Restore defaults | no | clear-before off by default, timestamp suffix off by default |
+| 9 | Verification panel | only if verification is enabled | `10.3` |
+| 10 | Verification policy | only if verification is enabled | the network rule and the alt check, both off until chosen (`14.4`) |
+| 11 | Scopes | only if verification is enabled | default three, restricted scope needs an acknowledgement |
+| 12 | Finish | yes | writes `wizard.done`, prints the invite, the command list, and the docs pointer |
 
-Step 10 (Privacy) is removed by operator decision: no disclosure page means the site has nothing to write text for. Steps after 9 shift down by one.
+Step 10 (Privacy) is removed by operator decision: no disclosure page means the site has nothing to write text for. The timeline step sits after logging because both answer "what gets recorded"; it was added after the table first shipped and the rows below it were renumbered once.
 
 ### 10.2 Branding upload
 

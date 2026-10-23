@@ -32,6 +32,7 @@ const STEP_SUBCOMMANDS = [
   "branding",
   "admins",
   "logs",
+  "tracking",
   "backup",
   "restore",
   "verify",

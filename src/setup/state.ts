@@ -9,7 +9,7 @@ import type { GuildSettings, WizardState, WizardStepState } from "../config/defa
 import { DEFAULT_WIZARD } from "../config/defaults.ts";
 
 export interface WizardStep {
-  /** the 0-10 index from D4PLAN 10.1. */
+  /** the 0-12 index from D4PLAN 10.1. */
   readonly index: number;
   /** stable key: it is the customID action and the settings_json key. */
   readonly key: string;
@@ -72,6 +72,14 @@ export const WIZARD_STEPS: readonly WizardStep[] = Object.freeze([
   },
   {
     index: 6,
+    key: "tracking",
+    title: "timeline",
+    required: false,
+    verifyOnly: false,
+    summary: "what the timeline records, and how long it is kept",
+  },
+  {
+    index: 7,
     key: "backup",
     title: "backup defaults",
     required: false,
@@ -79,7 +87,7 @@ export const WIZARD_STEPS: readonly WizardStep[] = Object.freeze([
     summary: "include set, message limits, auto-backup schedule",
   },
   {
-    index: 7,
+    index: 8,
     key: "restore",
     title: "restore defaults",
     required: false,
@@ -87,7 +95,7 @@ export const WIZARD_STEPS: readonly WizardStep[] = Object.freeze([
     summary: "clear-before, timestamp suffix, default selections",
   },
   {
-    index: 8,
+    index: 9,
     key: "verify",
     title: "verification panel",
     required: false,
@@ -95,7 +103,7 @@ export const WIZARD_STEPS: readonly WizardStep[] = Object.freeze([
     summary: "the panel, its colour, and its buttons",
   },
   {
-    index: 9,
+    index: 10,
     key: "policy",
     title: "verification policy",
     required: false,
@@ -103,7 +111,7 @@ export const WIZARD_STEPS: readonly WizardStep[] = Object.freeze([
     summary: "when a verification is refused: the network rule and the alt check",
   },
   {
-    index: 10,
+    index: 11,
     key: "scopes",
     title: "scopes",
     required: false,
@@ -111,7 +119,7 @@ export const WIZARD_STEPS: readonly WizardStep[] = Object.freeze([
     summary: "what the verification asks for, and why",
   },
   {
-    index: 11,
+    index: 12,
     key: "finish",
     title: "finish",
     required: true,

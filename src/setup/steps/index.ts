@@ -13,6 +13,7 @@ import { logsStep } from "./logs.ts";
 import { policyStep } from "./policy.ts";
 import { restoreStep } from "./restore.ts";
 import { scopesStep } from "./scopes.ts";
+import { trackingStep } from "./tracking.ts";
 import { verifyStep } from "./verify.ts";
 import { webStep } from "./web.ts";
 import { welcomeStep } from "./welcome.ts";
@@ -24,6 +25,7 @@ export const STEP_MODULES: readonly StepModule[] = Object.freeze([
   brandingStep,
   adminsStep,
   logsStep,
+  trackingStep,
   backupStep,
   restoreStep,
   verifyStep,
@@ -56,6 +58,7 @@ export {
   policyStep,
   restoreStep,
   scopesStep,
+  trackingStep,
   verifyStep,
   webStep,
   welcomeStep,

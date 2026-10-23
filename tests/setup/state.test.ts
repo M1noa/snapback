@@ -43,10 +43,10 @@ function everythingHandled(base: GuildSettings): GuildSettings {
 }
 
 describe("the step table", () => {
-  test("twelve steps, in order, with unique keys and indices", () => {
-    expect(WIZARD_STEPS.length).toBe(12);
-    expect(WIZARD_STEP_KEYS.length).toBe(12);
-    expect(new Set(WIZARD_STEP_KEYS).size).toBe(12);
+  test("thirteen steps, in order, with unique keys and indices", () => {
+    expect(WIZARD_STEPS.length).toBe(13);
+    expect(WIZARD_STEP_KEYS.length).toBe(13);
+    expect(new Set(WIZARD_STEP_KEYS).size).toBe(13);
     for (const [index, step] of WIZARD_STEPS.entries()) {
       expect(step.index).toBe(index);
     }
@@ -82,7 +82,7 @@ describe("pending steps", () => {
     expect(pending.includes("web")).toBe(false);
     expect(pending.includes("verify")).toBe(false);
     expect(pending.includes("scopes")).toBe(false);
-    expect(pending.length).toBe(8);
+    expect(pending.length).toBe(9);
   });
 
   test("turning verification on adds the three it needs", () => {
@@ -91,7 +91,7 @@ describe("pending steps", () => {
     expect(pending).toContain("verify");
     expect(pending).toContain("policy");
     expect(pending).toContain("scopes");
-    expect(pending.length).toBe(12);
+    expect(pending.length).toBe(13);
   });
 
   test("the panel is what turns verification on", () => {

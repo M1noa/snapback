@@ -488,6 +488,11 @@ const RESTORE_VALUES: Readonly<Record<string, SubmittedValue>> = {
   [sid(SETUP_OBJECT.step, "restore", "clear")]: "true",
   [sid(SETUP_OBJECT.step, "restore", "suffix")]: "true",
 };
+const TRACKING_VALUES: Readonly<Record<string, SubmittedValue>> = {
+  [sid(SETUP_OBJECT.step, "tracking", "history")]: "true",
+  [sid(SETUP_OBJECT.step, "tracking", "palantir")]: "true",
+  [sid(SETUP_OBJECT.step, "tracking", "keep")]: "90",
+};
 const VERIFY_VALUES: Readonly<Record<string, SubmittedValue>> = {
   [panelFieldId(GUILD, "title")]: "verify to enter",
   [panelFieldId(GUILD, "description")]: "prove you are human",
@@ -510,6 +515,7 @@ async function fullPass(h: Harness): Promise<void> {
   await press(h, modalId("branding"), new FakeSurface({}, "modal")); // branding left unset
   await press(h, navId(SETUP_ACTION.next, "admins")); // admins done, renders logs
   await press(h, stepId("logs"), new FakeSurface(LOG_VALUES));
+  await press(h, stepId("tracking"), new FakeSurface(TRACKING_VALUES));
   await press(h, stepId("backup"), new FakeSurface(BACKUP_VALUES));
   await press(h, stepId("restore"), new FakeSurface(RESTORE_VALUES));
   await press(h, modalId("verify"), new FakeSurface(VERIFY_VALUES, "modal"));
@@ -519,7 +525,7 @@ async function fullPass(h: Harness): Promise<void> {
   await press(h, stepId("finish"), new FakeSurface()); // completes the wizard
 }
 
-const PASS_SAVES = 14; // setup.open + twelve step saves + finish
+const PASS_SAVES = 15; // setup.open + thirteen step saves + finish
 
 async function auditRows(db: Database): Promise<AuditLogRow[]> {
   return auditDb.listAuditByGuild(db, GUILD, { limit: 100 });
@@ -535,6 +541,7 @@ const VALUE_FIELDS = [
   "ephemeral_default",
   "log_channel_id",
   "log_events",
+  "tracking",
   "auto_backup_enabled",
   "auto_backup_interval_hours",
   "auto_backup_message_count",
@@ -569,6 +576,9 @@ describe("the setup wizard, end to end", () => {
       for (const family of saved.log_events) {
         expect((LOG_EVENT_FAMILIES as readonly string[]).includes(family)).toBe(true);
       }
+
+      // the tracking settings, from the timeline page's checkboxes and modal
+      expect(saved.tracking).toEqual({ history: true, palantir: true, keep_days: 90 });
 
       // the backup and restore settings, from their pages and modals
       expect(saved.auto_backup_enabled).toBe(true);
@@ -613,9 +623,22 @@ describe("the setup wizard, end to end", () => {
       await fullPass(h);
       const before = (await auditRows(temp.handle.db)).length;
 
+      // tracking: both family checkboxes default to on and the page names the
+      // stored retention. nav "prev" never writes, so this is a pure render.
+      const trackingPage = await press(h, navId(SETUP_ACTION.prev, "backup"));
+      expect(texts(trackingPage.message)).toContain("keep for: 90 days");
+      expect(
+        findById(trackingPage.message, sid(SETUP_OBJECT.step, "tracking", "history")).default,
+      ).toBe(true);
+      expect(
+        findById(trackingPage.message, sid(SETUP_OBJECT.step, "tracking", "palantir")).default,
+      ).toBe(true);
+      const trackingModal = (await press(h, stepId("tracking"))).modals[0]?.components;
+      expect(findById(trackingModal, sid(SETUP_OBJECT.step, "tracking", "keep")).value).toBe("90");
+
       // logs: the family checkboxes default to the stored selection, and the page
-      // names the stored channel. nav "prev" never writes, so this is a pure render.
-      const logs = await press(h, navId(SETUP_ACTION.prev, "backup"));
+      // names the stored channel.
+      const logs = await press(h, navId(SETUP_ACTION.prev, "tracking"));
       expect(texts(logs.message)).toContain(`<#${CHANNEL}>`);
       const families = findById(logs.message, logId("families"));
       const wantFamilies = ["backup", "restore", "verify"];
@@ -700,6 +723,7 @@ describe("the setup wizard, end to end", () => {
           "setup.branding",
           "setup.admins.done",
           "setup.logs",
+          "setup.tracking",
           "setup.backup",
           "setup.restore",
           "setup.verify",
@@ -804,12 +828,12 @@ describe("the setup wizard, end to end", () => {
         expect(JSON.stringify(after[field])).toBe(JSON.stringify(snapshot[field]));
       }
 
-      // the second pass wrote 11 rows, not 14. two saves moved nothing so wrote
+      // the second pass wrote 12 rows, not 15. some saves moved nothing so wrote
       // no audit row: setup.open (the opener is already this user) and
       // setup.finish (the wizard is already complete, so completing it again is a
       // no-op). every other save advanced the wizard cursor and nothing else.
       const added = (await auditRows(temp.handle.db)).filter((row) => !firstIds.has(row.id));
-      expect(added).toHaveLength(11);
+      expect(added).toHaveLength(12);
       const addedActions = new Set(added.map((row) => row.action));
       expect(addedActions.has("setup.open")).toBe(false);
       expect(addedActions.has("setup.finish")).toBe(false);
