@@ -167,7 +167,11 @@ function recording(body: string, status = 200): Net & { recorded: Recorded[] } {
   return { fetch: impl, calls, recorded };
 }
 
-function makeDeps(db: Database, net: Net): SetupDeps {
+function makeDeps(
+  db: Database,
+  net: Net,
+  settingsSaved?: (guildId: string) => void | Promise<void>,
+): SetupDeps {
   // level error + dir null: the test never writes a log file.
   const log = createLogger({ level: "error", dir: null });
   const client = new DiscordClient({
@@ -179,7 +183,7 @@ function makeDeps(db: Database, net: Net): SetupDeps {
   // constructing the gateway is offline: it builds oceanic's Client and connects
   // only on connect(), which no test here calls.
   const gateway = new Gateway({ token: "test-token", log });
-  return createSetupDeps({ db, client, gateway, log, ownerId: OWNER });
+  return createSetupDeps({ db, client, gateway, log, ownerId: OWNER, settingsSaved });
 }
 
 describe("setup wiring: the settings store", () => {
@@ -217,6 +221,58 @@ describe("setup wiring: the settings store", () => {
       expect(after.log_events).toEqual(["backup", "restore"]);
 
       expect(net.calls).toEqual([]); // a settings save is a db write, not a request
+    } finally {
+      handle.close();
+    }
+  });
+
+  test("tells the caller that settings moved, once per save", async () => {
+    const net = offline();
+    const handle = await openHandle();
+    try {
+      const seen: string[] = [];
+      const deps = makeDeps(handle.db, net, (guildId) => {
+        seen.push(guildId);
+      });
+
+      await deps.store.save({
+        guildId: GUILD_A,
+        actorUserId: OWNER,
+        action: "setup.logs",
+        patch: {},
+      });
+      await deps.store.save({
+        guildId: GUILD_B,
+        actorUserId: OWNER,
+        action: "setup.tracking",
+        patch: { tracking: { history: false, palantir: false, keep_days: 30 } },
+      });
+      expect(seen).toEqual([GUILD_A, GUILD_B]);
+    } finally {
+      handle.close();
+    }
+  });
+
+  test("a throwing listener does not fail a save that already landed", async () => {
+    const net = offline();
+    const handle = await openHandle();
+    try {
+      const deps = makeDeps(handle.db, net, () => {
+        throw new Error("cache is down");
+      });
+
+      // the row is written before the cache is told, so a broken cache must not
+      // turn a durable save into a failure the operator has to retry.
+      const saved = await deps.store.save({
+        guildId: GUILD_A,
+        actorUserId: OWNER,
+        action: "setup.logs",
+        patch: { log_channel_id: CHANNEL },
+      });
+      expect(saved.settings.log_channel_id).toBe(CHANNEL);
+
+      const rows: AuditLogRow[] = await auditDb.listAuditByGuild(handle.db, GUILD_A);
+      expect(rows.length).toBe(1);
     } finally {
       handle.close();
     }

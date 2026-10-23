@@ -248,8 +248,13 @@ export function createSetupDeps(input: SetupWiringInput): SetupDeps {
       }
 
       // a cache of these settings is now stale. a failure here is not a failed
-      // save: the row is written, the cache re-reads on the next boot.
-      await input.settingsSaved?.(save.guildId);
+      // save: the row is written and the cache re-reads on the next boot, so the
+      // error is logged rather than handed to the caller as a save failure.
+      try {
+        await input.settingsSaved?.(save.guildId);
+      } catch (error) {
+        input.log.warn("settings cache not invalidated", { guildId: save.guildId, error });
+      }
 
       return { settings: next, changed };
     },
