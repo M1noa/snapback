@@ -547,6 +547,7 @@ The `privacy` step and the `/setup privacy` subcommand are removed by operator d
 | `/backup restore` | `backup`, `target_guild` | hands off to `/restore`'s selection UI prefilled |
 | `/backup delete` | `backup`, `confirm` | hard-deletes rows and asset files |
 | `/backup export` | `backup`, `format` | writes a JSON or zip into the export dir and returns it as a file component |
+| `/backup import` | `file` (upload), `label`, `format` (auto, snapback, restorecord, vaultcord) | reads an uploaded backup file into a stored backup, sealed against the same self-check |
 | `/backup prune` | `dry_run` | applies retention policy and reports what would go |
 
 ### `/restore`
@@ -1334,7 +1335,21 @@ Formats:
 
 `services/export/json.ts` serialises bigints as strings, dates as ISO 8601 UTC, and JSON blobs as parsed objects, so the output is readable rather than a wall of escaped strings. The reference stores them as stringified blobs and exports them as such `[r]`.
 
-### 17.4 Export expiry
+### 17.4 Import
+
+`/backup import` is the other direction of `17.3`: it takes a backup file from somewhere else and lands it in the same tables a native backup writes, so the restore engine, the diff, and the export all work on it with no special case.
+
+Three readers, and `auto` picks between them by shape rather than by filename:
+
+- **snapback JSON**, recognised by the export bundle guard. Lossless, because it is the same schema.
+- **restorecord**, recognised by `success === true` plus a string `createdAt`. Roles, channels, overwrites and the guild's own settings; no messages, no members beyond what a role list implies.
+- **vaultcord**, the lenient reader, since its files vary by version.
+
+The two foreign readers are lossy by definition, so the job does not paper over the gaps: every field the source could not carry becomes a skip entry naming the field, and the imported backup is sealed against the same self-check a native one gets, so a half-filled import is visible on `/backup info` instead of quietly looking complete. Missing source ids get a synthetic `rc-role-<n>` / `rc-channel-<n>` id. The dash matters: a synthetic id can never collide with a snowflake, so nothing downstream ever treats it as a real Discord object. A permission bitfield is only trusted as a decimal string or a safe integer, because reading one as a JS number silently loses precision past 2^53.
+
+The file is uploaded to Discord, not fetched from a URL the user chose: the attachment option's value is an id, and `discord/interactions/handlers.ts` trades it for the CDN url Discord resolved alongside it. The job then reads that url with the plain CDN get from `lib/http.ts` (64 MiB cap, 60 second timeout, no auth header), which is the same carve-out the asset store uses. Each table is written in its own step, so one bad row group costs the import that table and a skip entry, not the rows already committed.
+
+### 17.5 Export expiry
 
 Exported files are written under `data/exports/` with a timestamp and an `expires_at` (default 24h). The sweep deletes expired ones. Prevents the disk filling with four copies of a 300 MB dump because someone pressed export four times.
 

@@ -167,6 +167,9 @@ Answers marked here were resolved from the Discord docs and are recorded in `D4P
 - [x] check: a scratch guild round-trips counts, an over-limit channel clamps at the cap and not a page past it, the JSON matches the golden file.
       `tests/services/backup/pipeline.test.ts` drives the real pipeline over the fixture guild and a real database: the counts on the sealed row are the counts in the tables, an over-limit channel asks for exactly what was left and reads no page past it, a refused endpoint is a skip, and a broken step makes the backup incomplete. The golden file is `tests/fixtures/golden-backup.json`, compared byte for byte, and biome is told to leave it alone.
 
+- [x] `/backup import`: an uploaded backup file from snapback, restorecord or vaultcord read into a stored backup.
+      `src/services/import/`. `formats.ts` picks a reader by shape rather than by filename, and nothing about a foreign file is guessed: a field the source cannot carry becomes a skip entry that `/backup info` shows, a missing id becomes a synthetic `rc-role-<n>` (the dash is what keeps it from colliding with a snowflake), and a permission bitfield is read only as a decimal string or a safe integer. `job.ts` writes the skeleton, purges, then writes each table in its own step so one bad row group costs that table and not the ones already committed, and seals the result against the same self-check a native backup gets. the file arrives as the CDN url `discord/interactions/handlers.ts` resolved from the attachment id, read through `fetchCdn` with a 64 MiB cap and a 60 second timeout.
+
 Still open in this phase:
 
 - [~] a live job message. `/backup create` answers with the job's page and a refresh button, and the job's progress is in `job_progress`, but nothing edits one message in the channel while the capture runs. The plan's "live progress on one edited message" is phase 6's executor wording, and the job message for a capture belongs with it.
