@@ -25,7 +25,7 @@ export type JsonObject = Record<string, unknown>;
 export type JsonValue = JsonObject | unknown[] | string | number | boolean | null;
 
 export type JobStatus = "queued" | "running" | "paused" | "succeeded" | "failed" | "cancelled";
-export type JobKind = "backup" | "restore" | "pull" | "verify_refresh" | "export";
+export type JobKind = "backup" | "restore" | "pull" | "verify_refresh" | "export" | "import";
 export type BackupKind = "manual" | "auto" | "pre_restore";
 export type TokenStatus = "valid" | "unauthorized" | "revoked" | "refused" | "missing";
 export type IpType =

@@ -69,6 +69,9 @@ function fakeInteraction(
     /** the member's computed perms, as oceanic exposes them on every guild
      *  interaction. null is the dm shape and reads as unknown. */
     memberPermissions?: bigint | null;
+    /** attachment id to resolved url. discord always sends the resolved block;
+     *  an id missing here is one it did not resolve. */
+    attachments?: [string, string][];
   } = {},
 ): { interaction: AnyInteractionGateway; replies: Reply[] } {
   const replies: Reply[] = [];
@@ -93,6 +96,11 @@ function fakeInteraction(
             name: overrides.commandName ?? "snapback",
             // discord always nests a subcommand option; the default mirrors that.
             options: { raw: overrides.raw ?? [{ name: "status", type: 1, options: [] }] },
+            resolved: {
+              attachments: new Map(
+                (overrides.attachments ?? []).map(([id, url]) => [id, { id, url }]),
+              ),
+            },
           }
         : { customID: customId },
     async createMessage(payload: V2Payload) {
@@ -285,6 +293,50 @@ describe("slash commands", () => {
     await onInteraction(interaction);
 
     expect(seen[0]).toEqual({ backup: "b-1" });
+  });
+
+  test("an attachment option arrives as its cdn url, not its id", async () => {
+    const seen: Record<string, unknown>[] = [];
+    const router = new Router({ authorize: () => ({ kind: "allow" }) });
+    const onInteraction = createInteractionHandler({
+      commands: [
+        {
+          group: "snapback",
+          subcommand: "status",
+          description: "records options",
+          run: (ctx) => {
+            seen.push(ctx.options);
+            return { page: page({ state: "info", title: "ok", sections: [] }), ephemeral: true };
+          },
+        },
+      ],
+      router,
+      ownerId: OWNER,
+      guildOwnerId: async () => null,
+      log: quietLogger(),
+      isGuildAdmin: () => false,
+    });
+
+    const { interaction } = fakeInteraction({
+      raw: [
+        {
+          name: "status",
+          type: 1,
+          options: [
+            { name: "file", type: 11, value: "a-1" },
+            { name: "other", type: 11, value: "a-2" },
+          ],
+        },
+      ],
+      attachments: [["a-1", "https://cdn.discordapp.com/attachments/1/2/backup.json"]],
+    });
+    await onInteraction(interaction);
+
+    // the unresolved id stays an id: a step reads that as "no file chosen".
+    expect(seen[0]).toEqual({
+      file: "https://cdn.discordapp.com/attachments/1/2/backup.json",
+      other: "a-2",
+    });
   });
 });
 

@@ -65,6 +65,7 @@ import { resolveScope } from "./discord/registry.ts";
 import { createLogger, type Logger } from "./lib/log.ts";
 import { createBackupJobHandler } from "./services/backup/job.ts";
 import { createExportJobHandler } from "./services/export/job.ts";
+import { createImportJobHandler } from "./services/import/job.ts";
 import { createIntelService } from "./services/intel/index.ts";
 import { refreshIntelFiles } from "./services/intel/update.ts";
 import { JobRunner } from "./services/jobs/runner.ts";
@@ -361,6 +362,9 @@ export async function boot(): Promise<Boot> {
     "restore",
     createRestoreJobHandler({ db, client, log, backupDir: env.storage.backupDir }),
   );
+  // an import needs no client: the file arrives as the cdn url discord resolved
+  // for the attachment, and the job reads it with the plain get.
+  jobs.register("import", createImportJobHandler({ db, log }));
   await jobs.start();
 
   // the /backup surface. the same access check the router runs for every other

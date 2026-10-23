@@ -66,21 +66,27 @@ export interface AccessDeps {
   ) => Promise<boolean> | boolean;
 }
 
+// an attachment option's value is its id, not the file. an id is not fetchable,
+// so the command path trades it for the cdn url discord resolved next to it.
+type AttachmentResolver = (id: string) => string | undefined;
+
 // options arrive nested under a subcommand, and a subcommand group adds another
 // level. flatten to one record: a command reads ctx.options.name and does not
 // care where in the tree discord put it.
 function collect(
   options: readonly InteractionOptions[] | undefined,
+  attachments?: AttachmentResolver,
 ): Record<string, CommandOptionValue> {
   const out: Record<string, CommandOptionValue> = {};
   for (const option of options ?? []) {
     if ("value" in option) {
       const value = option.value;
       if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
-        out[option.name] = value;
+        const url = typeof value === "string" ? attachments?.(value) : undefined;
+        out[option.name] = url ?? value;
       }
     }
-    if ("options" in option) Object.assign(out, collect(option.options));
+    if ("options" in option) Object.assign(out, collect(option.options, attachments));
   }
   return out;
 }
@@ -93,18 +99,21 @@ interface Invocation {
 
 // the raw options carry the subcommand name; the wrapper's getSubCommand returns
 // a tuple that loses it.
-function invocationOf(options: readonly InteractionOptions[] | undefined): Invocation {
+function invocationOf(
+  options: readonly InteractionOptions[] | undefined,
+  attachments?: AttachmentResolver,
+): Invocation {
   for (const option of options ?? []) {
     const name = "name" in option ? option.name : "";
     if (option.type === ApplicationCommandOptionTypes.SUB_COMMAND) {
       const nested = "options" in option ? option.options : undefined;
-      return { name, options: collect(nested) };
+      return { name, options: collect(nested, attachments) };
     }
     if (option.type === ApplicationCommandOptionTypes.SUB_COMMAND_GROUP) {
-      return invocationOf("options" in option ? option.options : undefined);
+      return invocationOf("options" in option ? option.options : undefined, attachments);
     }
   }
-  return { name: undefined, options: collect(options) };
+  return { name: undefined, options: collect(options, attachments) };
 }
 
 function messageOf(error: unknown): string {
@@ -112,13 +121,14 @@ function messageOf(error: unknown): string {
 }
 
 // the cdn url for one uploaded attachment id. discord resolves uploads into the
-// interaction alongside the components, and a modal submit that carries no
-// resolved block (nothing was uploaded) yields undefined.
+// interaction alongside the components, so a command and a modal both arrive
+// with the url already sitting next to the id. an id it did not resolve, or no
+// resolved block at all, yields undefined.
 function resolvedAttachmentUrl(
-  interaction: ComponentInteraction | ModalSubmitInteraction,
+  interaction: CommandInteraction | ModalSubmitInteraction,
   id: string | undefined,
 ): string | undefined {
-  if (id === undefined || !interaction.isModalSubmitInteraction()) return undefined;
+  if (id === undefined) return undefined;
   return interaction.data.resolved.attachments.get(id)?.url;
 }
 
@@ -334,7 +344,9 @@ async function runCommand(
     return;
   }
 
-  const invocation = invocationOf(interaction.data.options?.raw);
+  const invocation = invocationOf(interaction.data.options?.raw, (id) =>
+    resolvedAttachmentUrl(interaction, id),
+  );
   const command = findCommand(deps.commands, interaction.data.name, invocation.name);
   if (command === undefined) {
     // registered live but absent from this build: an older message, or a

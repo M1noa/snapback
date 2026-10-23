@@ -134,7 +134,7 @@ describe("the /backup command group", () => {
   test("every documented subcommand is registered, once", () => {
     const commands = backupCommands(fakeDeps());
     const names = commands.map((command) => command.subcommand).sort();
-    expect(names).toEqual(["create", "delete", "export", "info", "list", "prune"]);
+    expect(names).toEqual(["create", "delete", "export", "import", "info", "list", "prune"]);
     for (const command of commands) {
       expect(command.group).toBe("backup");
       expect(command.description.length).toBeGreaterThan(0);

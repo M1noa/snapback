@@ -111,7 +111,7 @@ export type AuthHook = (input: AuthInput) => Promise<AuthDecision> | AuthDecisio
 
 /** a unit of long work. the runner owns the row; this is the request only. */
 export interface JobRequest {
-  readonly kind: string; // backup | restore | pull | verify_refresh | export
+  readonly kind: string; // backup | restore | pull | verify_refresh | export | import
   readonly guildId: string;
   readonly payload: Record<string, unknown>;
 }

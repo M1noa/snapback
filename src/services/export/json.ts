@@ -187,7 +187,7 @@ export async function readExport(path: string): Promise<ExportBundle> {
 
 // the shallow check the contract needs: the scalars, a backup object, and every
 // child entry an array. the row shapes are the query modules' to guarantee.
-function isExportBundle(value: unknown): value is ExportBundle {
+export function isExportBundle(value: unknown): value is ExportBundle {
   if (value === null || typeof value !== "object") return false;
   const record = value as Record<string, unknown>;
   if (typeof record.schema_version !== "number") return false;

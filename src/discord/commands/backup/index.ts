@@ -246,6 +246,77 @@ export function backupCommands(deps: BackupDeps): SlashCommand[] {
 
     {
       group: GROUP,
+      subcommand: "import",
+      description: "store a backup file from snapback, restorecord, or vaultcord",
+      options: [
+        {
+          name: "file",
+          description: "the json backup file to import",
+          type: OPTION_TYPE.attachment,
+          required: true,
+        },
+        {
+          name: "label",
+          description: "what to call the imported backup (default: the name in the file)",
+          type: OPTION_TYPE.string,
+        },
+        {
+          name: "format",
+          description: "how to read the file (default: work it out from the file)",
+          type: OPTION_TYPE.string,
+          choices: [
+            { name: "detect automatically", value: "auto" },
+            { name: "snapback json (lossless)", value: "snapback" },
+            { name: "restorecord", value: "restorecord" },
+            { name: "vaultcord", value: "vaultcord" },
+          ],
+        },
+      ],
+      async run(ctx: CommandContext): Promise<CommandResult> {
+        const denied = await refusal(deps, ctx);
+        if (denied !== null) return denied;
+
+        // an attachment option's value is its id. the handler traded the id for
+        // the cdn url discord resolved beside it, so an empty value means the
+        // upload did not resolve and there is nothing to read.
+        const url = typeof ctx.options.file === "string" ? ctx.options.file : "";
+        if (url === "") {
+          return {
+            page: page({
+              state: "danger",
+              title: "no file read",
+              sections: [
+                textDisplay(
+                  "discord sent no url for that upload, so nothing could be read. paste the file again and resend.",
+                ),
+              ],
+            }),
+            ephemeral: true,
+          };
+        }
+
+        const job = await deps.jobs.enqueue("import", {
+          guildId: ctx.guildId,
+          requestedBy: ctx.userId,
+          payload: {
+            url,
+            label: typeof ctx.options.label === "string" ? ctx.options.label : null,
+            format: typeof ctx.options.format === "string" ? ctx.options.format : "auto",
+          },
+        });
+        await deps.audit({
+          guildId: ctx.guildId,
+          actorUserId: ctx.userId,
+          action: "backup.import",
+          target: job.id,
+          detail: { format: ctx.options.format ?? "auto" },
+        });
+        return { page: await jobPageFor(deps, ctx.guildId, job.id), ephemeral: true };
+      },
+    },
+
+    {
+      group: GROUP,
       subcommand: "delete",
       description: "delete one backup and its files",
       options: [
