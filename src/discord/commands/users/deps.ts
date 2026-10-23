@@ -297,9 +297,13 @@ export function recordsExportToJson(bundle: RecordsExport): string {
   return `${JSON.stringify(bundle, null, 2)}\n`;
 }
 
+/** just the parts the export job reads, so boot can build it before the whole
+ *  surface exists. */
+export type UsersExportDeps = Pick<UsersDeps, "db" | "records" | "ipStorage" | "exportDir" | "now">;
+
 /** the job that writes the records out. it records the file with the expiry the
  *  sweeper uses, exactly as the backup export does (D4PLAN 17.4). */
-export function createUsersExportJobHandler(deps: UsersDeps): JobHandler {
+export function createUsersExportJobHandler(deps: UsersExportDeps): JobHandler {
   return async (ctx) => {
     const guildId = ctx.job.guild_id;
     const records = await deps.records(guildId, RECORDS_LIMIT);

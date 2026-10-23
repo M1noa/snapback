@@ -44,7 +44,12 @@ import { registerRestoreHandlers } from "./discord/commands/restore/handlers.ts"
 import { restoreCommands } from "./discord/commands/restore/index.ts";
 import { setupCommands } from "./discord/commands/setup/index.ts";
 import type { SlashCommand } from "./discord/commands/types.ts";
-import { USERS_SPECS, type UsersDeps } from "./discord/commands/users/deps.ts";
+import {
+  createExportDispatcher,
+  createUsersExportJobHandler,
+  USERS_SPECS,
+  type UsersDeps,
+} from "./discord/commands/users/deps.ts";
 import { registerUsersHandlers } from "./discord/commands/users/handlers.ts";
 import { usersCommands } from "./discord/commands/users/index.ts";
 import { VERIFY_SPECS, type VerifyDeps } from "./discord/commands/verify/deps.ts";
@@ -336,7 +341,21 @@ export async function boot(): Promise<Boot> {
       maxAssetBytes: env.storage.maxAssetBytes,
     }),
   );
-  jobs.register("export", createExportJobHandler({ db, log, exportDir: env.storage.exportDir }));
+  // backup exports and records exports share the "export" kind, so the kind
+  // holds a dispatcher rather than one handler (D4PLAN 17.3).
+  jobs.register(
+    "export",
+    createExportDispatcher({
+      backup: createExportJobHandler({ db, log, exportDir: env.storage.exportDir }),
+      records: createUsersExportJobHandler({
+        db,
+        now: () => Date.now(),
+        ipStorage: env.privacy.ipStorage,
+        exportDir: env.storage.exportDir,
+        records: async (guildId, limit) => await listRecords(db, guildId, limit),
+      }),
+    }),
+  );
   jobs.register(
     "restore",
     createRestoreJobHandler({ db, client, log, backupDir: env.storage.backupDir }),

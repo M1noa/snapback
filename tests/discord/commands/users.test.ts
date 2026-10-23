@@ -9,6 +9,7 @@ import type { ContainerComponent } from "oceanic.js";
 import type { VerifyRecordRow } from "../../../src/db/types.ts";
 import {
   buildRecordsExport,
+  createExportDispatcher,
   recordsExportToJson,
   USERS_ACTION,
   USERS_OBJECT,
@@ -22,6 +23,7 @@ import { usersCommands } from "../../../src/discord/commands/users/index.ts";
 import { countComponents, PAGE_LIMIT } from "../../../src/discord/components/page.ts";
 import { parseCustomId, Router } from "../../../src/discord/interactions/router.ts";
 import { createLogger } from "../../../src/lib/log.ts";
+import type { JobContext } from "../../../src/services/jobs/runner.ts";
 
 const GUILD = "123456789012345678";
 const OTHER_GUILD = "222222222222222222";
@@ -181,6 +183,30 @@ function fakeDeps(
   };
 }
 
+/** the smallest job context a handler reads: the row's payload and a logger. */
+function jobContext(payload: Record<string, unknown> | null): JobContext {
+  return {
+    job: {
+      id: "job-1",
+      guild_id: GUILD,
+      kind: "export",
+      status: "running",
+      requested_by: OWNER,
+      payload_json: payload,
+      progress_json: null,
+      error_code: null,
+      error_body: null,
+      created_at: AT,
+      started_at: AT,
+      finished_at: null,
+      attempts: 1,
+    },
+    signal: { cancelled: false, paused: false },
+    log: createLogger({ level: "error", dir: null }),
+    checkpoint: async () => {},
+  };
+}
+
 function walk(node: unknown, visit: (n: { customID?: string }) => void): void {
   if (node === null || typeof node !== "object") return;
   const record = node as { customID?: string; components?: unknown[] };
@@ -278,6 +304,22 @@ describe("the export", () => {
     expect(harness.enqueued[0]?.kind).toBe("export");
     const payload = harness.enqueued[0]?.payload as { scope?: string };
     expect(payload.scope).toBe("records");
+  });
+
+  test("the kind the job lands on reads the scope and picks the handler", async () => {
+    const calls: string[] = [];
+    const handler = createExportDispatcher({
+      backup: async () => void calls.push("backup"),
+      records: async () => void calls.push("records"),
+    });
+
+    // the payload /users export enqueues must reach the records writer, not the
+    // backup writer, which would throw SB_EXPORT_NO_BACKUP on it.
+    await handler(jobContext({ scope: "records", guildId: GUILD, fromUserId: "" }));
+    await handler(jobContext({ backupId: "0190a000-0000-7000-8000-0000000000b1" }));
+    await handler(jobContext(null));
+
+    expect(calls).toEqual(["records", "backup", "backup"]);
   });
 });
 
