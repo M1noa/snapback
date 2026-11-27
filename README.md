@@ -2,6 +2,8 @@
 
 > THIS PROJECT WAS MADE PARTIALLY USING AGENTIC AI CODING TOOLS
 
+> **WIP:** unfinished and not working in its current state. A lot is left to do.
+
 <img src="assets/brand/app-banner.png" alt="Snapback" width="420">
 
 [![license](https://img.shields.io/badge/license-MIT-b8a894?style=flat-square)](LICENSE)
